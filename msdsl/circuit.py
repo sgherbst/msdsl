@@ -1,4 +1,4 @@
-from sympy import symbols, linsolve, S
+from sympy import symbols, solve, linsolve, S
 from itertools import count, combinations
 
 from msdsl.components import *
@@ -253,27 +253,33 @@ class Circuit:
 
             # solve the modified system of equations
 
-            soln = linsolve(eqns, solve_vars)
+            # sympy linsolve approach (seems to be buggy)
+            # soln = linsolve(eqns, solve_vars)
+            # if len(soln) != 1:
+            #     continue
+            # soln = dict(zip(solve_vars, next(iter(soln))))
 
-            if len(soln) == 1:
-                soln = dict(zip(solve_vars, next(iter(soln))))
+            # sympy solve approach
+            soln = solve(eqns, solve_vars)
+            if not soln:
+                continue
 
-                print('State Variables')
-                for state_var in self.state_vars:
-                    if state_var not in disabled_state_vars:
-                        print(state_var.derivative.name + ': ' + str(soln[state_var.derivative]))
-                    else:
-                        print(state_var.variable.name + ': ' + str(soln[state_var.variable]))
-                if not self.state_vars:
-                    print('N/A')
-                print()
+            print('State Variables')
+            for state_var in self.state_vars:
+                if state_var not in disabled_state_vars:
+                    print(state_var.derivative.name + ': ' + str(soln[state_var.derivative]))
+                else:
+                    print(state_var.variable.name + ': ' + str(soln[state_var.variable]))
+            if not self.state_vars:
+                print('N/A')
+            print()
 
-                print('Output Variables')
-                for v in observe_vars:
-                    print(v.name + ': ' + str(soln[v]))
-                if not observe_vars:
-                    print('N/A')
+            print('Output Variables')
+            for v in observe_vars:
+                print(v.name + ': ' + str(soln[v]))
+            if not observe_vars:
+                print('N/A')
 
-                break
+            break
         else:
             print('No solutions found.')

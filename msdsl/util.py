@@ -1,4 +1,4 @@
-def centered(text, char='*', width=79):
+def centered(text, char='*', width=50):
     x = width - len(text)
 
     lhs = ((x // 2) - 1)
@@ -6,5 +6,5 @@ def centered(text, char='*', width=79):
 
     return (char*lhs) + ' ' + text + ' ' + (char*rhs)
 
-def line(char='*', width=79):
+def line(char='*', width=50):
     return char*width

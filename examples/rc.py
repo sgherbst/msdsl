@@ -1,4 +1,5 @@
 from msdsl.circuit import Circuit
+from msdsl.util import to_json
 
 # create new circuit
 cir = Circuit()
@@ -13,4 +14,4 @@ cir.resistor(v_in, v_out, 1e3)
 cir.capacitor(v_out, 0, 1e-9)
 
 # solve the circuit
-cir.solve()
+print(to_json(cir.solve(10e-9, [v_out])))

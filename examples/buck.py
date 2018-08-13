@@ -1,4 +1,5 @@
 from msdsl.circuit import Circuit
+from msdsl.util import to_json
 
 # create new circuit
 cir = Circuit()
@@ -15,7 +16,7 @@ cir.mosfet(v_in, v_sw)
 diode = cir.diode(0, v_sw)
 
 # filter
-cir.inductor(v_sw, v_out, value=10e-6)
+ind = cir.inductor(v_sw, v_out, value=10e-6)
 cir.capacitor(v_out, 0, value=10e-6)
 
 # output load
@@ -23,4 +24,4 @@ output = cir.external('output')
 cir.current_source(v_out, 0, expr=output)
 
 # solve the circuit
-cir.solve(diode.port.i, diode.port.v)
+print(to_json(cir.solve(0.25e-6, [v_out])))

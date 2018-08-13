@@ -1,8 +1,18 @@
-from sympy import symbols, solve, linsolve, S
+from sympy import symbols, solve, linear_eq_to_matrix
 from itertools import count, combinations
 
 from msdsl.components import *
-from msdsl.util import *
+
+def expr_to_dict(expr):
+    syms = list(expr.free_symbols)
+    sym_names = [sym.name for sym in syms]
+
+    A, b = linear_eq_to_matrix([expr], syms)
+
+    vars  = [float(x) for x in A]
+    const = -float(b[0])
+
+    return {'vars': dict(zip(sym_names, vars)), 'const': const}
 
 class NodalAnalysis:
     def __init__(self):
@@ -63,9 +73,11 @@ class Circuit:
         self.state_vars = []
 
         self.static_comps = []
-        self.dynamic_comps = []
+        self.diode_comps = []
+        self.mosfet_comps = []
 
         self.inductor_state_vars = []
+        self.capacitor_state_vars = []
 
     def external(self, *args):
         retval = self.namespace.define(*args)
@@ -142,6 +154,7 @@ class Circuit:
         v, i, dv_dt = self.internal('v_' + name, 'i_' + name, 'dv_dt_' + name)
 
         state = self.state(variable=v, derivative=dv_dt)
+        self.capacitor_state_vars.append(state)
 
         retval = Capacitor(port=Port(p=p, n=n, v=v, i=i), state=state, value=value, name=name)
         self.static_comps.append(retval)
@@ -162,7 +175,7 @@ class Circuit:
         v, i = self.internal('v_' + name, 'i_' + name)
 
         retval = MOSFET(port=Port(p=p, n=n, v=v, i=i), name=name)
-        self.dynamic_comps.append(retval)
+        self.mosfet_comps.append(retval)
 
         return retval
 
@@ -171,43 +184,52 @@ class Circuit:
         v, i = self.internal('v_' + name, 'i_' + name)
 
         retval = Diode(port=Port(p=p, n=n, v=v, i=i), vf=vf, name=name)
-        self.dynamic_comps.append(retval)
+        self.diode_comps.append(retval)
 
         return retval
 
-    def solve(self, *observe_vars):
-        first = True
-        for i in range(2**len(self.dynamic_comps)):
-            if first:
-                first = False
-            else:
-                print()
+    def solve(self, dt, output_vars=None):
+        if output_vars is None:
+            output_vars = []
 
-            comp_states = [bool((i >> j) & 1) for j in range(len(self.dynamic_comps))]
+        circuit = {
+            'dt': dt,
+            'diodes': {diode.name: {'v': diode.port.v.name,
+                                    'i': diode.port.i.name,
+                                    'vf': diode.vf}
+                       for diode in self.diode_comps},
+            'mosfets': [mosfet.name for mosfet in self.mosfet_comps],
+            'states': [state.variable.name for state in self.state_vars],
+            'outputs': [output.name for output in output_vars],
+            'ext_syms': [sym.name for sym in self.ext_syms]
+        }
 
-            print(centered('Case ' + str(i+1)))
-            self.solve_single(observe_vars=observe_vars, comp_states=comp_states)
-            print(line())
+        cases = []
+        dyn_comps = self.mosfet_comps + self.diode_comps
 
-    def solve_single(self, observe_vars=None, comp_states=None, max_attempts=10):
+        for i in range(2**(len(dyn_comps))):
+            # determine modes of dynamic components
+            dyn_modes = [bool((i >> j) & 1) for j in range(len(dyn_comps))]
+            dyn_modes = {comp.name: ('on' if mode else 'off')
+                         for comp, mode in zip(dyn_comps, dyn_modes)}
+
+            # append the result if it exists
+            case = self.solve_case(dt=dt, output_vars=output_vars, dyn_modes=dyn_modes)
+
+            if case is not None:
+                cases.append(case)
+
+        circuit['cases'] = cases
+
+        return circuit
+
+    def solve_case(self, dt, output_vars=None, dyn_modes=None, max_attempts=10):
         # set defaults
 
-        if observe_vars is None:
-            observe_vars = []
-        if comp_states is None:
-            comp_states = []
-
-        # print out the state of the dynamic components
-
-        dynamic_states = [comp.name + ': ' + ('on' if state else 'off')
-                          for comp, state in zip(self.dynamic_comps, comp_states)]
-
-        print('Switch States')
-        if dynamic_states:
-            print('\n'.join(dynamic_states))
-        else:
-            print('N/A')
-        print()
+        if output_vars is None:
+            output_vars = []
+        if dyn_modes is None:
+            dyn_modes = {}
 
         # create new analysis object
 
@@ -220,8 +242,11 @@ class Circuit:
 
         # handle dynamic components
 
-        for comp, state in zip(self.dynamic_comps, comp_states):
-            comp.add_to_analysis(state, analysis)
+        dyn_comps = self.mosfet_comps + self.diode_comps
+        dyn_comps = {value.name: value for value in dyn_comps}
+
+        for name, state in dyn_modes.items():
+            dyn_comps[name].add_to_analysis(state, analysis)
 
         # generate a list of different configurations to try, in which different combinations of
         # inductors are effectively disabled
@@ -242,44 +267,63 @@ class Circuit:
 
         for disabled_state_vars in configs:
 
+            # make copies of the variables to solve for
             solve_vars = self.int_syms[:]
             eqns = analysis.equations[:]
 
+            # configure the system of equations
             for state_var in self.state_vars:
                 if state_var not in disabled_state_vars:
                     solve_vars.remove(state_var.variable)
                 else:
                     eqns.append(state_var.derivative)
 
-            # solve the modified system of equations
-
-            # sympy linsolve approach (seems to be buggy)
-            # soln = linsolve(eqns, solve_vars)
-            # if len(soln) != 1:
-            #     continue
-            # soln = dict(zip(solve_vars, next(iter(soln))))
-
-            # sympy solve approach
+            # use sympy solve to solve the system of equations
             soln = solve(eqns, solve_vars)
             if not soln:
                 continue
 
-            print('State Variables')
+            # construct the output
+            case = {}
+
+            already_solved = set()
+
+            # compute state update equations
+            case['states'] = {}
             for state_var in self.state_vars:
                 if state_var not in disabled_state_vars:
-                    print(state_var.derivative.name + ': ' + str(soln[state_var.derivative]))
+                    expr = state_var.variable + dt*soln[state_var.derivative]
                 else:
-                    print(state_var.variable.name + ': ' + str(soln[state_var.variable]))
-            if not self.state_vars:
-                print('N/A')
-            print()
+                    expr = soln[state_var.variable]
 
-            print('Output Variables')
-            for v in observe_vars:
-                print(v.name + ': ' + str(soln[v]))
-            if not observe_vars:
-                print('N/A')
+                case['states'][state_var.variable.name] = expr_to_dict(expr)
 
-            break
-        else:
-            print('No solutions found.')
+                already_solved.add(state_var.variable)
+
+            # compute diode update equations
+            case['diodes'] = {}
+            for diode in self.diode_comps:
+                case['diodes'][diode.name] = {
+                    diode.port.i.name: expr_to_dict(soln[diode.port.i]),
+                    diode.port.v.name: expr_to_dict(soln[diode.port.v])
+                }
+
+                already_solved.add(diode.port.v)
+                already_solved.add(diode.port.i)
+
+            # list all output variables
+            case['outputs'] = {}
+            for output in output_vars:
+                if output not in already_solved:
+                    expr = soln[output]
+                else:
+                    expr = output
+
+                case['outputs'][output.name] = expr_to_dict(expr)
+
+            # add the modes of dynamic components to the dictionary
+            case['dyn_modes'] = dyn_modes
+
+            return case
+
+        return None

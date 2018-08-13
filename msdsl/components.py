@@ -109,7 +109,7 @@ class MOSFET:
     def add_to_analysis(self, state, analysis):
         self.port.add_to_analysis(analysis)
 
-        if state:
+        if state == 'on':
             analysis.set_equal(self.port.v, 0)
         else:
             analysis.set_equal(self.port.i, 0)
@@ -126,7 +126,7 @@ class Diode:
     def add_to_analysis(self, state, analysis):
         self.port.add_to_analysis(analysis)
 
-        if state:
+        if state == 'on':
             analysis.set_equal(self.port.v, self.vf)
         else:
             analysis.set_equal(self.port.i, 0)

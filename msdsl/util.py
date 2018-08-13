@@ -1,3 +1,5 @@
+import json
+
 def centered(text, char='*', width=50):
     x = width - len(text)
 
@@ -8,3 +10,15 @@ def centered(text, char='*', width=50):
 
 def line(char='*', width=50):
     return char*width
+
+def to_json(d, pretty=True):
+    if pretty:
+        # ref: https://docs.python.org/3.7/library/json.html
+        kwargs = {'sort_keys': True, 'indent': 2}
+    else:
+        kwargs = {}
+
+    return json.dumps(d, **kwargs)
+
+def from_json(string):
+    return json.loads(string)

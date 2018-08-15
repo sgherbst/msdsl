@@ -17,4 +17,4 @@ cir.capacitor(v_out, 0, 1e-9)
 diode = cir.diode(v_in, v_x)
 
 # solve the circuit
-print(to_json(cir.solve(10e-9, [v_out])))
+print(to_json(cir.solve(10e-9, [v_out]).to_dict()))

@@ -14,4 +14,4 @@ cir.resistor(v_in, v_out, 1e3)
 cir.capacitor(v_out, 0, 1e-9)
 
 # solve the circuit
-print(to_json(cir.solve(10e-9, [v_out])))
+print(to_json(cir.solve(10e-9, [v_out]).to_dict()))

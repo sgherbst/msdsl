@@ -31,4 +31,4 @@ output = cir.external('output')
 cir.current_source(v_out, 0, expr=output)
 
 # solve the circuit
-print(to_json(cir.solve(0.25e-6, [v_out])))
+print(to_json(cir.solve(0.25e-6, [v_out]).to_dict()))

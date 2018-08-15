@@ -114,6 +114,9 @@ class MOSFET:
         else:
             analysis.set_equal(self.port.i, 0)
 
+    @property
+    def on(self):
+        return self.name + '_on'
 
 class Diode:
     prefix = 'D'
@@ -130,3 +133,7 @@ class Diode:
             analysis.set_equal(self.port.v, self.vf)
         else:
             analysis.set_equal(self.port.i, 0)
+
+    @property
+    def on(self):
+        return self.name + '_on'

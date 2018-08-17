@@ -2,9 +2,11 @@
 
 CIRCUIT_FILE = ../examples/buck.py
 VIVADO_HOME = /Volumes/C/Xilinx/Vivado/2018.2/
+# VIVADO_HOME = "C:\Xilinx\Vivado\2017.3"
 
 CC = g++
 PYTHON = python3
+# PYTHON = python
 
 JSON_FILE = circuit.json
 CPP_FILE = circuit.cpp

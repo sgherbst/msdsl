@@ -22,7 +22,7 @@ class AnalogSignal:
         if range_ is None:
             range_ = [-1, 1]
         if (rel_tol is None) and (abs_tol is None):
-            rel_tol = 3e-7
+            rel_tol = 5e-7
 
         # create interval if necessary
         range_ = to_interval(range_)
@@ -38,35 +38,33 @@ class AnalogSignal:
         self.abs_tol = abs_tol
         self.expr = expr
 
-    def __str__(self):
-        return self.name
+    @property
+    def rel_tol(self):
+        if (self.range_[0].inf == 0) and (self.range_[0].sup == 0):
+            return 0
+        else:
+            return self.abs_tol / max(abs(self.range_[0].inf), abs(self.range_[0].sup))
 
     def __add__(self, other):
-        return AnalogSignal(range_=self.range_+other.range_, abs_tol=min(self.abs_tol, other.abs_tol))
+        return AnalogSignal(range_=self.range_+other.range_, abs_tol=max(self.abs_tol, other.abs_tol))
 
     def __mul__(self, other):
-        abs_tol = min(max(abs(self.range_[0].inf), abs(self.range_[0].sup))*other.abs_tol,
-                      max(abs(other.range_[0].inf), abs(other.range_[0].sup))*self.abs_tol)
-        return AnalogSignal(range_ = self.range_*other.range_, abs_tol=abs_tol)
+        rel_tol = max(self.rel_tol, other.rel_tol)
+        return AnalogSignal(range_ = self.range_*other.range_, rel_tol=rel_tol)
 
-    def to_cpp_type(self, margin=1.5):
+    @property
+    def cpp_type(self):
+        margin = 1.5
+
         if self.abs_tol == 0:
-            assert (self.range_.inf == 0) and (self.range_.sup == 0), 'A tolerance of zero is only allowed for a value with range [0,0]'
+            assert (self.range_[0].inf == 0) and (self.range_[0].sup == 0), 'A tolerance of zero is only allowed for a value with range [0,0]'
             return ap_fixed(1, 1)
 
         lsb = floor(log2(self.abs_tol))
-        width = max(signed_int_width(margin*self.range_.inf/(2**lsb)),
-                    signed_int_width(margin*self.range_.sup/(2**lsb)))
+        width = max(signed_int_width(margin*self.range_[0].inf/(2**lsb)),
+                    signed_int_width(margin*self.range_[0].sup/(2**lsb)))
 
         return ap_fixed(width, width+lsb)
-
-
-class AnalogConstant(AnalogSignal):
-    def __init__(self, name=None, value=None, rel_tol=None, abs_tol=None):
-        if (rel_tol is None) and (abs_tol is None):
-            rel_tol = 3e-5
-
-        super().__init__(name=name, range_=[value, value], rel_tol=rel_tol, abs_tol=abs_tol)
 
 
 class DigitalSignal:
@@ -79,7 +77,8 @@ class DigitalSignal:
     def __str__(self):
         return self.name
 
-    def to_cpp_type(self):
+    @property
+    def cpp_type(self):
         if self.signed:
             return ap_int(self.width)
         else:

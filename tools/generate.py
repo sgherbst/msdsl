@@ -1,18 +1,22 @@
 import sys
-from msdsl.util import from_json
+
+from msdsl.format import load_model
 from msdsl.util import Namespace
 from msdsl.cpp import *
+from msdsl.model import AnalogSignal
+
+def arr_to_signal(arr):
+    return AnalogSignal(range_=[min(arr), max(arr)])
 
 def decl_arrays(f, namespace, expr):
-    prods = [(namespace.make('arr'), key) for key in expr['coeffs'].keys()]
+    prods = [(namespace.make(prefix='arr'), key) for key in expr.coeffs.keys()]
     for coeff, var in prods:
-        f.array(const('coeff'), coeff, expr['coeffs'][var])
+        f.array(arr_to_signal(expr.coeffs[var]).cpp_type, coeff, expr.coeffs[var])
 
-    offset = namespace.make('arr')
-    f.array('real', offset, expr['offset'])
+    offset = namespace.make(prefix='arr')
+    f.array(arr_to_signal(expr.const).cpp_type, offset, expr.const)
 
     return prods, offset
-
 
 def linexpr(prods=None, offset=None):
     if prods is None:
@@ -26,6 +30,15 @@ def linexpr(prods=None, offset=None):
 
     return ' + '.join(terms)
 
+def expr_format(model, expr):
+    signals = {signal.name: signal for signal in (model.analog_inputs+model.analog_states)}
+
+    fmt = arr_to_signal(expr.const)
+
+    for signal_name, coeffs in expr.coeffs.items():
+        fmt += arr_to_signal(coeffs) * signals[signal_name]
+
+    return fmt
 
 def main():
     if len(sys.argv) >= 2:
@@ -34,7 +47,7 @@ def main():
         file_name = '../build/circuit.json'
 
     file_text = open(file_name, 'r').read()
-    circuit = from_json(file_text)
+    model = load_model(file_text)
 
     f = CppGen()
     namespace = Namespace()
@@ -46,47 +59,49 @@ def main():
 
     # start function representing circuit
     io = []
-    io += [('real', analog_input) for analog_input in circuit['analog_inputs']]
-    io += [('bit', digital_input) for digital_input in circuit['digital_inputs']]
-    io += [(ptr('real'), output) for output in circuit['analog_outputs'].keys()]
+    io += [(analog_input.cpp_type, analog_input.name) for analog_input in model.analog_inputs]
+    io += [(digital_input.cpp_type, digital_input.name) for digital_input in model.digital_inputs]
+    io += [(ptr(expr_format(model, analog_output.expr).cpp_type), analog_output.name)
+           for analog_output in model.analog_outputs]
     f.start_function('void', 'circuit', io)
 
     # declare analog state variables
     f.comment('Analog state variables')
-    for state, params in circuit['analog_states'].items():
-        f.static('real', state)
+    for analog_state in model.analog_states:
+        f.static(analog_state.cpp_type, analog_state.name)
     f.print()
 
     # declare digital state variables
     f.comment('Digital state variables')
-    for state, params in circuit['digital_states'].items():
-        f.static('bit', state)
+    for digital_state in model.digital_states:
+        f.static(digital_state.cpp_type, digital_state.name)
     f.print()
 
     # create the case index variable
     f.comment('Case index variable')
-    f.assign(ap_uint(len(circuit['idx'])) + ' ' + 'idx', concat(*circuit['idx']))
+    f.assign(ap_uint(len(model.mode)) + ' ' + 'idx', concat(*model.mode))
     f.print()
 
     # update digital states
-    for state, expr in circuit['digital_states'].items():
-        f.comment('Update digital state: ' + state)
-        prods, offset = decl_arrays(f, namespace, expr)
-        f.assign(state, gt(parens(linexpr(prods, offset)), instance('real', 0.0)))
+    for digital_state in model.digital_states:
+        f.comment('Update digital state: ' + digital_state.name)
+        prods, offset = decl_arrays(f, namespace, digital_state.expr)
+        f.assign(digital_state.name, gt(parens(linexpr(prods, offset)),
+                                        instance(expr_format(model, digital_state.expr).cpp_type, 0.0)))
         f.print()
 
     # update analog states
-    for state, expr in circuit['analog_states'].items():
-        f.comment('Update analog state: ' + state)
-        prods, offset = decl_arrays(f, namespace, expr)
-        f.assign(state, linexpr(prods, offset))
+    for analog_state in model.analog_states:
+        f.comment('Update analog state: ' + analog_state.name)
+        prods, offset = decl_arrays(f, namespace, analog_state.expr)
+        f.assign(analog_state.name, linexpr(prods, offset))
         f.print()
 
     # print the outputs
-    for output, expr in circuit['analog_outputs'].items():
-        f.comment('Calculate analog output: ' + output)
-        prods, offset = decl_arrays(f, namespace, expr)
-        f.assign(deref(output), linexpr(prods, offset))
+    for analog_output in model.analog_outputs:
+        f.comment('Calculate analog output: ' + analog_output.name)
+        prods, offset = decl_arrays(f, namespace, analog_output.expr)
+        f.assign(deref(analog_output.name), linexpr(prods, offset))
         f.print()
 
     f.end_function()

@@ -15,7 +15,7 @@ BIN_FILE = circuit
 all: analyze generate compile run view
 
 analyze: 
-	$(PYTHON) $(CIRCUIT_FILE) > $(JSON_FILE)
+	$(PYTHON) $(CIRCUIT_FILE) $(JSON_FILE) | tee $(JSON_FILE)
 
 generate: 
 	$(PYTHON) ../tools/generate.py $(JSON_FILE) 

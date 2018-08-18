@@ -1,4 +1,90 @@
 from sympy import linear_eq_to_matrix
+from math import log2, floor, ceil
+
+from msdsl.cpp import ap_fixed, ap_int, ap_uint
+from msdsl.util import to_interval
+
+def signed_int_width(int_val):
+    """Returns the number of bits required to represent int_val as a signed integer.  If int_val is zero,
+    the number of bits required is defined to be one.
+    """
+
+    if int_val < 0:
+        return ceil(log2(-int_val) + 1)
+    elif int_val > 0:
+        return ceil(log2(int_val + 1) + 1)
+    else:
+        return 1
+
+class AnalogSignal:
+    def __init__(self, name=None, range_=None, rel_tol=None, abs_tol=None, expr=None):
+        # set defaults
+        if range_ is None:
+            range_ = [-1, 1]
+        if (rel_tol is None) and (abs_tol is None):
+            rel_tol = 3e-7
+
+        # create interval if necessary
+        range_ = to_interval(range_)
+
+        # compute tolerance
+        if rel_tol is not None:
+            assert abs_tol is None, 'Cannot specify both relative and absolute tolerance.'
+            abs_tol = rel_tol * max(abs(range_[0].inf), abs(range_[0].sup))
+
+        # save settings
+        self.name = name
+        self.range_ = range_
+        self.abs_tol = abs_tol
+        self.expr = expr
+
+    def __str__(self):
+        return self.name
+
+    def __add__(self, other):
+        return AnalogSignal(range_=self.range_+other.range_, abs_tol=min(self.abs_tol, other.abs_tol))
+
+    def __mul__(self, other):
+        abs_tol = min(max(abs(self.range_[0].inf), abs(self.range_[0].sup))*other.abs_tol,
+                      max(abs(other.range_[0].inf), abs(other.range_[0].sup))*self.abs_tol)
+        return AnalogSignal(range_ = self.range_*other.range_, abs_tol=abs_tol)
+
+    def to_cpp_type(self, margin=1.5):
+        if self.abs_tol == 0:
+            assert (self.range_.inf == 0) and (self.range_.sup == 0), 'A tolerance of zero is only allowed for a value with range [0,0]'
+            return ap_fixed(1, 1)
+
+        lsb = floor(log2(self.abs_tol))
+        width = max(signed_int_width(margin*self.range_.inf/(2**lsb)),
+                    signed_int_width(margin*self.range_.sup/(2**lsb)))
+
+        return ap_fixed(width, width+lsb)
+
+
+class AnalogConstant(AnalogSignal):
+    def __init__(self, name=None, value=None, rel_tol=None, abs_tol=None):
+        if (rel_tol is None) and (abs_tol is None):
+            rel_tol = 3e-5
+
+        super().__init__(name=name, range_=[value, value], rel_tol=rel_tol, abs_tol=abs_tol)
+
+
+class DigitalSignal:
+    def __init__(self, name=None, signed=False, width=1, expr=None):
+        self.name = name
+        self.signed = signed
+        self.width = width
+        self.expr = expr
+
+    def __str__(self):
+        return self.name
+
+    def to_cpp_type(self):
+        if self.signed:
+            return ap_int(self.width)
+        else:
+            return ap_uint(self.width)
+
 
 class CaseLinearExpr:
     def __init__(self, num_cases, coeffs=None, const=None):
@@ -6,7 +92,7 @@ class CaseLinearExpr:
         if coeffs is None:
             coeffs = {}
         if const is None:
-            const = [None] * num_cases
+            const = [0] * num_cases
 
         self.num_cases = num_cases
         self.coeffs = coeffs
@@ -22,128 +108,20 @@ class CaseLinearExpr:
         vars = [float(x) for x in A]
         for sym_name, var in zip(sym_names, vars):
             if sym_name not in self.coeffs:
-                self.coeffs[sym_name] = [None] * self.num_cases
+                self.coeffs[sym_name] = [0] * self.num_cases
             self.coeffs[sym_name][case_no] = var
 
         # add constant
         self.const[case_no] = -float(b[0])
 
-    def to_dict(self):
-        return vars(self)
-
-    @staticmethod
-    def from_dict(d):
-        return CaseLinearExpr(**d)
 
 class MixedSignalModel:
-    def __init__(self, analog_inputs=None, digital_inputs=None, mode=None, analog_outputs=None, analog_states=None,
+    def __init__(self, mode=None, analog_inputs=None, digital_inputs=None, analog_outputs=None, analog_states=None,
                  digital_states=None):
 
-        self.analog_inputs = []
-        self.digital_inputs = []
-        self.mode = None
-        self.analog_outputs = {}
-        self.analog_states = {}
-        self.digital_states = {}
-
-        if analog_inputs is not None:
-            self.add_analog_inputs(analog_inputs)
-        if digital_inputs is not None:
-            self.add_digital_inputs(digital_inputs)
-        if mode is not None:
-            self.define_mode(mode)
-        if analog_outputs is not None:
-            self.add_analog_outputs(analog_outputs)
-        if analog_states is not None:
-            self.add_analog_states(analog_states)
-        if digital_states is not None:
-            self.add_digital_states(digital_states)
-
-    def add_analog_inputs(self, analog_inputs):
-        self.analog_inputs.extend(analog_inputs)
-
-    def add_digital_inputs(self, digital_inputs):
-        self.digital_inputs.extend(digital_inputs)
-
-    def define_mode(self, mode):
         self.mode = mode
-
-    def add_analog_outputs(self, analog_outputs):
-        self.analog_outputs.update(analog_outputs)
-
-    def add_analog_states(self, analog_states):
-        self.analog_states.update(analog_states)
-
-    def add_digital_states(self, digital_state):
-        self.digital_states.update(digital_state)
-
-    def to_dict(self):
-        d = vars(self)
-        d['analog_outputs'] = {key: val.to_dict() for key, val in d['analog_outputs'].items()}
-        d['analog_states'] = {key: val.to_dict() for key, val in d['analog_states'].items()}
-        d['digital_states'] = {key: val.to_dict() for key, val in d['digital_states'].items()}
-
-        return d
-
-    @staticmethod
-    def from_dict(d):
-        d_copy = d.copy()
-
-        d_copy['analog_outputs'] = {key: CaseLinearExpr.from_dict(val)
-                                    for key, val in d_copy['analog_outputs'].items()}
-        d_copy['analog_states'] = {key: CaseLinearExpr.from_dict(val)
-                                   for key, val in d_copy['analog_states'].items()}
-        d_copy['digital_states'] = {key: CaseLinearExpr.from_dict(val)
-                                    for key, val in d_copy['digital_states'].items()}
-
-        return MixedSignalModel(**d)
-
-# from interval import interval
-#
-# class AnalogSignal:
-#     def __init__(self, name=None, range_=None, rel_tol=None, abs_tol=None):
-#         # set defaults
-#         if range_ is None:
-#             range_ = interval[-1, 1]
-#         if (rel_tol is None) and (abs_tol is None):
-#             rel_tol = 1e-3
-#
-#         # compute tolerance
-#         if rel_tol is not None:
-#             assert abs_tol is None, 'Cannot specify both relative and absolute tolerance.'
-#             abs_tol = rel_tol * max(abs(range_[0].inf), abs(range_[0].sup))
-#
-#         # save settings
-#         self.name = name
-#         self.range_ = range_
-#         self.abs_tol = abs_tol
-#
-#     def to_dict(self):
-#         d = vars(self)
-#         d['range_'] = [self.range_[0].inf, self.range_[0].sup]
-#
-#         return d
-#
-#     @staticmethod
-#     def from_dict(d):
-#         d_copy = d.copy()
-#         d_copy['range_'] = interval[d_copy['range_'][0], d_copy['range_'][1]]
-#
-#         return AnalogSignal(**d_copy)
-#
-# class DigitalSignal:
-#     def __init__(self, name=None, signed=False, width=1):
-#         self.name = name
-#         self.signed = signed
-#         self.width = width
-#
-#     def to_dict(self):
-#         return vars(self)
-#
-#     @staticmethod
-#     def from_dict(d):
-#         return DigitalSignal(**d)
-#
-# class ModeVariable:
-#     def __init__(self, name=None, concatenation=None):
-#         self.
+        self.analog_inputs = analog_inputs if analog_inputs is not None else []
+        self.digital_inputs = digital_inputs if digital_inputs is not None else []
+        self.analog_outputs = analog_outputs if analog_outputs is not None else []
+        self.analog_states = analog_states if analog_states is not None else []
+        self.digital_states = digital_states if digital_states is not None else []

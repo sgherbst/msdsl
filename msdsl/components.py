@@ -55,31 +55,33 @@ class Resistor:
 class Inductor:
     prefix = 'L'
 
-    def __init__(self, port, state, value, name):
+    def __init__(self, port, di_dt, value, name, initial=0):
         self.port = port
-        self.state = state
+        self.di_dt = di_dt
         self.value = value
         self.name = name
+        self.initial = initial
 
     def add_to_analysis(self, analysis):
         self.port.add_to_analysis(analysis)
 
-        analysis.set_equal(self.state.derivative, self.port.v/self.value)
+        analysis.set_equal(self.di_dt, self.port.v/self.value)
 
 
 class Capacitor:
     prefix = 'C'
 
-    def __init__(self, port, state, value, name):
+    def __init__(self, port, dv_dt, value, name, initial=0):
         self.port = port
-        self.state = state
+        self.dv_dt = dv_dt
         self.value = value
         self.name = name
+        self.initial = initial
 
     def add_to_analysis(self, analysis):
         self.port.add_to_analysis(analysis)
 
-        analysis.set_equal(self.state.derivative, self.port.i/self.value)
+        analysis.set_equal(self.dv_dt, self.port.i/self.value)
 
 
 class Transformer:

@@ -1,8 +1,10 @@
-from sympy import symbols, solve, linear_eq_to_matrix
-from itertools import count, combinations
+from sympy import symbols, solve
+
+import logging
 
 from msdsl.components import *
-from msdsl.model import MixedSignalModel, CaseLinearExpr
+from msdsl.model import *
+from msdsl.util import Namespace, all_combos
 
 class NodalAnalysis:
     def __init__(self):
@@ -22,273 +24,281 @@ class NodalAnalysis:
 
 
 class StateVariable:
-    def __init__(self, variable, derivative):
+    def __init__(self, variable, derivative, range_):
         self.variable = variable
         self.derivative = derivative
+        self.range_ = range_
 
 
-class ComponentNamer:
+class InputVariable:
+    def __init__(self, variable, range_):
+        self.variable = variable
+        self.range_ = range_
+
+
+class CircuitNamespace:
     def __init__(self):
-        self.prefixes = {}
+        self.device_namespace = Namespace()
+        self.symbol_namespace = Namespace()
 
-    def make(self, prefix):
-        if prefix not in self.prefixes:
-            self.prefixes[prefix] = count()
+    def make_device(self, name=None, prefix=None, tries=100):
+        return self.device_namespace.make(name=name, prefix=prefix, tries=tries)
 
-        return prefix + str(next(self.prefixes[prefix]))
+    def make_symbols(self, *args):
+        retval = [symbols(self.symbol_namespace.make(arg)) for arg in args]
 
-
-class SymbolNamespace:
-    def __init__(self):
-        self.sym_names = set()
-
-    def define(self, *args):
-        # check that variable names are unique
-        for arg in args:
-            assert arg not in self.sym_names, 'Variable already defined: ' + arg
-            self.sym_names.add(arg)
-
-        # return new symbol(s)
-        return symbols(args)
-
+        if len(retval) == 1:
+            return retval[0]
+        else:
+            return retval
 
 class Circuit:
     def __init__(self):
-        self.namespace = SymbolNamespace()
-        self.namer = ComponentNamer()
+        self.namespace = CircuitNamespace()
 
-        self.ext_syms = []
-        self.int_syms = []
+        self.input_variables = []
+        self.state_variables = []
+        self.internal_symbols = set()
 
-        self.state_vars = []
+        self.linear_components = []
+        self.diodes = []
+        self.mosfets = []
 
-        self.static_comps = []
-        self.diode_comps = []
-        self.mosfet_comps = []
+        self.inductors = {}
 
-        self.inductor_state_vars = []
-        self.capacitor_state_vars = []
+    def input_(self, name, range_=None):
+        # set default
+        if range_ is None:
+            range_ = [-1, 1]
 
-    def external(self, *args):
-        retval = self.namespace.define(*args)
+        variable = self.namespace.make_symbols(name)
 
-        self.ext_syms.extend(retval)
+        self.input_variables.append(InputVariable(variable=variable, range_=range_))
 
-        if len(args) == 1:
+        return variable
+
+    def state(self, variable_name, derivative_name, range_):
+        variable, derivative = self.namespace.make_symbols(variable_name, derivative_name)
+
+        state_variable = StateVariable(variable=variable, derivative=derivative, range_=range_)
+        self.state_variables.append(state_variable)
+
+        return state_variable
+
+    def symbols(self, *args):
+        retval = []
+
+        for arg in args:
+            symbol = self.namespace.make_symbols(arg)
+            self.internal_symbols.add(symbol)
+
+            retval.append(symbol)
+
+        if len(retval) == 1:
             return retval[0]
         else:
             return retval
 
-    def internal(self, *args):
-        retval = self.namespace.define(*args)
-
-        self.int_syms.extend(retval)
-
-        if len(args) == 1:
-            return retval[0]
-        else:
-            return retval
-
-    def state(self, variable, derivative):
-        retval = StateVariable(variable=variable, derivative=derivative)
-
-        self.state_vars.append(retval)
-
-        return retval
+    def nodes(self, *args):
+        return self.symbols(*args)
 
     def voltage_source(self, p, n, expr=None, name=None):
-        name = name if name is not None else self.namer.make(VoltageSource.prefix)
-        v, i = self.internal('v_' + name, 'i_' + name)
+        name = self.namespace.make_device(name=name, prefix=VoltageSource.prefix)
+        v, i = self.symbols('v_' + name, 'i_' + name)
 
         retval = VoltageSource(port=Port(p=p, n=n, v=v, i=i), expr=expr, name=name)
 
-        self.static_comps.append(retval)
+        self.linear_components.append(retval)
 
         return retval
 
     def current_source(self, p, n, expr=None, name=None):
-        name = name if name is not None else self.namer.make(CurrentSource.prefix)
-        v, i = self.internal('v_' + name, 'i_' + name)
+        name = self.namespace.make_device(name=name, prefix=CurrentSource.prefix)
+        v, i = self.symbols('v_' + name, 'i_' + name)
 
         retval = CurrentSource(port=Port(p=p, n=n, v=v, i=i), expr=expr, name=name)
 
-        self.static_comps.append(retval)
+        self.linear_components.append(retval)
 
         return retval
 
     def resistor(self, p, n, value, name=None):
-        name = name if name is not None else self.namer.make(Resistor.prefix)
-        v, i = self.internal('v_' + name, 'i_' + name)
+        name = self.namespace.make_device(name=name, prefix=Resistor.prefix)
+        v, i = self.symbols('v_' + name, 'i_' + name)
 
         retval = Resistor(port=Port(p=p, n=n, v=v, i=i), value=value, name=name)
 
-        self.static_comps.append(retval)
+        self.linear_components.append(retval)
 
         return retval
 
-    def inductor(self, p, n, value, name=None):
-        name = name if name is not None else self.namer.make(Inductor.prefix)
-        v, i, di_dt = self.internal('v_' + name, 'i_' + name, 'di_dt_' + name)
+    def inductor(self, p, n, value, name=None, initial=0, range_=None):
+        # set default
+        if range_ is None:
+            range_ = [-25, 25]
 
-        state = self.state(variable=i, derivative=di_dt)
-        self.inductor_state_vars.append(state)
+        name = self.namespace.make_device(name=name, prefix=Inductor.prefix)
+        v = self.symbols('v_' + name)
+        state_variable = self.state('i_' + name, 'di_dt_' + name, range_=range_)
 
-        retval = Inductor(port=Port(p=p, n=n, v=v, i=i), state=state, value=value, name=name)
+        retval = Inductor(port=Port(p=p, n=n, v=v, i=state_variable.variable),
+                          di_dt=state_variable.derivative, value=value, name=name, initial=initial)
 
-        self.static_comps.append(retval)
+        self.linear_components.append(retval)
+        self.inductors[name] = retval
 
         return retval
 
-    def capacitor(self, p, n, value, name=None):
-        name = name if name is not None else self.namer.make(Capacitor.prefix)
-        v, i, dv_dt = self.internal('v_' + name, 'i_' + name, 'dv_dt_' + name)
+    def capacitor(self, p, n, value, name=None, initial=0, range_=None):
+        # set default
+        if range_ is None:
+            range_ = [-2e3, 2e3]
 
-        state = self.state(variable=v, derivative=dv_dt)
-        self.capacitor_state_vars.append(state)
+        name = self.namespace.make_device(name=name, prefix=Capacitor.prefix)
+        i = self.symbols('i_' + name)
+        state_variable = self.state('v_' + name, 'dv_dt_' + name, range_=range_)
 
-        retval = Capacitor(port=Port(p=p, n=n, v=v, i=i), state=state, value=value, name=name)
-        self.static_comps.append(retval)
+        retval = Capacitor(port=Port(p=p, n=n, v=state_variable.variable, i=i),
+                           dv_dt=state_variable.derivative, value=value, name=name, initial=initial)
+        self.linear_components.append(retval)
 
         return retval
 
     def transformer(self, p1, n1, p2, n2, n, name=None):
-        name = name if name is not None else self.namer.make(Transformer.prefix)
-        v1, i1, v2, i2 = self.internal('v1_' + name, 'i1_' + name, 'v2_' + name, 'i2_' + name)
+        name = self.namespace.make_device(name=name, prefix=Transformer.prefix)
+
+        v1, i1, v2, i2 = self.symbols('v1_' + name, 'i1_' + name, 'v2_' + name, 'i2_' + name)
 
         retval = Transformer(port1=Port(p=p1, n=n1, v=v1, i=i1), port2=Port(p=p2, n=n2, v=v2, i=i2), n=n, name=name)
-        self.static_comps.append(retval)
+        self.linear_components.append(retval)
 
         return retval
 
     def mosfet(self, p, n, name=None):
-        name = name if name is not None else self.namer.make(MOSFET.prefix)
-        v, i = self.internal('v_' + name, 'i_' + name)
+        name = self.namespace.make_device(name=name, prefix=MOSFET.prefix)
+        v, i = self.symbols('v_' + name, 'i_' + name)
 
         retval = MOSFET(port=Port(p=p, n=n, v=v, i=i), name=name)
-        self.mosfet_comps.append(retval)
+        self.mosfets.append(retval)
 
         return retval
 
     def diode(self, p, n, vf=0, name=None):
-        name = name if name is not None else self.namer.make(Diode.prefix)
-        v, i = self.internal('v_' + name, 'i_' + name)
+        name = self.namespace.make_device(name=name, prefix=Diode.prefix)
+        v, i = self.symbols('v_' + name, 'i_' + name)
 
         retval = Diode(port=Port(p=p, n=n, v=v, i=i), vf=vf, name=name)
-        self.diode_comps.append(retval)
+        self.diodes.append(retval)
 
         return retval
 
-    def solve(self, dt, output_vars=None):
-        if output_vars is None:
-            output_vars = []
+    def solve(self, dt, outputs=None):
+        if outputs is None:
+            outputs = []
+
+        dynamic_components = self.mosfets + self.diodes
+        num_cases = 2**(len(dynamic_components))
 
         model = MixedSignalModel()
 
-        model.add_analog_inputs([sym.name for sym in self.ext_syms])
-        model.add_digital_inputs([mosfet.on for mosfet in self.mosfet_comps])
+        model.analog_inputs = [AnalogSignal(name=input_.variable.name, range_=input_.range_)
+                               for input_ in self.input_variables]
 
-        dyn_comps = self.mosfet_comps + self.diode_comps
-        num_cases = 2**(len(dyn_comps))
+        model.digital_inputs = [DigitalSignal(name=mosfet.on) for mosfet in self.mosfets]
 
-        mode = [mosfet.on for mosfet in self.mosfet_comps] + [diode.on for diode in self.diode_comps]
-        mode = list(reversed(mode))
-        model.define_mode(mode)
+        model.mode = [mosfet.on for mosfet in self.mosfets] + [diode.on for diode in self.diodes]
+        model.mode = list(reversed(model.mode))
 
-        analog_outputs = {output.name: CaseLinearExpr(num_cases=num_cases) for output in output_vars}
-        model.add_analog_outputs(analog_outputs)
+        model.analog_outputs = [AnalogSignal(name=output.name, expr=CaseLinearExpr(num_cases=num_cases))
+                                for output in outputs]
 
-        analog_states = {state.variable.name: CaseLinearExpr(num_cases=num_cases) for state in self.state_vars}
-        model.add_analog_states(analog_states)
+        model.analog_states = [AnalogSignal(name=state_variable.variable.name,
+                                            range_=state_variable.range_,
+                                            expr=CaseLinearExpr(num_cases=num_cases))
+                               for state_variable in self.state_variables]
 
-        digital_states = {diode.on: CaseLinearExpr(num_cases=num_cases) for diode in self.diode_comps}
-        model.add_digital_states(digital_states)
+        model.digital_states = [DigitalSignal(name=diode.on, expr=CaseLinearExpr(num_cases=num_cases))
+                                for diode in self.diodes]
 
         for i in range(num_cases):
             # determine modes of dynamic components
-            dyn_modes = [bool((i >> j) & 1) for j in range(len(dyn_comps))]
-            dyn_modes = {comp.name: ('on' if mode else 'off')
-                         for comp, mode in zip(dyn_comps, dyn_modes)}
+            dynamic_modes = [bool((i >> j) & 1) for j in range(len(dynamic_components))]
+            dynamic_modes = {component: ('on' if mode else 'off')
+                             for component, mode in zip(dynamic_components, dynamic_modes)}
 
             # append the result if it exists
-            self.solve_case(dt=dt, case_no=i, dyn_modes=dyn_modes, analog_outputs=analog_outputs,
-                            analog_states=analog_states, digital_states=digital_states)
+            self.solve_case(dt=dt, model=model, case_no=i, dynamic_modes=dynamic_modes)
 
         return model
 
-    def solve_case(self, dt, case_no, dyn_modes, analog_outputs, analog_states, digital_states, max_attempts=10):
+    def solve_case(self, dt, model, case_no, dynamic_modes, max_attempts=10):
         # create new analysis object
         analysis = NodalAnalysis()
 
-        # handle static components
-        for comp in self.static_comps:
-            comp.add_to_analysis(analysis)
+        # handle linear components
+        for component in self.linear_components:
+            component.add_to_analysis(analysis)
 
         # handle dynamic components
-        dyn_comps = self.mosfet_comps + self.diode_comps
-        dyn_comps = {value.name: value for value in dyn_comps}
-
-        for name, state in dyn_modes.items():
-            dyn_comps[name].add_to_analysis(state, analysis)
-
-        # generate a list of different configurations to try, in which different combinations of
-        # inductors are effectively disabled
-
-        configs = []
-        for k in range(len(self.inductor_state_vars)+1):
-            done = False
-            for combo in combinations(self.inductor_state_vars, k):
-                if len(configs) < max_attempts:
-                    configs.append(set(combo))
-                else:
-                    done = True
-                    break
-            if done:
-                break
+        for component, mode in dynamic_modes.items():
+            component.add_to_analysis(mode, analysis)
 
         # loop through the configs until a solution is found
+        logging.debug('*** Case {} ***'.format(case_no))
 
-        print('*** Case {} ***'.format(case_no))
-        for attempt, disabled_state_vars in enumerate(configs):
+        for attempt, disabled_inductors in enumerate(all_combos(self.inductors.keys())):
 
-            print('attempt {} ... '.format(attempt), end='')
+            if attempt >= max_attempts:
+                return
 
-            # make copies of the variables to solve for
-            solve_vars = self.int_syms[:]
-            eqns = analysis.equations[:]
+            logging.debug('attempt {}'.format(attempt))
 
-            # configure the system of equations
-            for state_var in self.state_vars:
-                if state_var not in disabled_state_vars:
-                    solve_vars.remove(state_var.variable)
-                else:
-                    eqns.append(state_var.derivative)
+            # build a list of the equations to solve
+            equations = analysis.equations.copy()
+            equations.extend(self.inductors[inductor].di_dt for inductor in disabled_inductors)
+
+            # build a set of the variables to solve for
+            solve_variables = self.internal_symbols.copy()
+            solve_variables |= set(state_variable.derivative for state_variable in self.state_variables)
+            solve_variables |= set(self.inductors[inductor].port.i for inductor in disabled_inductors)
 
             # use sympy solve to solve the system of equations
-            soln = solve(eqns, solve_vars)
+            soln = solve(equations, solve_variables)
             if not soln:
-                print('no solution')
+                logging.debug('no solution')
                 continue
 
-            # compute state update equations
-            for state_var in self.state_vars:
-                if state_var not in disabled_state_vars:
-                    expr = state_var.variable + dt*soln[state_var.derivative]
+            # compute analog state update equations
+            exprs = {}
+            for state_variable in self.state_variables:
+                if state_variable in solve_variables:
+                    expr = soln[state_variable.variable]
                 else:
-                    expr = soln[state_var.variable]
+                    expr = state_variable.variable + dt*soln[state_variable.derivative]
 
-                analog_states[state_var.variable.name].add_case(case_no=case_no, expr=expr)
+                exprs[state_variable.variable.name] = expr
 
-            # compute diode update equations
-            for diode in self.diode_comps:
-                if dyn_modes[diode.name] == 'on':
-                    digital_states[diode.on].add_case(case_no=case_no, expr=soln[diode.port.i])
+            # apply digital state update equations
+            for analog_state in model.analog_states:
+                analog_state.expr.add_case(case_no=case_no, expr=exprs[analog_state.name])
+
+            # compute digital state update equations
+            exprs = {}
+            for diode in self.diodes:
+                if dynamic_modes[diode] == 'on':
+                    expr = soln[diode.port.i]
                 else:
-                    digital_states[diode.on].add_case(case_no=case_no, expr=soln[diode.port.v])
+                    expr = soln[diode.port.v] - diode.vf
+
+                exprs[diode.on] = expr
+
+            # apply digital state update equations
+            for digital_state in model.digital_states:
+                digital_state.expr.add_case(case_no=case_no, expr=exprs[digital_state.name])
 
             # list all output variables
-            for output, lin_expr in analog_outputs.items():
-                if output not in analog_states:
-                    lin_expr.add_case(case_no=case_no, expr=soln[symbols(output)])
+            for output in model.analog_outputs:
+                output.expr.add_case(case_no=case_no, expr=soln[symbols(output.name)])
 
-            print('solution found')
+            logging.debug('solution found')
             return

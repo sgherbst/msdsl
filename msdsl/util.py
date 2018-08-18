@@ -1,24 +1,41 @@
-import json
+from itertools import count, combinations
+from interval import interval
 
-def centered(text, char='*', width=50):
-    x = width - len(text)
 
-    lhs = ((x // 2) - 1)
-    rhs = ((x // 2) - 1) if ((x % 2) == 0) else (x // 2)
-
-    return (char*lhs) + ' ' + text + ' ' + (char*rhs)
-
-def line(char='*', width=50):
-    return char*width
-
-def to_json(d, pretty=True):
-    if pretty:
-        # ref: https://docs.python.org/3.7/library/json.html
-        kwargs = {'sort_keys': True, 'indent': 2}
+def to_interval(obj):
+    if isinstance(obj, interval):
+        return obj
     else:
-        kwargs = {}
+        return interval[obj[0], obj[1]]
 
-    return json.dumps(d, **kwargs)
 
-def from_json(string):
-    return json.loads(string)
+def all_combos(vals):
+    for k in range(len(vals) + 1):
+        for combo in combinations(vals, k):
+            yield(set(combo))
+
+class Namespace:
+    def __init__(self):
+        self.prefixes = {}
+        self.names = set()
+
+    def make(self, name=None, prefix=None, tries=100):
+        if name is not None:
+            assert name not in self.names, 'Name already defined: ' + name
+        else:
+            assert prefix is not None, "Must provide prefix if name isn't provided."
+
+            if prefix not in self.prefixes:
+                self.prefixes[prefix] = count()
+
+            for _ in range(tries):
+                name = prefix + str(next(self.prefixes[prefix]))
+                if name not in self.names:
+                    break
+            else:
+                raise Exception('Could not define name with prefix: ' + prefix)
+
+
+        self.names.add(name)
+
+        return name

@@ -11,7 +11,9 @@ setup(
     install_requires=[
         'scipy',
         'numpy',
-        'sympy'
+        'sympy',
+        'interval',
+        'marshmallow'
     ],
     include_package_data=True,
     zip_safe=False,

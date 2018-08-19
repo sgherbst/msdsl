@@ -1,13 +1,19 @@
 from itertools import count, combinations
 from interval import interval
+from collections import Iterable
+from sympy import symbols
 
+def listify(x):
+    if not isinstance(x, Iterable):
+        return list(x)
+    else:
+        return x
 
 def to_interval(obj):
     if isinstance(obj, interval):
         return obj
     else:
         return interval[obj[0], obj[1]]
-
 
 def all_combos(vals):
     for k in range(len(vals) + 1):
@@ -19,7 +25,11 @@ class Namespace:
         self.prefixes = {}
         self.names = set()
 
-    def make(self, name=None, prefix=None, tries=100):
+    def make(self, name=None, prefix=None, tries=None) :
+        # set defaults
+        if tries is None:
+            tries = 100
+
         if name is not None:
             assert name not in self.names, 'Name already defined: ' + name
         else:
@@ -39,3 +49,9 @@ class Namespace:
         self.names.add(name)
 
         return name
+
+
+class SymbolNamespace(Namespace):
+    def make(self, name=None, prefix=None, tries=None):
+        name = super().make(name=name, prefix=prefix, tries=tries)
+        return symbols(name)

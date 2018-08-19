@@ -1,126 +1,179 @@
 from sympy import linear_eq_to_matrix
-from math import log2, floor, ceil
 
-from msdsl.cpp import ap_fixed, ap_int, ap_uint
-from msdsl.util import to_interval
-
-def signed_int_width(int_val):
-    """Returns the number of bits required to represent int_val as a signed integer.  If int_val is zero,
-    the number of bits required is defined to be one.
-    """
-
-    if int_val < 0:
-        return ceil(log2(-int_val) + 1)
-    elif int_val > 0:
-        return ceil(log2(int_val + 1) + 1)
-    else:
-        return 1
 
 class AnalogSignal:
-    def __init__(self, name=None, range_=None, rel_tol=None, abs_tol=None, expr=None):
+    def __init__(self, name=None, range_=None, rel_tol=None, abs_tol=None, expr=None, initial=None):
         # set defaults
-        if range_ is None:
-            range_ = [-1, 1]
         if (rel_tol is None) and (abs_tol is None):
             rel_tol = 5e-7
-
-        # create interval if necessary
-        range_ = to_interval(range_)
-
-        # compute tolerance
-        if rel_tol is not None:
-            assert abs_tol is None, 'Cannot specify both relative and absolute tolerance.'
-            abs_tol = rel_tol * max(abs(range_[0].inf), abs(range_[0].sup))
 
         # save settings
         self.name = name
         self.range_ = range_
+        self.rel_tol = rel_tol
         self.abs_tol = abs_tol
         self.expr = expr
-
-    @property
-    def rel_tol(self):
-        if (self.range_[0].inf == 0) and (self.range_[0].sup == 0):
-            return 0
-        else:
-            return self.abs_tol / max(abs(self.range_[0].inf), abs(self.range_[0].sup))
-
-    def __add__(self, other):
-        return AnalogSignal(range_=self.range_+other.range_, abs_tol=max(self.abs_tol, other.abs_tol))
-
-    def __mul__(self, other):
-        rel_tol = max(self.rel_tol, other.rel_tol)
-        return AnalogSignal(range_ = self.range_*other.range_, rel_tol=rel_tol)
-
-    @property
-    def cpp_type(self):
-        margin = 1.5
-
-        if self.abs_tol == 0:
-            assert (self.range_[0].inf == 0) and (self.range_[0].sup == 0), 'A tolerance of zero is only allowed for a value with range [0,0]'
-            return ap_fixed(1, 1)
-
-        lsb = floor(log2(self.abs_tol))
-        width = max(signed_int_width(margin*self.range_[0].inf/(2**lsb)),
-                    signed_int_width(margin*self.range_[0].sup/(2**lsb)))
-
-        return ap_fixed(width, width+lsb)
+        self.initial = initial
 
 
 class DigitalSignal:
-    def __init__(self, name=None, signed=False, width=1, expr=None):
+    def __init__(self, name=None, signed=None, width=None, expr=None, initial=None):
+        # set defaults
+        if signed is None:
+            signed = False
+        if width is None:
+            width = 1
+
         self.name = name
         self.signed = signed
         self.width = width
         self.expr = expr
+        self.initial = initial
 
-    def __str__(self):
-        return self.name
 
-    @property
-    def cpp_type(self):
-        if self.signed:
-            return ap_int(self.width)
+class CaseCoeffProduct:
+    def __init__(self, var=None, num_cases=None, coeffs=None):
+        # set defaults
+        if num_cases is not None:
+            assert coeffs is None
+            coeffs = [0]*num_cases
         else:
-            return ap_uint(self.width)
+            assert coeffs is not None
+            num_cases = len(coeffs)
+
+        # save settings
+        self.var = var
+        self.num_cases = num_cases
+        self.coeffs = coeffs
+
+    def update(self, case_no, coeff):
+        self.coeffs[case_no] = coeff
 
 
 class CaseLinearExpr:
-    def __init__(self, num_cases, coeffs=None, const=None):
+    def __init__(self, num_cases=None, prods=None, const=None):
         # set defaults
-        if coeffs is None:
-            coeffs = {}
-        if const is None:
-            const = [0] * num_cases
+        if num_cases is not None:
+            assert prods is None
+            prods = []
 
+            assert const is None
+            const = CaseCoeffProduct(num_cases=num_cases)
+        else:
+            assert (prods is not None) and (const is not None)
+            num_cases = const.num_cases
+
+        # save settings
         self.num_cases = num_cases
-        self.coeffs = coeffs
         self.const = const
 
-    def add_case(self, case_no, expr):
-        syms = list(expr.free_symbols)
-        sym_names = [sym.name for sym in syms]
+        # dictionary mapping variable names to the associated CaseCoeffProduct object
+        self._var_dict = {prod.var: prod for prod in prods}
 
+    @property
+    def prods(self):
+        return list(self._var_dict.values())
+
+    def get_var(self, var):
+        return self._var_dict[var]
+
+    def has_var(self, var):
+        return var in self._var_dict
+
+    def init_var(self, var):
+        prod = CaseCoeffProduct(var=var, num_cases=self.num_cases)
+
+        self._var_dict[var] = prod
+        self.prods.append(prod)
+
+        return prod
+
+    def add_case(self, case_no, expr):
+        # convert symbolic expression to a linear form
+        syms = list(expr.free_symbols)
         A, b = linear_eq_to_matrix([expr], syms)
 
-        # add variables
-        vars = [float(x) for x in A]
-        for sym_name, var in zip(sym_names, vars):
-            if sym_name not in self.coeffs:
-                self.coeffs[sym_name] = [0] * self.num_cases
-            self.coeffs[sym_name][case_no] = var
+        # get coefficient values and variable names
+        coeffs = [float(x) for x in A]
+        vars = [sym.name for sym in syms]
 
-        # add constant
-        self.const[case_no] = -float(b[0])
+        # update coeff products
+        for coeff, var in zip(coeffs, vars):
+            if not self.has_var(var):
+                self.init_var(var)
+            self.get_var(var).update(case_no, coeff)
+
+        # update constant
+        self.const.update(case_no, -float(b[0]))
 
 
 class MixedSignalModel:
-    def __init__(self, mode=None, analog_inputs=None, digital_inputs=None, analog_outputs=None, analog_states=None,
-                 digital_states=None):
+    def __init__(self, analog_inputs=None, digital_inputs=None, analog_outputs=None, digital_outputs=None,
+                 analog_states=None, digital_states=None, mode=None):
 
-        self.mode = mode
-        self.analog_inputs = analog_inputs if analog_inputs is not None else []
-        self.digital_inputs = digital_inputs if digital_inputs is not None else []
-        self.analog_outputs = analog_outputs if analog_outputs is not None else []
-        self.analog_states = analog_states if analog_states is not None else []
-        self.digital_states = digital_states if digital_states is not None else []
+        # initialize model
+        self.analog_inputs = []
+        self.digital_inputs = []
+        self.analog_outputs = []
+        self.digital_outputs = []
+        self.analog_states = []
+        self.digital_states = []
+        self.mode = []
+
+        # initial name dictionary
+        self._signal_name_dict = {}
+
+        # apply inputs
+        if analog_inputs is not None:
+            self.add_analog_inputs(analog_inputs)
+        if digital_inputs is not None:
+            self.add_digital_inputs(digital_inputs)
+        if analog_outputs is not None:
+            self.add_analog_outputs(analog_outputs)
+        if digital_outputs is not None:
+            self.add_digital_outputs(digital_outputs)
+        if analog_states is not None:
+            self.add_analog_states(analog_states)
+        if digital_states is not None:
+            self.add_digital_states(digital_states)
+        if mode is not None:
+            self.mode = mode
+
+    # get specific I/O by name
+
+    def get_signal(self, name):
+        return self._signal_name_dict[name]
+
+    def has_signal(self, name):
+        return name in self._signal_name_dict
+
+    def add_signals(self, *args):
+        for arg in args:
+            assert not self.has_signal(arg.name)
+            self._signal_name_dict[arg.name] = arg
+
+    # Build model
+
+    def add_analog_inputs(self, *args):
+        self.analog_inputs.extend(args)
+        self.add_signals(*args)
+        
+    def add_digital_inputs(self, *args):
+        self.digital_inputs.extend(args)
+        self.add_signals(*args)
+
+    def add_analog_outputs(self, *args):
+        self.analog_outputs.extend(args)
+        self.add_signals(*args)
+
+    def add_digital_outputs(self, *args):
+        self.digital_outputs.extend(args)
+        self.add_signals(*args)
+
+    def add_analog_states(self, *args):
+        self.analog_states.extend(args)
+        self.add_signals(*args)
+
+    def add_digital_states(self, *args):
+        self.digital_states.extend(args)
+        self.add_signals(*args)

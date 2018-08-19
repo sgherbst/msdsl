@@ -55,12 +55,11 @@ class Resistor:
 class Inductor:
     prefix = 'L'
 
-    def __init__(self, port, di_dt, value, name, initial=0):
+    def __init__(self, port, di_dt, value, name):
         self.port = port
         self.di_dt = di_dt
         self.value = value
         self.name = name
-        self.initial = initial
 
     def add_to_analysis(self, analysis):
         self.port.add_to_analysis(analysis)
@@ -71,12 +70,11 @@ class Inductor:
 class Capacitor:
     prefix = 'C'
 
-    def __init__(self, port, dv_dt, value, name, initial=0):
+    def __init__(self, port, dv_dt, value, name):
         self.port = port
         self.dv_dt = dv_dt
         self.value = value
         self.name = name
-        self.initial = initial
 
     def add_to_analysis(self, analysis):
         self.port.add_to_analysis(analysis)

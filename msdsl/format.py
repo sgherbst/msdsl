@@ -1,9 +1,7 @@
 import json
-from interval import interval
-
 from marshmallow import Schema, fields, post_load
 
-from msdsl.model import AnalogSignal, DigitalSignal, CaseLinearExpr, MixedSignalModel
+from msdsl.model import AnalogSignal, DigitalSignal, CaseLinearExpr, MixedSignalModel, CaseCoeffProduct
 
 def load_model(data):
     schema = MixedSignalModelSchema()
@@ -21,18 +19,18 @@ def dump_model(model, pretty=True):
     print(json.dumps(data, **kwargs))
 
 
-class IntervalField(fields.Field):
-    def _serialize(self, value, attr, obj):
-        return [value[0].inf, value[0].sup]
+class CaseCoeffProductSchema(Schema):
+    coeffs = fields.List(fields.Number())
+    var = fields.Str(allow_none=True)
 
-    def _deserialize(self, value, attr, data):
-        return interval[value[0], value[1]]
+    @post_load
+    def make_object(self, data):
+        return CaseCoeffProduct(**data)
 
 
 class CaseLinearExprSchema(Schema):
-    num_cases = fields.Integer()
-    coeffs = fields.Dict()
-    const = fields.Number()
+    prods = fields.Nested(CaseCoeffProductSchema(), many=True)
+    const = fields.Nested(CaseCoeffProductSchema())
 
     @post_load
     def make_object(self, data):
@@ -41,10 +39,11 @@ class CaseLinearExprSchema(Schema):
 
 class AnalogSignalSchema(Schema):
     name = fields.Str()
-    range_ = IntervalField(allow_none=True)
+    range_ = fields.List(fields.Number(), allow_none=True)
     rel_tol = fields.Number(allow_none=True)
     abs_tol = fields.Number(allow_none=True)
-    expr = fields.Nested(CaseLinearExprSchema, allow_none=True)
+    expr = fields.Nested(CaseLinearExprSchema(), allow_none=True)
+    initial = fields.Number(allow_none=True)
 
     @post_load
     def make_object(self, data):
@@ -55,7 +54,8 @@ class DigitalSignalSchema(Schema):
     name = fields.Str()
     signed = fields.Boolean()
     width = fields.Integer()
-    expr = fields.Nested(CaseLinearExprSchema, allow_none=True)
+    expr = fields.Nested(CaseLinearExprSchema(), allow_none=True)
+    initial = fields.Integer(allow_none=True)
 
     @post_load
     def make_object(self, data):
@@ -64,11 +64,12 @@ class DigitalSignalSchema(Schema):
 
 class MixedSignalModelSchema(Schema):
     mode = fields.List(fields.String())
-    analog_inputs = fields.Nested(AnalogSignalSchema, many=True)
-    digital_inputs = fields.Nested(DigitalSignalSchema, many=True)
-    analog_outputs = fields.Nested(AnalogSignalSchema, many=True)
-    analog_states = fields.Nested(AnalogSignalSchema, many=True)
-    digital_states = fields.Nested(DigitalSignalSchema, many=True)
+    analog_inputs = fields.Nested(AnalogSignalSchema(), many=True)
+    digital_inputs = fields.Nested(DigitalSignalSchema(), many=True)
+    analog_outputs = fields.Nested(AnalogSignalSchema(), many=True)
+    digital_outputs = fields.Nested(DigitalSignalSchema(), many=True)
+    analog_states = fields.Nested(AnalogSignalSchema(), many=True)
+    digital_states = fields.Nested(DigitalSignalSchema(), many=True)
 
     @post_load
     def make_object(self, data):

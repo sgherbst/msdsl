@@ -13,5 +13,11 @@ cir.voltage_source(v_in, 0, input_)
 cir.resistor(v_in, v_out, 1e3)
 cir.resistor(v_out, 0, 2e3)
 
+# define outputs
+cir.output(v_out)
+
 # solve the circuit
-dump_model(cir.solve(10e-9, [v_out]))
+cir.solve(10e-9)
+
+# dump the model
+dump_model(cir.model)

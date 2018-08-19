@@ -5,6 +5,32 @@ from msdsl.util import Namespace
 from msdsl.cpp import *
 from msdsl.model import AnalogSignal
 
+def signed_int_width(int_val):
+    """Returns the number of bits required to represent int_val as a signed integer.  If int_val is zero,
+    the number of bits required is defined to be one.
+    """
+
+    if int_val < 0:
+        return ceil(log2(-int_val) + 1)
+    elif int_val > 0:
+        return ceil(log2(int_val + 1) + 1)
+    else:
+        return 1
+
+def cpp_type(self):
+    margin = 1.5
+
+    if self.abs_tol == 0:
+        assert (self.range_[0].inf == 0) and (
+        self.range_[0].sup == 0), 'A tolerance of zero is only allowed for a value with range [0,0]'
+        return ap_fixed(1, 1)
+
+    lsb = floor(log2(self.abs_tol))
+    width = max(signed_int_width(margin * self.range_[0].inf / (2 ** lsb)),
+                signed_int_width(margin * self.range_[0].sup / (2 ** lsb)))
+
+    return ap_fixed(width, width + lsb)
+
 def arr_to_signal(arr):
     return AnalogSignal(range_=[min(arr), max(arr)])
 

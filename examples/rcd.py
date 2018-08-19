@@ -16,5 +16,11 @@ cir.capacitor(v_out, 0, 1e-9)
 # instantiate diode
 diode = cir.diode(v_in, v_x)
 
+# define outputs
+cir.output(v_out)
+
 # solve the circuit
-dump_model(cir.solve(10e-9, [v_out]))
+cir.solve(10e-9)
+
+# dump the model
+dump_model(cir.model)

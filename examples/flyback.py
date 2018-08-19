@@ -30,5 +30,11 @@ cir.capacitor(v_out, 0, value=10e-6)
 output = cir.input_('output')
 cir.current_source(v_out, 0, expr=output)
 
+# define outputs
+cir.output(v_out)
+
 # solve the circuit
-dump_model(cir.solve(0.25e-6, [v_out]))
+cir.solve(0.25e-6)
+
+# dump the model
+dump_model(cir.model)

@@ -31,6 +31,7 @@ class CaseCoeffProductSchema(Schema):
 class CaseLinearExprSchema(Schema):
     prods = fields.Nested(CaseCoeffProductSchema, many=True)
     const = fields.Nested(CaseCoeffProductSchema)
+    cases_present = fields.List(fields.Integer())
 
     @post_load
     def make_object(self, data):
@@ -48,13 +49,6 @@ class AnalogSignalSchema(Schema):
     @post_load
     def make_object(self, data):
         return AnalogSignal(**data)
-
-
-class TitleCased(fields.Field):
-    def _serialize(self, value, attr, obj):
-        if value is None:
-            return ''
-        return value.title()
 
 
 class DigitalExprField(fields.Field):

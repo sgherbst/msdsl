@@ -40,27 +40,45 @@ class AnalogFormatter:
 
         return ap_fixed(width, width + lsb)
 
-    def decl_arrays(self, expr):
-        prods = []
-
-        for prod in expr.prods:
-            # declare the array
-            coeff_array_name = self.namespace.make(prefix='arr')
-            coeff_array_type = self.type_(self.arr_to_signal(prod.coeffs))
-            self.cpp_gen.array(coeff_array_type, coeff_array_name, prod.coeffs)
-
-            # save the pair of coefficient array and variable names
-            prods.append((coeff_array_name, prod.var))
-
-        # declare the array of constants
-        offset_array_name = self.namespace.make(prefix='arr')
-        offset_array_type = self.type_(self.arr_to_signal(expr.const.coeffs))
-        self.cpp_gen.array(offset_array_type, offset_array_name, expr.const.coeffs)
-
-        return prods, offset_array_name
-
     def arr_to_signal(self, arr):
         return AnalogSignal(range_=[min(arr), max(arr)], rel_tol=self.coeff_rel_tol)
+
+    def val_to_signal(self, val):
+        return self.arr_to_signal([val, val])
+
+    def make_expr(self, expr):
+        terms = []
+        for prod in (expr.prods + [expr.const]):
+            # get the coefficients from cases that were actually defined
+            coeffs_present = [prod.coeffs[k] for k in expr.cases_present]
+
+            # check if all zeros
+            if all(coeff_val==0 for coeff_val in coeffs_present):
+                continue
+
+            # create a constant or array as necessary
+            const_val = coeffs_present[0]
+            if all(coeff_val==const_val for coeff_val in coeffs_present):
+                if (const_val == 1) and (prod.var is not None):
+                    # special case: if the coefficients are all "1", then no multiplication is necessary
+                    terms.append(prod.var)
+                    continue
+                else:
+                    term = instance(self.type_(self.val_to_signal(const_val)), const_val)
+            else:
+                arr = self.namespace.make(prefix='arr')
+                self.cpp_gen.array(self.type_(self.arr_to_signal(prod.coeffs)), arr, prod.coeffs)
+
+                term = arr + '[idx]'
+
+            # multiply by variable if defined
+            if prod.var is not None:
+                term += '*' + prod.var
+
+            # add to terms list
+            terms.append(term)
+
+        return ' + '.join(terms)
 
     def expr_type(self, expr, rel_tol=None, abs_tol=None):
         range_ = interval[min(expr.const.coeffs), max(expr.const.coeffs)]
@@ -111,13 +129,6 @@ class DigitalFormatter:
             child_2 = DigitalFormatter.expr2str(expr.children[1])
             return '(' + child_1 + ')' + expr.data + '(' + child_2 + ')'
 
-def linexpr(prods, const):
-    terms = [coeff + '[idx]*' + var for coeff, var in prods]
-
-    if const is not None:
-        terms.append(const + '[idx]')
-
-    return ' + '.join(terms)
 
 def main():
     if len(sys.argv) >= 2:
@@ -127,7 +138,6 @@ def main():
 
     file_text = open(file_name, 'r').read()
     model = load_model(file_text)
-    print(model)
 
     cpp_gen = CppGen()
     namespace = Namespace()
@@ -163,20 +173,6 @@ def main():
         cpp_gen.static(digital_fmt.type_(digital_state), digital_state.name, initial=digital_state.initial)
     cpp_gen.print()
 
-    # update digital states
-    for digital_state in model.digital_states:
-        for expr in digital_state.expr.walk():
-            if isinstance(expr.data, CaseLinearExpr):
-                cpp_gen.comment('Making temporary variable')
-                tmpvar = namespace.make(prefix='tmp')
-                prods, offset = analog_fmt.decl_arrays(expr.data)
-                cpp_gen.assign(analog_fmt.expr_type(expr.data) + ' ' + tmpvar, linexpr(prods, offset))
-                cpp_gen.print()
-                expr.data = 'SIGN_BIT(' + tmpvar + ')'
-        cpp_gen.comment('Update digital state: ' + digital_state.name)
-        cpp_gen.assign(digital_state.name, digital_fmt.expr2str(digital_state.expr))
-        cpp_gen.print()
-
     # create the case index variable
     cpp_gen.comment('Case index variable')
     cpp_gen.assign(ap_uint(len(model.mode)) + ' ' + 'idx', concat(*model.mode))
@@ -191,8 +187,7 @@ def main():
 
         # assign to temporary variable
         cpp_gen.comment('Update analog state: ' + analog_state.name)
-        prods, offset = analog_fmt.decl_arrays(analog_state.expr)
-        cpp_gen.assign(analog_fmt.type_(analog_state) + ' ' + tmpvar, linexpr(prods, offset))
+        cpp_gen.assign(analog_fmt.type_(analog_state) + ' ' + tmpvar, analog_fmt.make_expr(analog_state.expr))
         cpp_gen.print()
 
     # update analog states from temporary variables
@@ -201,12 +196,33 @@ def main():
         cpp_gen.assign(state, tmpvar)
     cpp_gen.print()
 
-    # print the outputs
+    # update the outputs
     for analog_output in model.analog_outputs:
         cpp_gen.comment('Calculate analog output: ' + analog_output.name)
-        prods, offset = analog_fmt.decl_arrays(analog_output.expr)
-        cpp_gen.assign(deref(analog_output.name), linexpr(prods, offset))
+        cpp_gen.assign(deref(analog_output.name), analog_fmt.make_expr(analog_output.expr))
         cpp_gen.print()
+
+    # update digital states into temporary variables
+    tmpvars = []
+    for digital_state in model.digital_states:
+        cpp_gen.comment('Update digital state: ' + digital_state.name)
+
+        for expr in digital_state.expr.walk():
+            if isinstance(expr.data, CaseLinearExpr):
+                tmpvar = namespace.make(prefix='tmp')
+                cpp_gen.assign(analog_fmt.expr_type(expr.data) + ' ' + tmpvar, analog_fmt.make_expr(expr.data))
+                expr.data = 'SIGN_BIT(' + tmpvar + ')'
+
+        tmpvar = namespace.make(prefix='tmp')
+        tmpvars.append((digital_state.name, tmpvar))
+        cpp_gen.assign(digital_fmt.type_(digital_state) + ' ' + tmpvar, digital_fmt.expr2str(digital_state.expr))
+        cpp_gen.print()
+
+    # update digital states from temporary variables
+    cpp_gen.comment('Assigning digital states from temporary variables')
+    for state, tmpvar in tmpvars:
+        cpp_gen.assign(state, tmpvar)
+    cpp_gen.print()
 
     cpp_gen.end_function()
 

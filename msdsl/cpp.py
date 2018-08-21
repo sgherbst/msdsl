@@ -28,18 +28,6 @@ def concat(*args):
 def instance(type_, *args):
     return type_ + concat(*args)
 
-def gt(a, b):
-    return str(a) + ' > ' + str(b)
-
-def ge(a, b):
-    return str(a) + ' >= ' + str(b)
-
-def lt(a, b):
-    return str(a) + ' < ' + str(b)
-
-def le(a, b):
-    return str(a) + ' <= ' + str(b)
-
 def const(type_):
     return 'const ' + type_
 

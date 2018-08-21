@@ -70,7 +70,7 @@ class CaseCoeffProduct:
         # set defaults
         if num_cases is not None:
             assert coeffs is None
-            coeffs = [None]*num_cases
+            coeffs = [0]*num_cases
         else:
             assert coeffs is not None
             num_cases = len(coeffs)
@@ -85,7 +85,7 @@ class CaseCoeffProduct:
 
 
 class CaseLinearExpr:
-    def __init__(self, num_cases=None, prods=None, const=None):
+    def __init__(self, num_cases=None, prods=None, const=None, cases_present=None):
         # set defaults
         if num_cases is not None:
             assert prods is None
@@ -93,13 +93,17 @@ class CaseLinearExpr:
 
             assert const is None
             const = CaseCoeffProduct(num_cases=num_cases)
+
+            assert cases_present is None
+            cases_present = []
         else:
-            assert (prods is not None) and (const is not None)
+            assert (prods is not None) and (const is not None) and (cases_present is not None)
             num_cases = const.num_cases
 
         # save settings
         self.num_cases = num_cases
         self.const = const
+        self.cases_present = cases_present
 
         # dictionary mapping variable names to the associated CaseCoeffProduct object
         self._var_dict = {prod.var: prod for prod in prods}
@@ -123,6 +127,9 @@ class CaseLinearExpr:
         return prod
 
     def add_case(self, case_no, expr):
+        # remove case from missing set
+        self.cases_present.append(case_no)
+
         # convert symbolic expression to a linear form
         syms = list(expr.free_symbols)
         A, b = linear_eq_to_matrix([expr], syms)

@@ -1,32 +1,28 @@
-# Build flow for 
+# Build flow for generating 
 
+# set Vivado location if not already defined
+VIVADO_HOME ?= /Volumes/C/Xilinx/Vivado/2018.2/
+
+# define circuit location
 CIRCUIT_FILE = ../examples/buck.py
-VIVADO_HOME = /Volumes/C/Xilinx/Vivado/2018.2/
 
+# tool binaries
 CC = g++
 PYTHON = python3
 
-JSON_FILE = circuit.json
-CPP_FILE = circuit.cpp
-BIN_FILE = circuit
+.PHONY: all analyze generate generate_float clean
 
-.PHONY: all analyze generate compile run view clean
-
-all: analyze generate compile run view
+all: analyze generate
+float: analyze generate_float
 
 analyze: 
-	$(PYTHON) $(CIRCUIT_FILE) $(JSON_FILE) | tee $(JSON_FILE)
+	$(PYTHON) $(CIRCUIT_FILE) > circuit.json
 
 generate: 
-	$(PYTHON) ../tools/generate.py $(JSON_FILE) 
-#	$(PYTHON) ../tools/generate.py $(JSON_FILE) > $(CPP_FILE)
+	$(PYTHON) ../tools/generate.py -i circuit.json -o circuit.cpp
 
-# TODO...
+generate_float: 
+	$(PYTHON) ../tools/generate.py -i circuit.json -o circuit_float.cpp 
 
-compile: 
-
-run: 
-
-view: 
-
-clean:
+clean: 
+	rm -f circuit.json circuit.cpp circuit_float.cpp

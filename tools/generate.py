@@ -1,4 +1,5 @@
 import sys
+import argparse
 
 from math import log2, floor, ceil
 from interval import interval
@@ -20,7 +21,7 @@ class AnalogFormatter:
     def type_(self, signal):
         # handle case where floating point numbers are used
         if self.use_float:
-            return 'double'
+            return 'float'
 
         # compute absolute tolerance if needed
         if signal.abs_tol is None:
@@ -131,18 +132,20 @@ class DigitalFormatter:
 
 
 def main():
-    if len(sys.argv) >= 2:
-        file_name = sys.argv[1]
-    else:
-        file_name = '../build/circuit.json'
+    parser = argparse.ArgumentParser(description='Generate C++ code from mixed-signal intermediate representation.')
+    parser.add_argument('-i', type=str, help='Input file.', default='../build/circuit.json')
+    parser.add_argument('-o', type=str, help='Output file.', default='../build/circuit.cpp')
+    parser.add_argument('--use_float', action='store_true', help='Use floating-point numbers (instead of fixed-point)')
 
-    file_text = open(file_name, 'r').read()
+    args = parser.parse_args()
+
+    file_text = open(args.i, 'r').read()
     model = load_model(file_text)
 
-    cpp_gen = CppGen()
+    cpp_gen = CppGen(filename=args.o)
     namespace = Namespace()
 
-    analog_fmt = AnalogFormatter(cpp_gen=cpp_gen, namespace=namespace, model=model)
+    analog_fmt = AnalogFormatter(use_float=args.use_float, cpp_gen=cpp_gen, namespace=namespace, model=model)
     digital_fmt = DigitalFormatter()
 
     # include files
@@ -151,7 +154,10 @@ def main():
     cpp_gen.print()
 
     # macros
-    cpp_gen.print('#define SIGN_BIT(x) (ap_uint<1>(x[x.length()-1]))')
+    if args.use_float:
+        cpp_gen.define('SIGN_BIT(x)', 'ap_uint<1>(((x) < 0) ? 1 : 0)')
+    else:
+        cpp_gen.define('SIGN_BIT(x)', '(ap_uint<1>(x[x.length()-1]))')
     cpp_gen.print()
 
     # start function representing circuit

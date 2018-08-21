@@ -32,12 +32,15 @@ def const(type_):
     return 'const ' + type_
 
 class CppGen:
-    def __init__(self, tab='    ', newline='\n'):
+    def __init__(self, filename=None, tab='    ', newline='\n'):
+        self.filename = filename
         self.tab = tab
         self.newline = newline
 
         self.level = 0
         self.line_started = False
+
+        self.clear()
 
     def indent(self):
         self.level += 1
@@ -47,6 +50,9 @@ class CppGen:
 
     def include(self, f):
         self.print('#include ' + f)
+
+    def define(self, macro_name, macro_definition):
+        self.print('#define ' + macro_name + ' ' + macro_definition)
 
     def typedef(self, type_, name):
         self.print('typedef ' + type_ + ' ' + name + ';')
@@ -78,11 +84,19 @@ class CppGen:
 
     def print(self, s='', newline=True):
         if not self.line_started:
-            print(self.tab*self.level, end='')
+            self.write(self.tab*self.level)
             self.line_started = True
 
-        print(s, end='')
+        self.write(s)
 
         if newline:
-            print(self.newline, end='')
+            self.write(self.newline)
             self.line_started = False
+
+    def clear(self):
+        with open(self.filename, 'w') as f:
+            f.write('')
+
+    def write(self, data):
+        with open(self.filename, 'a') as f:
+            f.write(data)

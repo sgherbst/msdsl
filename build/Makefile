@@ -1,4 +1,4 @@
-# Build flow for generating 
+# Build flow for generating HLS code from a circuit model
 
 # set Vivado location if not already defined
 VIVADO_HOME ?= /Volumes/C/Xilinx/Vivado/2018.2/

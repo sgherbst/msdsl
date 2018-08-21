@@ -1,7 +1,7 @@
 import json
 from marshmallow import Schema, fields, post_load
 
-from msdsl.model import AnalogSignal, DigitalSignal, CaseLinearExpr, MixedSignalModel, CaseCoeffProduct
+from msdsl.model import AnalogSignal, DigitalSignal, CaseLinearExpr, MixedSignalModel, CaseCoeffProduct, DigitalExpr
 
 def load_model(data):
     schema = MixedSignalModelSchema()
@@ -29,8 +29,8 @@ class CaseCoeffProductSchema(Schema):
 
 
 class CaseLinearExprSchema(Schema):
-    prods = fields.Nested(CaseCoeffProductSchema(), many=True)
-    const = fields.Nested(CaseCoeffProductSchema())
+    prods = fields.Nested(CaseCoeffProductSchema, many=True)
+    const = fields.Nested(CaseCoeffProductSchema)
 
     @post_load
     def make_object(self, data):
@@ -42,7 +42,7 @@ class AnalogSignalSchema(Schema):
     range_ = fields.List(fields.Number(), allow_none=True)
     rel_tol = fields.Number(allow_none=True)
     abs_tol = fields.Number(allow_none=True)
-    expr = fields.Nested(CaseLinearExprSchema(), allow_none=True)
+    expr = fields.Nested(CaseLinearExprSchema, allow_none=True)
     initial = fields.Number(allow_none=True)
 
     @post_load
@@ -50,11 +50,46 @@ class AnalogSignalSchema(Schema):
         return AnalogSignal(**data)
 
 
+class TitleCased(fields.Field):
+    def _serialize(self, value, attr, obj):
+        if value is None:
+            return ''
+        return value.title()
+
+
+class DigitalExprField(fields.Field):
+    def _serialize(self, value, attr, obj):
+        if value is None:
+            return None
+
+        if isinstance(value.data, CaseLinearExpr):
+            data = CaseLinearExprSchema().dump(value.data).data
+        else:
+            data = value.data
+
+        children = [self._serialize(child, None, None) for child in value.children]
+
+        return {'data': data, 'children': children}
+
+    def _deserialize(self, value, attr, data):
+        if value is None:
+            return None
+
+        if isinstance(value['data'], dict):
+            data = CaseLinearExprSchema().load(value['data']).data
+        else:
+            data = value['data']
+
+        children = [self._deserialize(child, None, None) for child in value['children']]
+
+        return DigitalExpr(data=data, children=children)
+
+
 class DigitalSignalSchema(Schema):
     name = fields.Str()
     signed = fields.Boolean()
     width = fields.Integer()
-    expr = fields.Nested(CaseLinearExprSchema(), allow_none=True)
+    expr = DigitalExprField(allow_none=True)
     initial = fields.Integer(allow_none=True)
 
     @post_load
@@ -64,12 +99,12 @@ class DigitalSignalSchema(Schema):
 
 class MixedSignalModelSchema(Schema):
     mode = fields.List(fields.String())
-    analog_inputs = fields.Nested(AnalogSignalSchema(), many=True)
-    digital_inputs = fields.Nested(DigitalSignalSchema(), many=True)
-    analog_outputs = fields.Nested(AnalogSignalSchema(), many=True)
-    digital_outputs = fields.Nested(DigitalSignalSchema(), many=True)
-    analog_states = fields.Nested(AnalogSignalSchema(), many=True)
-    digital_states = fields.Nested(DigitalSignalSchema(), many=True)
+    analog_inputs = fields.Nested(AnalogSignalSchema, many=True)
+    digital_inputs = fields.Nested(DigitalSignalSchema, many=True)
+    analog_outputs = fields.Nested(AnalogSignalSchema, many=True)
+    digital_outputs = fields.Nested(DigitalSignalSchema, many=True)
+    analog_states = fields.Nested(AnalogSignalSchema, many=True)
+    digital_states = fields.Nested(DigitalSignalSchema, many=True)
 
     @post_load
     def make_object(self, data):

@@ -23,9 +23,21 @@ class NodalAnalysis:
         self.kcl[n] = self.kcl.get(n, 0) + expr
 
 
+class DiodeExpr(DigitalExpr):
+    def __init__(self, on, num_cases):
+        self.current = CaseLinearExpr(num_cases=num_cases)
+        self.voltage = CaseLinearExpr(num_cases=num_cases)
+
+        expr_on = DigitalExpr.and_(on, DigitalExpr.not_(self.current))
+        expr_off = DigitalExpr.and_(DigitalExpr.not_(on), DigitalExpr.not_(self.voltage))
+
+        super().__init__('|', [expr_on, expr_off])
+
+
 class Circuit:
     def __init__(self):
         self.model = MixedSignalModel()
+
         self.symbol_namespace = SymbolNamespace()
         self.device_namespace = Namespace()
 
@@ -162,7 +174,7 @@ class Circuit:
         diode = Diode(port=Port(p=p, n=n, v=v, i=i), vf=vf, name=name)
         self.diodes.append(diode)
 
-        self.model.add_digital_states(DigitalSignal(diode.on))
+        self.model.add_digital_states(DigitalSignal(diode.on, initial=0))
 
         return diode
 
@@ -179,8 +191,8 @@ class Circuit:
         for analog_state in self.model.analog_states:
             analog_state.expr = CaseLinearExpr(num_cases=num_cases)
 
-        for digital_state in self.model.digital_states:
-            digital_state.expr = CaseLinearExpr(num_cases=num_cases)
+        for diode in self.diodes:
+            self.model.get_signal(diode.on).expr = DiodeExpr(on=diode.on, num_cases=num_cases)
 
         for i in range(num_cases):
             # determine modes of dynamic components
@@ -242,12 +254,8 @@ class Circuit:
 
             # compute digital state update equations
             for diode in self.diodes:
-                if dynamic_modes[diode] == 'on':
-                    expr = soln[diode.port.i]
-                else:
-                    expr = soln[diode.port.v] - diode.vf
-
-                self.model.get_signal(diode.on).expr.add_case(case_no=case_no, expr=expr)
+                self.model.get_signal(diode.on).expr.voltage.add_case(case_no=case_no, expr=soln[diode.port.v]-diode.vf)
+                self.model.get_signal(diode.on).expr.current.add_case(case_no=case_no, expr=soln[diode.port.i])
 
             # list all output variables
             for output in self.model.analog_outputs:

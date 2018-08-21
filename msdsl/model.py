@@ -31,12 +31,46 @@ class DigitalSignal:
         self.initial = initial
 
 
+class DigitalExpr:
+    def __init__(self, data=None, children=None):
+        if children is None:
+            children = []
+
+        self.data = data
+        self.children = children
+
+    def add_child(self, child):
+        self.children.append(child)
+
+    @staticmethod
+    def or_(a, b):
+        a = a if isinstance(a, DigitalExpr) else DigitalExpr(data=a)
+        b = b if isinstance(b, DigitalExpr) else DigitalExpr(data=b)
+        return DigitalExpr(data='|', children=[a, b])
+
+    @staticmethod
+    def and_(a, b):
+        a = a if isinstance(a, DigitalExpr) else DigitalExpr(data=a)
+        b = b if isinstance(b, DigitalExpr) else DigitalExpr(data=b)
+        return DigitalExpr(data='&', children=[a, b])
+
+    @staticmethod
+    def not_(a):
+        a = a if isinstance(a, DigitalExpr) else DigitalExpr(data=a)
+        return DigitalExpr(data='~', children=[a])
+
+    def walk(self):
+        yield self
+
+        for child in self.children:
+            yield from child.walk()
+
 class CaseCoeffProduct:
     def __init__(self, var=None, num_cases=None, coeffs=None):
         # set defaults
         if num_cases is not None:
             assert coeffs is None
-            coeffs = [0]*num_cases
+            coeffs = [None]*num_cases
         else:
             assert coeffs is not None
             num_cases = len(coeffs)
@@ -125,17 +159,17 @@ class MixedSignalModel:
 
         # apply inputs
         if analog_inputs is not None:
-            self.add_analog_inputs(analog_inputs)
+            self.add_analog_inputs(*analog_inputs)
         if digital_inputs is not None:
-            self.add_digital_inputs(digital_inputs)
+            self.add_digital_inputs(*digital_inputs)
         if analog_outputs is not None:
-            self.add_analog_outputs(analog_outputs)
+            self.add_analog_outputs(*analog_outputs)
         if digital_outputs is not None:
-            self.add_digital_outputs(digital_outputs)
+            self.add_digital_outputs(*digital_outputs)
         if analog_states is not None:
-            self.add_analog_states(analog_states)
+            self.add_analog_states(*analog_states)
         if digital_states is not None:
-            self.add_digital_states(digital_states)
+            self.add_digital_states(*digital_states)
         if mode is not None:
             self.mode = mode
 

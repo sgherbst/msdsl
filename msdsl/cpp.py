@@ -85,7 +85,7 @@ class CppGen:
         self.print('// ' + s)
 
     def array(self, type_, name, values):
-        literal = '{' + ', '.join(str(x) for x in values) + '}'
+        literal = '{' + ', '.join(str(x if (x != 0) else 0) for x in values) + '}'
         self.print(type_ + ' ' + name + ' [] = ' + literal + ';')
 
     def print(self, s='', newline=True):

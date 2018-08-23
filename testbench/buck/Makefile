@@ -10,10 +10,10 @@ CIRCUIT_FILE = ../../examples/buck.py
 CC = g++
 PYTHON = python3
 
-.PHONY: all analyze generate generate_float compile run view clean
+.PHONY: all analyze generate generate_float compile run clean
 
-all: analyze generate compile run view
-float: analyze generate_float compile run view
+all: analyze generate compile run
+float: analyze generate_float compile run
 
 analyze: 
 	$(PYTHON) $(CIRCUIT_FILE) > circuit.json
@@ -25,13 +25,10 @@ generate_float:
 	$(PYTHON) ../../tools/generate.py --use_float
 
 compile: 
-	$(CC) -I$(VIVADO_HOME)/include stim.cpp circuit.cpp -o stim
+	$(CC) -I$(VIVADO_HOME)/include -I../../msdsl ../../msdsl/vcd.cpp stim.cpp circuit.cpp -o stim
 
 run: 
-	./stim > out.csv
-
-view: 
-	$(PYTHON) ../../tools/view.py -i out.csv
+	./stim > out.vcd
 
 clean: 
-	rm -f circuit.json circuit.cpp circuit.hpp stim out.csv
+	rm -f circuit.json circuit.cpp circuit.hpp stim out.vcd

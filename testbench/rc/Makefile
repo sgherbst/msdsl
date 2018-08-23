@@ -10,10 +10,10 @@ CIRCUIT_FILE = ../../examples/rc.py
 CC = g++
 PYTHON = python3
 
-.PHONY: all analyze generate generate_float compile run view clean
+.PHONY: all analyze generate generate_float compile run clean
 
-all: analyze generate compile run view
-float: analyze generate_float compile run view
+all: analyze generate compile run
+float: analyze generate_float compile run
 
 analyze: 
 	$(PYTHON) $(CIRCUIT_FILE) > circuit.json

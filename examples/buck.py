@@ -1,6 +1,8 @@
 from msdsl.circuit import Circuit
 from msdsl.format import dump_model
 
+# ref: http://www.simonbramble.co.uk/dc_dc_converter_design/buck_converter/buck_converter_design.htm
+
 # create new circuit
 cir = Circuit()
 
@@ -16,18 +18,17 @@ cir.mosfet(v_in, v_sw)
 diode = cir.diode(0, v_sw)
 
 # filter
-ind = cir.inductor(v_sw, v_out, value=10e-6)
-cir.capacitor(v_out, 0, value=10e-6)
+ind = cir.inductor(v_sw, v_out, value=4.7e-6)
+cir.capacitor(v_out, 0, value=150e-6)
 
 # output load
-output = cir.input_('output')
-cir.current_source(v_out, 0, expr=output)
+cir.resistor(v_out, 0, value=2)
 
 # define outputs
 cir.output(v_out)
 
 # solve the circuit
-cir.solve(0.25e-6)
+cir.solve(20e-9)
 
 # dump the model
 dump_model(cir.model)

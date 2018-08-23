@@ -1,4 +1,3 @@
-import sys
 import argparse
 
 from math import log2, floor, ceil
@@ -94,7 +93,7 @@ class AnalogFormatter:
         return self.type_(AnalogSignal(range_=range_, rel_tol=rel_tol, abs_tol=abs_tol))
 
     def output_format(self, output):
-        return ptr(self.expr_type(output.expr, rel_tol=output.rel_tol, abs_tol=output.abs_tol))
+        return self.expr_type(output.expr, rel_tol=output.rel_tol, abs_tol=output.abs_tol)
 
     @staticmethod
     def signed_int_width(int_val):
@@ -130,19 +129,68 @@ class DigitalFormatter:
             child_2 = DigitalFormatter.expr2str(expr.children[1])
             return '(' + child_1 + ')' + expr.data + '(' + child_2 + ')'
 
+def make_header(args, model):
+    cpp_gen = CppGen(filename=args.hpp)
+    namespace = Namespace()
 
-def main():
-    parser = argparse.ArgumentParser(description='Generate C++ code from mixed-signal intermediate representation.')
-    parser.add_argument('-i', type=str, help='Input file.', default='../build/circuit.json')
-    parser.add_argument('-o', type=str, help='Output file.', default='../build/circuit.cpp')
-    parser.add_argument('--use_float', action='store_true', help='Use floating-point numbers (instead of fixed-point)')
+    analog_fmt = AnalogFormatter(use_float=args.use_float, cpp_gen=cpp_gen, namespace=namespace, model=model)
+    digital_fmt = DigitalFormatter()
 
-    args = parser.parse_args()
+    # start include guard
+    include_guard_var = '__' + args.hpp.upper().replace('.', '_') + '__'
+    cpp_gen.start_include_guard(include_guard_var)
+    cpp_gen.print()
 
-    file_text = open(args.i, 'r').read()
-    model = load_model(file_text)
+    # include files
+    cpp_gen.include('"ap_int.h"')
+    cpp_gen.include('"ap_fixed.h"')
+    cpp_gen.print()
 
-    cpp_gen = CppGen(filename=args.o)
+    # macro(s)
+    macro_name = 'LESS_THAN_ZERO(x)'
+    if args.use_float:
+        cpp_gen.define(macro_name, 'ap_uint<1>(((x) < 0) ? 1 : 0)')
+    else:
+        cpp_gen.define(macro_name, '(ap_uint<1>(x[x.length()-1]))')
+    cpp_gen.print()
+
+    # declare I/O types
+    io = []
+
+    cpp_gen.comment('analog inputs')
+    for analog_input in model.analog_inputs:
+        type_ = analog_fmt.type_(analog_input)
+        type_name = analog_input.name + '_type'
+        cpp_gen.typedef(type_, type_name)
+        io.append((type_name, analog_input.name))
+    cpp_gen.print()
+
+    cpp_gen.comment('digital inputs')
+    for digital_input in model.digital_inputs:
+        type_ = digital_fmt.type_(digital_input)
+        type_name = digital_input.name + '_type'
+        cpp_gen.typedef(type_, type_name)
+        io.append((type_name, digital_input.name))
+    cpp_gen.print()
+
+    cpp_gen.comment('analog outputs')
+    for analog_output in model.analog_outputs:
+        type_ = analog_fmt.output_format(analog_output)
+        type_name = analog_output.name + '_type'
+        cpp_gen.typedef(type_, type_name)
+        io.append((ptr(type_name), analog_output.name))
+    cpp_gen.print()
+
+    # declare function prototype
+    cpp_gen.comment('function prototype')
+    cpp_gen.function_prototype('void', 'circuit', io)
+    cpp_gen.print()
+
+    # end include guard
+    cpp_gen.end_include_guard(include_guard_var)
+
+def make_source(args, model):
+    cpp_gen = CppGen(filename=args.cpp)
     namespace = Namespace()
 
     analog_fmt = AnalogFormatter(use_float=args.use_float, cpp_gen=cpp_gen, namespace=namespace, model=model)
@@ -153,18 +201,14 @@ def main():
     cpp_gen.include('"ap_fixed.h"')
     cpp_gen.print()
 
-    # macros
-    if args.use_float:
-        cpp_gen.define('SIGN_BIT(x)', 'ap_uint<1>(((x) < 0) ? 1 : 0)')
-    else:
-        cpp_gen.define('SIGN_BIT(x)', '(ap_uint<1>(x[x.length()-1]))')
+    cpp_gen.include('"' + args.hpp + '"')
     cpp_gen.print()
 
     # start function representing circuit
     io = []
-    io += [(analog_fmt.type_(analog_input), analog_input.name) for analog_input in model.analog_inputs]
-    io += [(digital_fmt.type_(digital_input), digital_input.name) for digital_input in model.digital_inputs]
-    io += [(analog_fmt.output_format(analog_output), analog_output.name) for analog_output in model.analog_outputs]
+    io += [(analog_input.name + '_type', analog_input.name) for analog_input in model.analog_inputs]
+    io += [(digital_input.name + '_type', digital_input.name) for digital_input in model.digital_inputs]
+    io += [(ptr(analog_output.name + '_type'), analog_output.name) for analog_output in model.analog_outputs]
     cpp_gen.start_function('void', 'circuit', io)
 
     # declare analog state variables
@@ -180,9 +224,38 @@ def main():
     cpp_gen.print()
 
     # create the case index variable
-    cpp_gen.comment('Case index variable')
-    cpp_gen.assign(ap_uint(len(model.mode)) + ' ' + 'idx', concat(*model.mode))
+    if len(model.mode) > 0:
+        cpp_gen.comment('Case index variable')
+        cpp_gen.assign(ap_uint(len(model.mode)) + ' ' + 'idx', concat(*model.mode))
+        cpp_gen.print()
+
+    # update digital states into temporary variables
+    tmpvars = []
+    for digital_state in model.digital_states:
+        cpp_gen.comment('Update digital state: ' + digital_state.name)
+
+        for expr in digital_state.expr.walk():
+            if isinstance(expr.data, CaseLinearExpr):
+                tmpvar = namespace.make(prefix='tmp')
+                cpp_gen.assign(analog_fmt.expr_type(expr.data) + ' ' + tmpvar, analog_fmt.make_expr(expr.data))
+                expr.data = 'LESS_THAN_ZERO(' + tmpvar + ')'
+
+        tmpvar = namespace.make(prefix='tmp')
+        tmpvars.append((digital_state.name, tmpvar))
+        cpp_gen.assign(digital_fmt.type_(digital_state) + ' ' + tmpvar, digital_fmt.expr2str(digital_state.expr))
+        cpp_gen.print()
+
+    # update digital states from temporary variables
+    cpp_gen.comment('Assigning digital states from temporary variables')
+    for state, tmpvar in tmpvars:
+        cpp_gen.assign(state, tmpvar)
     cpp_gen.print()
+
+    # re-assign case index variable
+    if len(model.mode) > 0:
+        cpp_gen.comment('Re-assigning case index variable')
+        cpp_gen.assign('idx', concat(*model.mode))
+        cpp_gen.print()
 
     # update analog states into temporary variables
     tmpvars = []
@@ -208,29 +281,25 @@ def main():
         cpp_gen.assign(deref(analog_output.name), analog_fmt.make_expr(analog_output.expr))
         cpp_gen.print()
 
-    # update digital states into temporary variables
-    tmpvars = []
-    for digital_state in model.digital_states:
-        cpp_gen.comment('Update digital state: ' + digital_state.name)
-
-        for expr in digital_state.expr.walk():
-            if isinstance(expr.data, CaseLinearExpr):
-                tmpvar = namespace.make(prefix='tmp')
-                cpp_gen.assign(analog_fmt.expr_type(expr.data) + ' ' + tmpvar, analog_fmt.make_expr(expr.data))
-                expr.data = 'SIGN_BIT(' + tmpvar + ')'
-
-        tmpvar = namespace.make(prefix='tmp')
-        tmpvars.append((digital_state.name, tmpvar))
-        cpp_gen.assign(digital_fmt.type_(digital_state) + ' ' + tmpvar, digital_fmt.expr2str(digital_state.expr))
-        cpp_gen.print()
-
-    # update digital states from temporary variables
-    cpp_gen.comment('Assigning digital states from temporary variables')
-    for state, tmpvar in tmpvars:
-        cpp_gen.assign(state, tmpvar)
-    cpp_gen.print()
-
     cpp_gen.end_function()
+
+def main():
+    parser = argparse.ArgumentParser(description='Generate C++ code from mixed-signal intermediate representation.')
+    parser.add_argument('--json', type=str, help='Input JSON file.', default='circuit.json')
+    parser.add_argument('--cpp', type=str, help='Output C++ source file.', default='circuit.cpp')
+    parser.add_argument('--hpp', type=str, help='Output C++ header file.', default='circuit.hpp')
+    parser.add_argument('--use_float', action='store_true', help='Use floating-point numbers (instead of fixed-point)')
+
+    args = parser.parse_args()
+
+    file_text = open(args.json, 'r').read()
+    model = load_model(file_text)
+
+    # make the header
+    make_header(args=args, model=model)
+
+    # make the source code
+    make_source(args=args, model=model)
 
 if __name__ == '__main__':
     main()

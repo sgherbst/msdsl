@@ -54,6 +54,13 @@ class CppGen:
     def define(self, macro_name, macro_definition):
         self.print('#define ' + macro_name + ' ' + macro_definition)
 
+    def start_include_guard(self, var):
+        self.print('#ifndef ' + var)
+        self.print('#define ' + var)
+
+    def end_include_guard(self, var):
+        self.print('#endif // ' + var)
+
     def typedef(self, type_, name):
         self.print('typedef ' + type_ + ' ' + name + ';')
 
@@ -64,6 +71,10 @@ class CppGen:
         arg_list = ', '.join(arg_type + ' ' + arg_name for arg_type, arg_name in io)
         self.print(func_type + ' ' + func_name + '(' + arg_list + ') {')
         self.indent()
+
+    def function_prototype(self, func_type, func_name, io):
+        arg_list = ', '.join(arg_type + ' ' + arg_name for arg_type, arg_name in io)
+        self.print(func_type + ' ' + func_name + '(' + arg_list + ');')
 
     def end_function(self):
         self.dedent()

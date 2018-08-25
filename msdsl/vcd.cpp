@@ -1,13 +1,6 @@
-#include <iostream>
+#include "vcd.hpp"
+
 #include <ctime>
-#include <map>
-#include <vector>
-
-#define VCD_CHAR_MIN 33
-#define VCD_CHAR_MAX 126
-
-char vcd_char = VCD_CHAR_MIN;
-std::map<std::string, char> signal_mapping;
 
 std::string vcd_date_time_string(){
     // ref: https://stackoverflow.com/questions/16357999/current-date-and-time-as-string
@@ -28,39 +21,58 @@ std::string vcd_date_time_string(){
     return std::string(buffer);
 }
 
-void vcd_header(){
+VcdWriter::VcdWriter(std::string filename){
+    current_symbol = 33; // 33 is the minimum allowed VCD character
+    file.open(filename);
+}
+
+VcdWriter::~VcdWriter(){
+    file.close();
+}
+
+void VcdWriter::header(){
     // date
-    std::cout << "$date" << std::endl;
-    std::cout << "\t" << vcd_date_time_string() << std::endl;
-    std::cout << "$end" << std::endl;
+    file << "$date" << '\n';
+    file << "\t" << vcd_date_time_string() << '\n';
+    file << "$end" << '\n';
 
     // version
-    std::cout << "$version" << std::endl;
-    std::cout << "\tMSDSL" << std::endl;
-    std::cout << "$end" << std::endl;
+    file << "$version" << '\n';
+    file << "\tMSDSL" << '\n';
+    file << "$end" << '\n';
 
     // timescale
-    std::cout << "$timescale" << std::endl;
-    std::cout << "\t1ps" << std::endl;
-    std::cout << "$end" << std::endl;
+    file << "$timescale" << '\n';
+    file << "\t1ps" << '\n';
+    file << "$end" << '\n';
 }
 
-void vcd_probe(std::vector<std::string> signals){
-    std::cout << "$scope module circuit $end" << std::endl;
+void VcdWriter::probe(std::vector<std::string> signals){
+    file << "$scope module circuit $end" << '\n';
 
     for (std::vector<std::string>::iterator it = signals.begin(); it != signals.end(); it++){
-        std::cout << "$var real 1 " << vcd_char << " " << *it << " $end" << std::endl;
-        signal_mapping[*it] = vcd_char;
-        vcd_char++;
+        // write variable definition
+        file << "$var real 1 " << current_symbol << " " << *it << " $end" << '\n';
+
+        // update signal mapping to link the symbol to the signal name
+        signal_mapping[*it] = current_symbol;
+
+        // increment symbol
+        current_symbol++;
+
+        // check that the symbol is legal
+        if (current_symbol > 126){
+            throw std::runtime_error("Invalid VCD symbol.");
+        }
     }
-    std::cout << "$upscope $end" << std::endl;
-    std::cout << "$enddefinitions $end" << std::endl;
+    file << "$upscope $end" << '\n';
+    file << "$enddefinitions $end" << '\n';
 }
 
-void vcd_timestep(long time_ps){
-    std::cout << "#" << time_ps << std::endl;
+void VcdWriter::timestep(long time_ps){
+     file << "#" << time_ps << '\n';
 }
 
-char vcd_get_signal(std::string signal){
+char VcdWriter::get_signal(std::string signal){
     return signal_mapping[signal];
 }

@@ -24,14 +24,9 @@ class NodalAnalysis:
 
 
 class DiodeExpr(DigitalExpr):
-    def __init__(self, on, num_cases):
+    def __init__(self, num_cases):
         self.current = CaseLinearExpr(num_cases=num_cases)
-        self.voltage = CaseLinearExpr(num_cases=num_cases)
-
-        expr_on = DigitalExpr.and_(on, DigitalExpr.not_(self.current))
-        expr_off = DigitalExpr.and_(DigitalExpr.not_(on), DigitalExpr.not_(self.voltage))
-
-        super().__init__('|', [expr_on, expr_off])
+        super().__init__('&', [DigitalExpr.not_('M0_on'), DigitalExpr.not_(self.current)])
 
 
 class Circuit:
@@ -48,6 +43,8 @@ class Circuit:
         self.inductors = {}
         self.derivatives = {}
 
+        self.output_symbols = {}
+
     def input_(self, name, range_=None, rel_tol=None, abs_tol=None):
         if range_ is None:
             range_ = [-10, 10]
@@ -56,8 +53,12 @@ class Circuit:
 
         return self.symbol_namespace.make(name)
 
-    def output(self, sym, rel_tol=None, abs_tol=None):
-        self.model.add_analog_outputs(AnalogSignal(name=sym.name, rel_tol=rel_tol, abs_tol=abs_tol))
+    def output(self, sym, name=None, rel_tol=None, abs_tol=None):
+        if name is None:
+            name = sym.name
+
+        self.output_symbols[name] = sym
+        self.model.add_analog_outputs(AnalogSignal(name=name, rel_tol=rel_tol, abs_tol=abs_tol))
 
     def state(self, variable_name, derivative_name, range_=None, rel_tol=None, abs_tol=None, initial=None):
         signal = AnalogSignal(name=variable_name, range_=range_, rel_tol=rel_tol, abs_tol=abs_tol, initial=initial)
@@ -192,7 +193,7 @@ class Circuit:
             analog_state.expr = CaseLinearExpr(num_cases=num_cases)
 
         for diode in self.diodes:
-            self.model.get_signal(diode.on).expr = DiodeExpr(on=diode.on, num_cases=num_cases)
+            self.model.get_signal(diode.on).expr = DiodeExpr(num_cases=num_cases)
 
         for i in range(num_cases):
             # determine modes of dynamic components
@@ -203,7 +204,7 @@ class Circuit:
             # append the result if it exists
             self.solve_case(dt=dt, case_no=i, dynamic_modes=dynamic_modes)
 
-    def solve_case(self, dt, case_no, dynamic_modes, max_attempts=10):
+    def solve_case(self, dt, case_no, dynamic_modes):
         # create new analysis object
         analysis = NodalAnalysis()
 
@@ -218,48 +219,45 @@ class Circuit:
         # loop through the configs until a solution is found
         logging.debug('*** Case {} ***'.format(case_no))
 
-        for attempt, disabled_inductors in enumerate(all_combos(self.inductors.keys())):
+        # get the list of equations
+        equations = analysis.equations.copy()
 
-            if attempt >= max_attempts:
-                return
+        # build a set of the variables to solve for
+        solve_variables = set().union(*[equation.free_symbols for equation in equations])
+        solve_variables -= set(symbols(input_.name) for input_ in self.model.analog_inputs)
+        solve_variables -= set(symbols(state.name) for state in self.model.analog_states)
 
-            logging.debug('attempt {}'.format(attempt))
-
-            # build a list of the equations to solve
-            equations = analysis.equations.copy()
-            equations.extend(self.inductors[inductor].di_dt for inductor in disabled_inductors)
-
-            # build a set of the variables to solve for
-            solve_variables = set().union(*[equation.free_symbols for equation in equations])
-            solve_variables -= set(symbols(input_.name) for input_ in self.model.analog_inputs)
-            solve_variables -= set(symbols(state.name) for state in self.model.analog_states)
-            solve_variables |= set(self.inductors[inductor].port.i for inductor in disabled_inductors)
-
-            # use sympy solve to solve the system of equations
-            soln = solve(equations, solve_variables)
-            if not soln:
-                logging.debug('no solution')
-                continue
-
-            # apply digital state update equations
-            for analog_state in self.model.analog_states:
-                variable = symbols(analog_state.name)
-
-                if variable in solve_variables:
-                    expr = soln[variable]
-                else:
-                    expr = variable + dt*soln[self.derivatives[variable]]
-
-                analog_state.expr.add_case(case_no=case_no, expr=expr)
-
-            # compute digital state update equations
-            for diode in self.diodes:
-                self.model.get_signal(diode.on).expr.voltage.add_case(case_no=case_no, expr=soln[diode.port.v]-diode.vf)
-                self.model.get_signal(diode.on).expr.current.add_case(case_no=case_no, expr=soln[diode.port.i])
-
-            # list all output variables
-            for output in self.model.analog_outputs:
-                output.expr.add_case(case_no=case_no, expr=soln[symbols(output.name)])
-
-            logging.debug('solution found')
+        # use sympy solve to solve the system of equations
+        soln = solve(analysis.equations, solve_variables)
+        if not soln:
+            logging.debug('no solution')
             return
+
+        # apply digital state update equations
+        for analog_state in self.model.analog_states:
+            variable = symbols(analog_state.name)
+            expr = variable + dt*soln[self.derivatives[variable]]
+
+            analog_state.expr.add_case(case_no=case_no, expr=expr)
+
+        # compute digital state update equations
+        for diode in self.diodes:
+            # TODO: make this more general
+            if dynamic_modes[diode] == 'on':
+                expr = self.model.get_signal(diode.on).expr
+                expr.current.add_case(case_no=case_no, expr=soln[diode.port.i])
+                expr.current.add_case(case_no=case_no-2, expr=soln[diode.port.i])
+
+        # list all output variables
+        for output in self.model.analog_outputs:
+            symbol = self.output_symbols[output.name]
+
+            if symbol in soln:
+                expr = soln[symbol]
+            else:
+                expr = symbol
+
+            output.expr.add_case(case_no=case_no, expr=expr)
+
+        logging.debug('solution found')
+        return

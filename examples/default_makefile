@@ -9,16 +9,18 @@ CIRCUIT_FILE = circuit.py
 # tool binaries
 CC = g++
 PYTHON = python3
+GTKWAVE = gtkwave
 
-.PHONY: all analyze generate generate_float compile run clean
+.PHONY: all analyze generate generate_fixed generate_float compile run clean
 
-all: analyze generate compile run
+all: float
+fixed: analyze generate_fixed compile run
 float: analyze generate_float compile run
 
 analyze: 
 	$(PYTHON) $(CIRCUIT_FILE) > circuit.json
 
-generate: 
+generate_fixed: 
 	$(PYTHON) ../../tools/generate.py 
 
 generate_float: 
@@ -28,7 +30,10 @@ compile:
 	$(CC) -I$(VIVADO_HOME)/include -I../../msdsl ../../msdsl/vcd.cpp stim.cpp circuit.cpp -o stim
 
 run: 
-	./stim > out.vcd
+	./stim
+
+view: 
+	$(GTKWAVE) out.vcd &
 
 clean: 
 	rm -f circuit.json circuit.cpp circuit.hpp stim out.vcd

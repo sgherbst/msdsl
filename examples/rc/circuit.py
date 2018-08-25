@@ -1,5 +1,10 @@
+import sys
+import logging
+
 from msdsl.circuit import Circuit
 from msdsl.format import dump_model
+
+logging.basicConfig(level=logging.DEBUG, stream=sys.stderr)
 
 # create new circuit
 cir = Circuit()

@@ -1,16 +1,27 @@
 #ifndef __VCD_HPP__
 #define __VCD_HPP__
 
+#include <iostream>
+#include <fstream>
+#include <map>
 #include <vector>
 
-std::string vcd_date_time_string();
-void vcd_header();
-void vcd_probe(std::vector<std::string> signals);
-void vcd_timestep(long time_ps);
-char vcd_get_signal(std::string signal);
-
-template <class T> void vcd_dump(std::string signal, T value){
-    std::cout << "r" << value << " " << vcd_get_signal(signal) << std::endl;
-}
+class VcdWriter{
+    private:
+        std::ofstream file;
+        std::map<std::string, char> signal_mapping;
+        char get_signal(std::string signal);
+        char current_symbol;
+    public:
+        VcdWriter(std::string filename);
+        ~VcdWriter();
+        void header();
+        void probe(std::vector<std::string> signals);
+        void timestep(long time_ps);
+        template <class T> void dump(std::string signal, T value){
+            // it seems simplest to define a templated method in a file
+            file << "r" << value << " " << get_signal(signal) << '\n';
+        }
+};
 
 #endif // __VCD_HPP__

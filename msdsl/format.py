@@ -31,7 +31,7 @@ class CaseCoeffProductSchema(Schema):
 class CaseLinearExprSchema(Schema):
     prods = fields.Nested(CaseCoeffProductSchema, many=True)
     const = fields.Nested(CaseCoeffProductSchema)
-    cases_present = fields.List(fields.Integer())
+    mode = fields.Str()
 
     @post_load
     def make_object(self, data):
@@ -92,7 +92,8 @@ class DigitalSignalSchema(Schema):
 
 
 class MixedSignalModelSchema(Schema):
-    mode = fields.List(fields.String())
+    analog_modes = fields.Nested(DigitalSignalSchema, many=True)
+    digital_modes = fields.Nested(DigitalSignalSchema, many=True)
     analog_inputs = fields.Nested(AnalogSignalSchema, many=True)
     digital_inputs = fields.Nested(DigitalSignalSchema, many=True)
     analog_outputs = fields.Nested(AnalogSignalSchema, many=True)

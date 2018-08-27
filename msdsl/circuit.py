@@ -11,10 +11,6 @@ class NodalAnalysis:
         self.kcl = {}
         self.other_equations = []
 
-    @property
-    def equations(self):
-        return list(self.kcl.values()) + self.other_equations
-
     def set_equal(self, lhs, rhs):
         self.other_equations.append(lhs - rhs)
 
@@ -24,9 +20,9 @@ class NodalAnalysis:
 
 
 class DiodeExpr(DigitalExpr):
-    def __init__(self, num_cases):
-        self.current = CaseLinearExpr(num_cases=num_cases)
-        super().__init__('&', [DigitalExpr.not_('M0_on'), DigitalExpr.not_(self.current)])
+    def __init__(self, num_cases, mode):
+        self.voltage = CaseLinearExpr(num_cases=num_cases, mode=mode)
+        super().__init__(data='~', children=[DigitalExpr(data=self.voltage)])
 
 
 class Circuit:
@@ -157,22 +153,22 @@ class Circuit:
 
         return transformer
 
-    def mosfet(self, p, n, name=None):
+    def mosfet(self, p, n, ron=0.1, name=None):
         name = self.device_namespace.make(name=name, prefix=MOSFET.prefix)
         v, i = self.symbols('v_' + name, 'i_' + name)
 
-        mosfet = MOSFET(port=Port(p=p, n=n, v=v, i=i), name=name)
+        mosfet = MOSFET(port=Port(p=p, n=n, v=v, i=i), ron=ron, name=name)
         self.mosfets.append(mosfet)
 
         self.model.add_digital_inputs(DigitalSignal(mosfet.on))
 
         return mosfet
 
-    def diode(self, p, n, vf=0, name=None):
+    def diode(self, p, n, vf=0, ron=0.1, name=None):
         name = self.device_namespace.make(name=name, prefix=Diode.prefix)
         v, i = self.symbols('v_' + name, 'i_' + name)
 
-        diode = Diode(port=Port(p=p, n=n, v=v, i=i), vf=vf, name=name)
+        diode = Diode(port=Port(p=p, n=n, v=v, i=i), vf=vf, ron=ron, name=name)
         self.diodes.append(diode)
 
         self.model.add_digital_states(DigitalSignal(diode.on, initial=0))
@@ -181,30 +177,52 @@ class Circuit:
 
     def solve(self, dt):
         dynamic_components = self.mosfets + self.diodes
-        num_cases = 2**(len(dynamic_components))
+        num_analog_cases = 2**(len(dynamic_components))
+        num_digital_cases = 2**(len(self.mosfets))
 
-        self.model.mode = [mosfet.on for mosfet in self.mosfets] + [diode.on for diode in self.diodes]
-        self.model.mode = list(reversed(self.model.mode))
-
-        for analog_output in self.model.analog_outputs:
-            analog_output.expr = CaseLinearExpr(num_cases=num_cases)
-
-        for analog_state in self.model.analog_states:
-            analog_state.expr = CaseLinearExpr(num_cases=num_cases)
+        # define the digital mode variable
+        digital_mode = [mosfet.on for mosfet in self.mosfets]
+        digital_mode = list(reversed(digital_mode))
+        digital_mode = DigitalSignal(name='d_idx', width=len(self.mosfets), expr=DigitalExpr.concat(*digital_mode))
+        self.model.add_digital_modes(digital_mode)
 
         for diode in self.diodes:
-            self.model.get_signal(diode.on).expr = DiodeExpr(num_cases=num_cases)
+            self.model.get_signal(diode.on).expr = DiodeExpr(num_cases=num_digital_cases, mode=digital_mode.name)
 
-        for i in range(num_cases):
+        # define analog mode variable
+        analog_mode = [mosfet.on for mosfet in self.mosfets] + [diode.on for diode in self.diodes]
+        analog_mode = list(reversed(analog_mode))
+        analog_mode = DigitalSignal(name='a_idx', width=len(dynamic_components), expr=DigitalExpr.concat(*analog_mode))
+        self.model.add_analog_modes(analog_mode)
+
+        for analog_output in self.model.analog_outputs:
+            analog_output.expr = CaseLinearExpr(num_cases=num_analog_cases, mode=analog_mode.name)
+
+        for analog_state in self.model.analog_states:
+            analog_state.expr = CaseLinearExpr(num_cases=num_analog_cases, mode=analog_mode.name)
+
+        # enumerate all of the cases
+        for i in range(num_analog_cases):
             # determine modes of dynamic components
             dynamic_modes = [bool((i >> j) & 1) for j in range(len(dynamic_components))]
             dynamic_modes = {component: ('on' if mode else 'off')
                              for component, mode in zip(dynamic_components, dynamic_modes)}
 
             # append the result if it exists
-            self.solve_case(dt=dt, case_no=i, dynamic_modes=dynamic_modes)
+            logging.debug('*** Case {} ***'.format(i))
+            soln = self.solve_case(dynamic_modes)
+            logging.debug('solution found')
 
-    def solve_case(self, dt, case_no, dynamic_modes):
+            # update analog states and outputs
+            self.update_analog_states(case_no=i, soln=soln, dt=dt)
+            self.update_analog_outputs(case_no=i, soln=soln)
+
+            # update diode states if needed (i.e., all diodes off)
+            if (i >> len(self.mosfets)) == 0:
+                mask = (2**len(self.mosfets)) - 1
+                self.update_diode_states(case_no=(i & mask), soln=soln)
+
+    def solve_case(self, dynamic_modes):
         # create new analysis object
         analysis = NodalAnalysis()
 
@@ -216,23 +234,32 @@ class Circuit:
         for component, mode in dynamic_modes.items():
             component.add_to_analysis(mode, analysis)
 
-        # loop through the configs until a solution is found
-        logging.debug('*** Case {} ***'.format(case_no))
-
-        # get the list of equations
-        equations = analysis.equations.copy()
+        # get the list of equations (note that the ground node equation is omitted)
+        equations = [equation for node, equation in analysis.kcl.items() if node != 0]
+        equations += analysis.other_equations
 
         # build a set of the variables to solve for
         solve_variables = set().union(*[equation.free_symbols for equation in equations])
         solve_variables -= set(symbols(input_.name) for input_ in self.model.analog_inputs)
         solve_variables -= set(symbols(state.name) for state in self.model.analog_states)
 
-        # use sympy solve to solve the system of equations
-        soln = solve(analysis.equations, solve_variables)
-        if not soln:
-            logging.debug('no solution')
-            return
+        # make sure that the system of equations is well-defined
+        assert len(solve_variables) == len(equations)
 
+        # use sympy solve to solve the system of equations
+        soln = solve(equations, solve_variables)
+        if not soln:
+            raise Exception('No solution found.')
+
+        return soln
+
+    def update_diode_states(self, case_no, soln):
+        # compute digital state update equations
+        for diode in self.diodes:
+            expr = self.model.get_signal(diode.on).expr
+            expr.voltage.add_case(case_no=case_no, expr=soln[diode.port.v]-diode.vf)
+
+    def update_analog_states(self, case_no, soln, dt):
         # apply digital state update equations
         for analog_state in self.model.analog_states:
             variable = symbols(analog_state.name)
@@ -240,14 +267,7 @@ class Circuit:
 
             analog_state.expr.add_case(case_no=case_no, expr=expr)
 
-        # compute digital state update equations
-        for diode in self.diodes:
-            # TODO: make this more general
-            if dynamic_modes[diode] == 'on':
-                expr = self.model.get_signal(diode.on).expr
-                expr.current.add_case(case_no=case_no, expr=soln[diode.port.i])
-                expr.current.add_case(case_no=case_no-2, expr=soln[diode.port.i])
-
+    def update_analog_outputs(self, case_no, soln):
         # list all output variables
         for output in self.model.analog_outputs:
             symbol = self.output_symbols[output.name]
@@ -258,6 +278,3 @@ class Circuit:
                 expr = symbol
 
             output.expr.add_case(case_no=case_no, expr=expr)
-
-        logging.debug('solution found')
-        return

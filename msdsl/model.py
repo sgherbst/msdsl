@@ -43,6 +43,11 @@ class DigitalExpr:
         self.children.append(child)
 
     @staticmethod
+    def concat(*args):
+        args = [arg if isinstance(arg, DigitalExpr) else DigitalExpr(data=arg) for arg in args]
+        return DigitalExpr(data='concat', children=args)
+
+    @staticmethod
     def or_(a, b):
         a = a if isinstance(a, DigitalExpr) else DigitalExpr(data=a)
         b = b if isinstance(b, DigitalExpr) else DigitalExpr(data=b)
@@ -85,7 +90,7 @@ class CaseCoeffProduct:
 
 
 class CaseLinearExpr:
-    def __init__(self, num_cases=None, prods=None, const=None, cases_present=None):
+    def __init__(self, num_cases=None, prods=None, const=None, mode=None):
         # set defaults
         if num_cases is not None:
             assert prods is None
@@ -93,17 +98,14 @@ class CaseLinearExpr:
 
             assert const is None
             const = CaseCoeffProduct(num_cases=num_cases)
-
-            assert cases_present is None
-            cases_present = []
         else:
-            assert (prods is not None) and (const is not None) and (cases_present is not None)
+            assert (prods is not None) and (const is not None)
             num_cases = const.num_cases
 
         # save settings
         self.num_cases = num_cases
         self.const = const
-        self.cases_present = cases_present
+        self.mode = mode
 
         # dictionary mapping variable names to the associated CaseCoeffProduct object
         self._var_dict = {prod.var: prod for prod in prods}
@@ -127,9 +129,6 @@ class CaseLinearExpr:
         return prod
 
     def add_case(self, case_no, expr):
-        # remove case from missing set
-        self.cases_present.append(case_no)
-
         # convert symbolic expression to a linear form
         syms = list(expr.free_symbols)
         A, b = linear_eq_to_matrix([expr], syms)
@@ -150,7 +149,7 @@ class CaseLinearExpr:
 
 class MixedSignalModel:
     def __init__(self, analog_inputs=None, digital_inputs=None, analog_outputs=None, digital_outputs=None,
-                 analog_states=None, digital_states=None, mode=None):
+                 analog_states=None, digital_states=None, analog_modes=None, digital_modes=None):
 
         # initialize model
         self.analog_inputs = []
@@ -159,7 +158,8 @@ class MixedSignalModel:
         self.digital_outputs = []
         self.analog_states = []
         self.digital_states = []
-        self.mode = []
+        self.analog_modes = []
+        self.digital_modes = []
 
         # initial name dictionary
         self._signal_name_dict = {}
@@ -177,8 +177,10 @@ class MixedSignalModel:
             self.add_analog_states(*analog_states)
         if digital_states is not None:
             self.add_digital_states(*digital_states)
-        if mode is not None:
-            self.mode = mode
+        if analog_modes is not None:
+            self.add_analog_modes(*analog_modes)
+        if digital_modes is not None:
+            self.add_digital_modes(*digital_modes)
 
     # get specific I/O by name
 
@@ -217,4 +219,12 @@ class MixedSignalModel:
 
     def add_digital_states(self, *args):
         self.digital_states.extend(args)
+        self.add_signals(*args)
+
+    def add_analog_modes(self, *args):
+        self.analog_modes.extend(args)
+        self.add_signals(*args)
+
+    def add_digital_modes(self, *args):
+        self.digital_modes.extend(args)
         self.add_signals(*args)

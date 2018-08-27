@@ -5,7 +5,7 @@ from interval import interval
 
 from msdsl.format import load_model
 from msdsl.util import Namespace
-from msdsl.model import AnalogSignal, CaseLinearExpr
+from msdsl.model import AnalogSignal, CaseLinearExpr, DigitalSignal
 from msdsl.cpp import *
 
 class AnalogFormatter:
@@ -49,16 +49,13 @@ class AnalogFormatter:
     def make_expr(self, expr):
         terms = []
         for prod in (expr.prods + [expr.const]):
-            # get the coefficients from cases that were actually defined
-            coeffs_present = [prod.coeffs[k] for k in expr.cases_present]
-
             # check if all zeros
-            if all(coeff_val==0 for coeff_val in coeffs_present):
+            if all(coeff_val==0 for coeff_val in prod.coeffs):
                 continue
 
             # create a constant or array as necessary
-            const_val = coeffs_present[0]
-            if all(coeff_val==const_val for coeff_val in coeffs_present):
+            const_val = prod.coeffs[0]
+            if all(coeff_val==const_val for coeff_val in prod.coeffs):
                 if (const_val == 1) and (prod.var is not None):
                     # special case: if the coefficients are all "1", then no multiplication is necessary
                     terms.append(prod.var)
@@ -69,7 +66,7 @@ class AnalogFormatter:
                 arr = self.namespace.make(prefix='arr')
                 self.cpp_gen.array(self.type_(self.arr_to_signal(prod.coeffs)), arr, prod.coeffs)
 
-                term = arr + '[idx]'
+                term = arr + '[' + expr.mode + ']'
 
             # multiply by variable if defined
             if prod.var is not None:
@@ -110,6 +107,9 @@ class AnalogFormatter:
 
 
 class DigitalFormatter:
+    def __init__(self, model):
+        self.model = model
+
     @staticmethod
     def type_(signal):
         if signal.signed:
@@ -121,20 +121,24 @@ class DigitalFormatter:
     def expr2str(expr):
         if len(expr.children) == 0:
             return expr.data
-        elif len(expr.children) == 1:
-            child = DigitalFormatter.expr2str(expr.children[0])
-            return expr.data + '(' + child + ')'
-        elif len(expr.children) == 2:
-            child_1 = DigitalFormatter.expr2str(expr.children[0])
-            child_2 = DigitalFormatter.expr2str(expr.children[1])
-            return '(' + child_1 + ')' + expr.data + '(' + child_2 + ')'
+        else:
+            if expr.data == 'concat':
+                return '(' + ', '.join(DigitalFormatter.expr2str(child) for child in expr.children) + ')'
+            elif expr.data == '~':
+                return expr.data + '(' + DigitalFormatter.expr2str(expr.children[0]) + ')'
+            elif expr.data in ['&', '|']:
+                child_0 = DigitalFormatter.expr2str(expr.children[0])
+                child_1 = DigitalFormatter.expr2str(expr.children[1])
+                return '(' + child_0 + ')' + expr.data + '(' + child_1 + ')'
+            else:
+                raise ValueError('Invalid digital expression type.')
 
 def make_header(args, model):
     cpp_gen = CppGen(filename=args.hpp)
     namespace = Namespace()
 
     analog_fmt = AnalogFormatter(use_float=args.use_float, cpp_gen=cpp_gen, namespace=namespace, model=model)
-    digital_fmt = DigitalFormatter()
+    digital_fmt = DigitalFormatter(model=model)
 
     # start include guard
     include_guard_var = '__' + args.hpp.upper().replace('.', '_') + '__'
@@ -194,7 +198,7 @@ def make_source(args, model):
     namespace = Namespace()
 
     analog_fmt = AnalogFormatter(use_float=args.use_float, cpp_gen=cpp_gen, namespace=namespace, model=model)
-    digital_fmt = DigitalFormatter()
+    digital_fmt = DigitalFormatter(model=model)
 
     # include files
     cpp_gen.include('"ap_int.h"')
@@ -223,10 +227,10 @@ def make_source(args, model):
         cpp_gen.static(digital_fmt.type_(digital_state), digital_state.name, initial=digital_state.initial)
     cpp_gen.print()
 
-    # create the case index variable
-    if len(model.mode) > 0:
-        cpp_gen.comment('Case index variable')
-        cpp_gen.assign(ap_uint(len(model.mode)) + ' ' + 'idx', concat(*model.mode))
+    # create the digital mode variables
+    for mode in model.digital_modes:
+        cpp_gen.comment('Digital mode variable: ' + mode.name)
+        cpp_gen.assign(digital_fmt.type_(mode) + ' ' + mode.name, digital_fmt.expr2str(mode.expr))
         cpp_gen.print()
 
     # update digital states into temporary variables
@@ -251,10 +255,10 @@ def make_source(args, model):
         cpp_gen.assign(state, tmpvar)
     cpp_gen.print()
 
-    # re-assign case index variable
-    if len(model.mode) > 0:
-        cpp_gen.comment('Re-assigning case index variable')
-        cpp_gen.assign('idx', concat(*model.mode))
+    # create the digital mode variables
+    for mode in model.analog_modes:
+        cpp_gen.comment('Analog mode variable: ' + mode.name)
+        cpp_gen.assign(digital_fmt.type_(mode) + ' ' + mode.name, digital_fmt.expr2str(mode.expr))
         cpp_gen.print()
 
     # update analog states into temporary variables

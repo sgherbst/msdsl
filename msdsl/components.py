@@ -102,15 +102,16 @@ class Transformer:
 class MOSFET:
     prefix = 'M'
 
-    def __init__(self, port, name):
+    def __init__(self, port, ron, name):
         self.port = port
+        self.ron = ron
         self.name = name
 
     def add_to_analysis(self, state, analysis):
         self.port.add_to_analysis(analysis)
 
         if state == 'on':
-            analysis.set_equal(self.port.v, 0)
+            analysis.set_equal(self.port.i, self.port.v/self.ron)
         else:
             analysis.set_equal(self.port.i, 0)
 
@@ -121,16 +122,17 @@ class MOSFET:
 class Diode:
     prefix = 'D'
 
-    def __init__(self, port, vf, name):
+    def __init__(self, port, vf, ron, name):
         self.port = port
         self.vf = vf
+        self.ron = ron
         self.name = name
 
     def add_to_analysis(self, state, analysis):
         self.port.add_to_analysis(analysis)
 
         if state == 'on':
-            analysis.set_equal(self.port.v, self.vf)
+            analysis.set_equal(self.port.i, (self.port.v - self.vf)/self.ron)
         else:
             analysis.set_equal(self.port.i, 0)
 

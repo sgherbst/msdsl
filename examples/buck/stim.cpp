@@ -4,7 +4,6 @@
 #include <iostream>
 #include <stdexcept>
 #include <cmath>
-#include <vector>
 
 int main() {
     // test bench I/O
@@ -20,14 +19,14 @@ int main() {
     vcd.header();
 
     // write VCD signal information
-    std::vector<std::string> signals;
-    signals.push_back("v_out");
-    signals.push_back("i_mag");
-    vcd.probe(signals);
+    vcd.register_real("v_out");
+    vcd.register_real("i_mag");
+    vcd.register_wire("M0_on");
+    vcd.write_probes();
 
     // run simulation
     long time_ps = 0;
-    for (int i = 0; i < 2000000; i++) {
+    for (int i = 0; i < 20000; i++) {
         // set gate waveform
         if (i % 1000 == 0){
             M0_on = ~M0_on;
@@ -38,8 +37,9 @@ int main() {
 
         // dump result
         vcd.timestep(time_ps);
-        vcd.dump<v_out_type>("v_out", v_out);
-        vcd.dump<v_out_type>("i_mag", i_mag);
+        vcd.dump_real<v_out_type>("v_out", v_out);
+        vcd.dump_real<i_mag_type>("i_mag", i_mag);
+        vcd.dump_wire<M0_on_type>("M0_on", M0_on);
 
         // increment time
         time_ps += 2000;

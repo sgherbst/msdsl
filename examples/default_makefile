@@ -33,7 +33,7 @@ run:
 	./stim
 
 view: 
-	$(GTKWAVE) out.vcd &
+	$(GTKWAVE) out.vcd -a circuit.gtkw &
 
 clean: 
 	rm -f circuit.json circuit.cpp circuit.hpp stim out.vcd

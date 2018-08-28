@@ -44,7 +44,7 @@ class VcdWriter{
         }
         template <class T> void dump_wire(std::string name, T data) {
             // note that the arbitrary precision type already places "0b" at the front of the string,
-            // so we need to remove the leading zero for the VCD format
+            // so we need to remove the leading zero to be compatible with the VCD format
             file << data.to_string(2).substr(1) << " " << name_to_symbol[name] << '\n';
         }
 };

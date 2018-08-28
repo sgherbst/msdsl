@@ -21,9 +21,9 @@ int main() {
     vcd.header();
 
     // write VCD signal information
-    std::vector<std::string> signals;
-    signals.push_back("v_out");
-    vcd.probe(signals);
+    vcd.register_real("v_out");
+    vcd.register_real("input");
+    vcd.write_probes();
 
     // run simulation
     long time_ps = 0;
@@ -41,7 +41,8 @@ int main() {
 
         // dump result
         vcd.timestep(time_ps);
-        vcd.dump<v_out_type>("v_out", v_out);
+        vcd.dump_real<v_out_type>("v_out", v_out);
+        vcd.dump_real<input_type>("input", input);
 
         // increment time
         time_ps += 10000;

@@ -1,0 +1,39 @@
+[*]
+[*] GTKWave Analyzer v3.3.93 (w)1999-2018 BSI
+[*] Tue Aug 28 01:24:12 2018
+[*]
+[dumpfile] "/Users/sgherbst/Dropbox/Laptop Sync/Stanford/Research/Mixed Signal Emulation/Code/msdsl/examples/buck/out.vcd"
+[dumpfile_mtime] "Tue Aug 28 01:23:07 2018"
+[dumpfile_size] 745449
+[savefile] "/Users/sgherbst/Dropbox/Laptop Sync/Stanford/Research/Mixed Signal Emulation/Code/msdsl/examples/buck/circuit.gtkw"
+[timestart] 0
+[size] 1000 600
+[pos] -1 -1
+*-23.494268 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[sst_width] 193
+[signals_width] 78
+[sst_expanded] 1
+[sst_vpaned_height] 167
+@8028
+circuit.i_mag
+@20000
+-
+-
+-
+-
+-
+-
+@8028
+circuit.v_out
+@20001
+-
+@20000
+-
+-
+-
+-
+-
+@28
+circuit.M0_on
+[pattern_trace] 1
+[pattern_trace] 0

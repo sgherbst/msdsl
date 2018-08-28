@@ -229,9 +229,10 @@ def make_source(args, model):
 
     # create the digital mode variables
     for mode in model.digital_modes:
-        cpp_gen.comment('Digital mode variable: ' + mode.name)
-        cpp_gen.assign(digital_fmt.type_(mode) + ' ' + mode.name, digital_fmt.expr2str(mode.expr))
-        cpp_gen.print()
+        if len(mode.expr.children) > 0:
+            cpp_gen.comment('Digital mode variable: ' + mode.name)
+            cpp_gen.assign(digital_fmt.type_(mode) + ' ' + mode.name, digital_fmt.expr2str(mode.expr))
+            cpp_gen.print()
 
     # update digital states into temporary variables
     tmpvars = []
@@ -257,9 +258,10 @@ def make_source(args, model):
 
     # create the digital mode variables
     for mode in model.analog_modes:
-        cpp_gen.comment('Analog mode variable: ' + mode.name)
-        cpp_gen.assign(digital_fmt.type_(mode) + ' ' + mode.name, digital_fmt.expr2str(mode.expr))
-        cpp_gen.print()
+        if len(mode.expr.children) > 0:
+            cpp_gen.comment('Analog mode variable: ' + mode.name)
+            cpp_gen.assign(digital_fmt.type_(mode) + ' ' + mode.name, digital_fmt.expr2str(mode.expr))
+            cpp_gen.print()
 
     # update analog states into temporary variables
     tmpvars = []

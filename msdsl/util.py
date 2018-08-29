@@ -55,3 +55,50 @@ class SymbolNamespace(Namespace):
     def make(self, name=None, prefix=None, tries=None):
         name = super().make(name=name, prefix=prefix, tries=tries)
         return symbols(name)
+
+
+class TagDict:
+    def __init__(self):
+        self.name_to_value = {}
+        self.tag_to_name = {}
+
+    def add(self, name, value, *tags):
+        self.update({name: value}, *tags)
+
+    def update(self, nv_dict, *tags):
+        self.name_to_value.update(nv_dict)
+
+        if tags is not None:
+            for tag in tags:
+                if tag not in self.tag_to_name:
+                    self.tag_to_name[tag] = set()
+                self.tag_to_name[tag].update(nv_dict.keys())
+
+    def has(self, name):
+        return name in self.name_to_value
+
+    def get_by_name(self, name):
+        return self.name_to_value[name]
+
+    def get_by_tag(self, *tags):
+        matching_names = self.name_to_value.keys()
+
+        for group in tags:
+            group_names = set()
+
+            if isinstance(group, str):
+                group = [group]
+
+            for tag in group:
+                if tag in self.tag_to_name:
+                    group_names |= self.tag_to_name[tag]
+
+            matching_names &= group_names
+
+        return [self.name_to_value[name] for name in matching_names]
+
+    def isa(self, name, *tags):
+        for tag in tags:
+            if tag not in self.tag_to_name or (name not in self.tag_to_name[tag]):
+                return False
+        return True

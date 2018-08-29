@@ -90,8 +90,9 @@ class CppGen:
         self.print('// ' + s)
 
     def array(self, type_, name, values):
-        literal = '{' + ', '.join(str(x if (x != 0) else 0) for x in values) + '}'
-        self.print(type_ + ' ' + name + ' [] = ' + literal + ';')
+        lhs = type_ + ' ' + name + ' []'
+        rhs = '{' + ', '.join(str(x if (x != 0) else 0) for x in values) + '}'
+        self.assign(lhs, rhs)
 
     def print(self, s='', newline=True):
         if not self.line_started:

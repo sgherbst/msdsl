@@ -1,230 +1,198 @@
-from sympy import linear_eq_to_matrix
-
+from msdsl.cpp import ap_int, ap_uint, ap_fixed, ap_ufixed
+from msdsl.util import TagDict, Namespace
 
 class AnalogSignal:
-    def __init__(self, name=None, range_=None, rel_tol=None, abs_tol=None, expr=None, initial=None):
+    def __init__(self, name=None, range_=None, rel_tol=None, abs_tol=None, value=None, array=None, tags=None):
         # set defaults
         if (rel_tol is None) and (abs_tol is None):
             rel_tol = 5e-7
+        if tags is None:
+            tags = []
 
         # save settings
         self.name = name
         self.range_ = range_
         self.rel_tol = rel_tol
         self.abs_tol = abs_tol
-        self.expr = expr
-        self.initial = initial
+        self.value = value
+        self.array = array
+        self.tags = tags
+
+    def to_hls(self):
+        # TODO: allow fixed point
+        return 'float'
+
+    def isa(self, tag):
+        return tag in self.tags
+
+
+class AnalogInput(AnalogSignal):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, tags=['analog', 'input'], **kwargs)
+
+
+class AnalogOutput(AnalogSignal):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, tags=['analog', 'output'], **kwargs)
+
+
+class AnalogState(AnalogSignal):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, tags=['analog', 'state'], **kwargs)
+
+
+class AnalogInternal(AnalogSignal):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, tags=['analog', 'internal'], **kwargs)
+
+
+class AnalogConstant(AnalogSignal):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, tags=['analog', 'constant'], **kwargs)
 
 
 class DigitalSignal:
-    def __init__(self, name=None, signed=None, width=None, expr=None, initial=None):
+    def __init__(self, name=None, signed=None, width=None, value=None, array=None, tags=None):
         # set defaults
         if signed is None:
             signed = False
         if width is None:
             width = 1
+        if tags is None:
+            tags = []
 
         self.name = name
         self.signed = signed
         self.width = width
-        self.expr = expr
-        self.initial = initial
+        self.value = value
+        self.array = array
+        self.tags = tags
 
-
-class DigitalExpr:
-    def __init__(self, data=None, children=None):
-        if children is None:
-            children = []
-
-        self.data = data
-        self.children = children
-
-    def add_child(self, child):
-        self.children.append(child)
-
-    @staticmethod
-    def concat(*args):
-        args = [arg if isinstance(arg, DigitalExpr) else DigitalExpr(data=arg) for arg in args]
-        return DigitalExpr(data='concat', children=args)
-
-    @staticmethod
-    def or_(a, b):
-        a = a if isinstance(a, DigitalExpr) else DigitalExpr(data=a)
-        b = b if isinstance(b, DigitalExpr) else DigitalExpr(data=b)
-        return DigitalExpr(data='|', children=[a, b])
-
-    @staticmethod
-    def and_(a, b):
-        a = a if isinstance(a, DigitalExpr) else DigitalExpr(data=a)
-        b = b if isinstance(b, DigitalExpr) else DigitalExpr(data=b)
-        return DigitalExpr(data='&', children=[a, b])
-
-    @staticmethod
-    def not_(a):
-        a = a if isinstance(a, DigitalExpr) else DigitalExpr(data=a)
-        return DigitalExpr(data='~', children=[a])
-
-    def walk(self):
-        yield self
-
-        for child in self.children:
-            yield from child.walk()
-
-class CaseCoeffProduct:
-    def __init__(self, var=None, num_cases=None, coeffs=None):
-        # set defaults
-        if num_cases is not None:
-            assert coeffs is None
-            coeffs = [0]*num_cases
+    def to_hls(self):
+        if self.signed:
+            return ap_int(self.width)
         else:
-            assert coeffs is not None
-            num_cases = len(coeffs)
+            return ap_uint(self.width)
 
-        # save settings
-        self.var = var
-        self.num_cases = num_cases
-        self.coeffs = coeffs
-
-    def update(self, case_no, coeff):
-        self.coeffs[case_no] = coeff
+    def isa(self, tag):
+        return tag in self.tags
 
 
-class CaseLinearExpr:
-    def __init__(self, num_cases=None, prods=None, const=None, mode=None):
-        # set defaults
-        if num_cases is not None:
-            assert prods is None
-            prods = []
+class DigitalInput(DigitalSignal):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, tags=['digital', 'input'], **kwargs)
 
-            assert const is None
-            const = CaseCoeffProduct(num_cases=num_cases)
-        else:
-            assert (prods is not None) and (const is not None)
-            num_cases = const.num_cases
 
-        # save settings
-        self.num_cases = num_cases
-        self.const = const
-        self.mode = mode
+class DigitalOutput(DigitalSignal):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, tags=['digital', 'output'], **kwargs)
 
-        # dictionary mapping variable names to the associated CaseCoeffProduct object
-        self._var_dict = {prod.var: prod for prod in prods}
 
-    @property
-    def prods(self):
-        return list(self._var_dict.values())
+class DigitalState(DigitalSignal):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, tags=['digital', 'state'], **kwargs)
 
-    def get_var(self, var):
-        return self._var_dict[var]
 
-    def has_var(self, var):
-        return var in self._var_dict
+class DigitalInternal(DigitalSignal):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, tags=['digital', 'internal'], **kwargs)
 
-    def init_var(self, var):
-        prod = CaseCoeffProduct(var=var, num_cases=self.num_cases)
 
-        self._var_dict[var] = prod
-        self.prods.append(prod)
+class DigitalConstant(DigitalSignal):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, tags=['digital', 'constant'], **kwargs)
 
-        return prod
 
-    def add_case(self, case_no, expr):
-        # convert symbolic expression to a linear form
-        syms = list(expr.free_symbols)
-        A, b = linear_eq_to_matrix([expr], syms)
+class AssignmentGroup:
+    def __init__(self, group=None):
+        if group is None:
+            group = []
+        self.group = group
 
-        # get coefficient values and variable names
-        coeffs = [float(x) for x in A]
-        vars = [sym.name for sym in syms]
 
-        # update coeff products
-        for coeff, var in zip(coeffs, vars):
-            if not self.has_var(var):
-                self.init_var(var)
-            self.get_var(var).update(case_no, coeff)
-
-        # update constant
-        self.const.update(case_no, -float(b[0]))
+class ModelAssignment:
+    def __init__(self, lhs, rhs):
+        self.lhs = lhs
+        self.rhs = rhs
 
 
 class MixedSignalModel:
-    def __init__(self, analog_inputs=None, digital_inputs=None, analog_outputs=None, digital_outputs=None,
-                 analog_states=None, digital_states=None, analog_modes=None, digital_modes=None):
-
+    def __init__(self, analog_signals=None, digital_signals=None, assignment_groups=None):
         # initialize model
-        self.analog_inputs = []
-        self.digital_inputs = []
-        self.analog_outputs = []
-        self.digital_outputs = []
-        self.analog_states = []
-        self.digital_states = []
-        self.analog_modes = []
-        self.digital_modes = []
+        self.tag_dict = TagDict()
+        self.assignment_groups = []
+        self.namespace = Namespace()
 
-        # initial name dictionary
-        self._signal_name_dict = {}
+        # apply inputs when relevant
+        if analog_signals is not None:
+            for analog_signal in analog_signals:
+                self.add(analog_signal)
 
-        # apply inputs
-        if analog_inputs is not None:
-            self.add_analog_inputs(*analog_inputs)
-        if digital_inputs is not None:
-            self.add_digital_inputs(*digital_inputs)
-        if analog_outputs is not None:
-            self.add_analog_outputs(*analog_outputs)
-        if digital_outputs is not None:
-            self.add_digital_outputs(*digital_outputs)
-        if analog_states is not None:
-            self.add_analog_states(*analog_states)
-        if digital_states is not None:
-            self.add_digital_states(*digital_states)
-        if analog_modes is not None:
-            self.add_analog_modes(*analog_modes)
-        if digital_modes is not None:
-            self.add_digital_modes(*digital_modes)
+        if digital_signals is not None:
+            for digital_signal in digital_signals:
+                self.add(digital_signal)
+
+        if assignment_groups is not None:
+            for assignment_group in assignment_groups:
+                self.assign(*[(assignment.lhs, assignment.rhs) for assignment in assignment_group])
+
+    # get specific I/O by tags
+
+    @property
+    def analog_signals(self):
+        return self.tag_dict.get_by_tag('analog')
+
+    @property
+    def digital_signals(self):
+        return self.tag_dict.get_by_tag('digital')
+
+    @property
+    def analog_inputs(self):
+        return self.tag_dict.get_by_tag('analog', 'input')
+
+    @property
+    def analog_outputs(self):
+        return self.tag_dict.get_by_tag('analog', 'output')
+
+    @property
+    def analog_states(self):
+        return self.tag_dict.get_by_tag('analog', 'state')
+
+    @property
+    def analog_constants(self):
+        return self.tag_dict.get_by_tag('analog', 'constant')
+
+    @property
+    def ios(self):
+        return self.tag_dict.get_by_tag(('input', 'output'))
+
+    @property
+    def constants(self):
+        return self.tag_dict.get_by_tag('constant')
+
+    @property
+    def states(self):
+        return self.tag_dict.get_by_tag('state')
 
     # get specific I/O by name
 
-    def get_signal(self, name):
-        return self._signal_name_dict[name]
+    def has(self, name):
+        return self.tag_dict.has(name)
 
-    def has_signal(self, name):
-        return name in self._signal_name_dict
+    def get_by_name(self, name):
+        return self.tag_dict.get_by_name(name)
 
-    def add_signals(self, *args):
-        for arg in args:
-            assert not self.has_signal(arg.name)
-            self._signal_name_dict[arg.name] = arg
+    def get_by_tag(self, name, *tags):
+        return self.tag_dict.get_by_tag(name, *tags)
 
-    # Build model
+    def isa(self, name, *tags):
+        return self.tag_dict.isa(name, *tags)
 
-    def add_analog_inputs(self, *args):
-        self.analog_inputs.extend(args)
-        self.add_signals(*args)
-        
-    def add_digital_inputs(self, *args):
-        self.digital_inputs.extend(args)
-        self.add_signals(*args)
+    # model building
 
-    def add_analog_outputs(self, *args):
-        self.analog_outputs.extend(args)
-        self.add_signals(*args)
+    def add(self, signal):
+        self.tag_dict.add(signal.name, signal, *signal.tags)
 
-    def add_digital_outputs(self, *args):
-        self.digital_outputs.extend(args)
-        self.add_signals(*args)
-
-    def add_analog_states(self, *args):
-        self.analog_states.extend(args)
-        self.add_signals(*args)
-
-    def add_digital_states(self, *args):
-        self.digital_states.extend(args)
-        self.add_signals(*args)
-
-    def add_analog_modes(self, *args):
-        self.analog_modes.extend(args)
-        self.add_signals(*args)
-
-    def add_digital_modes(self, *args):
-        self.digital_modes.extend(args)
-        self.add_signals(*args)
+    def assign(self, *assignments):
+        assignment_group = [ModelAssignment(lhs=lhs, rhs=rhs) for lhs, rhs in assignments]
+        self.assignment_groups.append(assignment_group)

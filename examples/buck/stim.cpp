@@ -33,7 +33,7 @@ int main() {
         }
 
         // run one timestep
-        circuit(input, M0_on, &v_out, &i_mag);
+        circuit(&i_mag, input, M0_on, &v_out);
 
         // dump result
         vcd.timestep(time_ps);

@@ -3,6 +3,7 @@ import logging
 
 from msdsl.components import *
 from msdsl.model import *
+from msdsl.expr import ModelExpr, SymPyLinExpr
 from msdsl.util import Namespace, SymbolNamespace, all_combos
 
 
@@ -19,15 +20,16 @@ class NodalAnalysis:
         self.kcl[n] = self.kcl.get(n, 0) + expr
 
 
-class DiodeExpr(DigitalExpr):
-    def __init__(self, num_cases, mode):
-        self.voltage = CaseLinearExpr(num_cases=num_cases, mode=mode)
-        super().__init__(data='~', children=[DigitalExpr(data=self.voltage)])
+class DiodeExpr(ModelExpr):
+    def __init__(self, model, num_cases, index):
+        self.voltage = SymPyLinExpr(num_cases=num_cases, index=index, model=model)
+        super().__init__(operator='gt', operands=[self.voltage, 'zero'])
 
 
 class Circuit:
     def __init__(self):
         self.model = MixedSignalModel()
+        self.model.add(AnalogConstant(name='zero', value=0))
 
         self.symbol_namespace = SymbolNamespace()
         self.device_namespace = Namespace()
@@ -45,7 +47,7 @@ class Circuit:
         if range_ is None:
             range_ = [-10, 10]
 
-        self.model.add_analog_inputs(AnalogSignal(name=name, range_=range_, rel_tol=rel_tol, abs_tol=abs_tol))
+        self.model.add(AnalogInput(name=name, range_=range_, rel_tol=rel_tol, abs_tol=abs_tol))
 
         return self.symbol_namespace.make(name)
 
@@ -54,11 +56,11 @@ class Circuit:
             name = sym.name
 
         self.output_symbols[name] = sym
-        self.model.add_analog_outputs(AnalogSignal(name=name, rel_tol=rel_tol, abs_tol=abs_tol))
+        self.model.add(AnalogOutput(name=name, rel_tol=rel_tol, abs_tol=abs_tol))
 
     def state(self, variable_name, derivative_name, range_=None, rel_tol=None, abs_tol=None, initial=None):
-        signal = AnalogSignal(name=variable_name, range_=range_, rel_tol=rel_tol, abs_tol=abs_tol, initial=initial)
-        self.model.add_analog_states(signal)
+        signal = AnalogState(name=variable_name, range_=range_, rel_tol=rel_tol, abs_tol=abs_tol, value=initial)
+        self.model.add(signal)
 
         variable = self.symbol_namespace.make(variable_name)
         derivative = self.symbol_namespace.make(derivative_name)
@@ -160,7 +162,7 @@ class Circuit:
         mosfet = MOSFET(port=Port(p=p, n=n, v=v, i=i), ron=ron, name=name)
         self.mosfets.append(mosfet)
 
-        self.model.add_digital_inputs(DigitalSignal(mosfet.on))
+        self.model.add(DigitalInput(name=mosfet.on))
 
         return mosfet
 
@@ -171,7 +173,7 @@ class Circuit:
         diode = Diode(port=Port(p=p, n=n, v=v, i=i), vf=vf, ron=ron, name=name)
         self.diodes.append(diode)
 
-        self.model.add_digital_states(DigitalSignal(diode.on, initial=0))
+        self.model.add(DigitalInternal(name=diode.on))
 
         return diode
 
@@ -180,26 +182,34 @@ class Circuit:
         num_analog_cases = 2**(len(dynamic_components))
         num_digital_cases = 2**(len(self.mosfets))
 
-        # define the digital mode variable
-        digital_mode = [mosfet.on for mosfet in self.mosfets]
-        digital_mode = list(reversed(digital_mode))
-        digital_mode = DigitalSignal(name='d_idx', width=len(self.mosfets), expr=DigitalExpr.concat(*digital_mode))
-        self.model.add_digital_modes(digital_mode)
+        # define the digital index variable
+        self.model.add(DigitalInternal(name='d_idx', width=max(1, len(self.mosfets))))
+        if len(self.mosfets) == 0:
+            self.model.assign(('d_idx', ModelExpr.add('0')))
+        else:
+            self.model.assign(('d_idx', ModelExpr.concat(*[mosfet.on for mosfet in reversed(self.mosfets)])))
 
-        for diode in self.diodes:
-            self.model.get_signal(diode.on).expr = DiodeExpr(num_cases=num_digital_cases, mode=digital_mode.name)
+        # Create the diode expressions
+        diode_exprs = {diode: DiodeExpr(num_cases=num_digital_cases, index='d_idx', model=self.model)
+                       for diode in self.diodes}
+        self.model.assign(*[(diode.on, expr) for diode, expr in diode_exprs.items()])
 
-        # define analog mode variable
-        analog_mode = [mosfet.on for mosfet in self.mosfets] + [diode.on for diode in self.diodes]
-        analog_mode = list(reversed(analog_mode))
-        analog_mode = DigitalSignal(name='a_idx', width=len(dynamic_components), expr=DigitalExpr.concat(*analog_mode))
-        self.model.add_analog_modes(analog_mode)
+        # define the analog index variable
+        self.model.add(DigitalInternal(name='a_idx', width=max(1, len(dynamic_components))))
+        if len(dynamic_components) == 0:
+            self.model.assign(('a_idx', ModelExpr.add('0')))
+        else:
+            self.model.assign(('a_idx', ModelExpr.concat(*[device.on for device in reversed(dynamic_components)])))
 
-        for analog_output in self.model.analog_outputs:
-            analog_output.expr = CaseLinearExpr(num_cases=num_analog_cases, mode=analog_mode.name)
+        # analog state expressions
+        analog_state_exprs = {signal.name: SymPyLinExpr(num_cases=num_analog_cases, index='a_idx', model=self.model)
+                              for signal in self.model.analog_states}
+        self.model.assign(*list(analog_state_exprs.items()))
 
-        for analog_state in self.model.analog_states:
-            analog_state.expr = CaseLinearExpr(num_cases=num_analog_cases, mode=analog_mode.name)
+        # analog output expressions
+        analog_output_exprs = {signal.name: SymPyLinExpr(num_cases=num_analog_cases, index='a_idx', model=self.model)
+                               for signal in self.model.analog_outputs}
+        self.model.assign(*list(analog_output_exprs.items()))
 
         # enumerate all of the cases
         for i in range(num_analog_cases):
@@ -214,13 +224,13 @@ class Circuit:
             logging.debug('solution found')
 
             # update analog states and outputs
-            self.update_analog_states(case_no=i, soln=soln, dt=dt)
-            self.update_analog_outputs(case_no=i, soln=soln)
+            self.update_analog_states(analog_state_exprs=analog_state_exprs, case_no=i, soln=soln, dt=dt)
+            self.update_analog_outputs(analog_output_exprs=analog_output_exprs, case_no=i, soln=soln)
 
             # update diode states if needed (i.e., all diodes off)
             if (i >> len(self.mosfets)) == 0:
                 mask = (2**len(self.mosfets)) - 1
-                self.update_diode_states(case_no=(i & mask), soln=soln)
+                self.update_diode_states(diode_exprs=diode_exprs, case_no=(i & mask), soln=soln)
 
     def solve_case(self, dynamic_modes):
         # create new analysis object
@@ -240,8 +250,8 @@ class Circuit:
 
         # build a set of the variables to solve for
         solve_variables = set().union(*[equation.free_symbols for equation in equations])
-        solve_variables -= set(symbols(input_.name) for input_ in self.model.analog_inputs)
-        solve_variables -= set(symbols(state.name) for state in self.model.analog_states)
+        solve_variables -= set(symbols(signal.name) for signal in self.model.analog_inputs)
+        solve_variables -= set(symbols(signal.name) for signal in self.model.analog_states)
 
         # make sure that the system of equations is well-defined
         assert len(solve_variables) == len(equations)
@@ -253,28 +263,23 @@ class Circuit:
 
         return soln
 
-    def update_diode_states(self, case_no, soln):
-        # compute digital state update equations
-        for diode in self.diodes:
-            expr = self.model.get_signal(diode.on).expr
-            expr.voltage.add_case(case_no=case_no, expr=soln[diode.port.v]-diode.vf)
+    def update_diode_states(self, diode_exprs, case_no, soln):
+        for diode, expr in diode_exprs.items():
+            expr.voltage.add_case(case_no=case_no, sympy_lin_expr=soln[diode.port.v]-diode.vf)
 
-    def update_analog_states(self, case_no, soln, dt):
-        # apply digital state update equations
-        for analog_state in self.model.analog_states:
-            variable = symbols(analog_state.name)
-            expr = variable + dt*soln[self.derivatives[variable]]
+    def update_analog_states(self, analog_state_exprs, case_no, soln, dt):
+        for state, expr in analog_state_exprs.items():
+            symbol = symbols(state)
+            sympy_lin_expr = symbol + dt*soln[self.derivatives[symbol]]
+            expr.add_case(case_no=case_no, sympy_lin_expr=sympy_lin_expr)
 
-            analog_state.expr.add_case(case_no=case_no, expr=expr)
-
-    def update_analog_outputs(self, case_no, soln):
-        # list all output variables
-        for output in self.model.analog_outputs:
-            symbol = self.output_symbols[output.name]
+    def update_analog_outputs(self, analog_output_exprs, case_no, soln):
+        for output, expr in analog_output_exprs.items():
+            symbol = self.output_symbols[output]
 
             if symbol in soln:
-                expr = soln[symbol]
+                sympy_lin_expr = soln[symbol]
             else:
-                expr = symbol
+                sympy_lin_expr = symbol
 
-            output.expr.add_case(case_no=case_no, expr=expr)
+            expr.add_case(case_no=case_no, sympy_lin_expr=sympy_lin_expr)

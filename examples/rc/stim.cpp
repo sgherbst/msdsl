@@ -1,4 +1,4 @@
-#include "circuit.hpp"
+#include "model.hpp"
 #include "vcd.hpp"
 
 #include <iostream>
@@ -6,13 +6,19 @@
 #include <cmath>
 #include <vector>
 
+float random_bit(){
+    return (rand()%2 == 0) ? -1.0 : +1.0;
+}
+
 int main() {
-    // initialize input state
-    bool state = false;
+    // parameters
+    float last_time = 1000e-6;
+    float bit_period = 10e-6;
 
     // test bench I/O
-    input_type input;
-    v_out_type v_out;
+    float dt = 0.25e-6;
+    float v_in = random_bit();
+    float v_out = 0.0;
 
     // create VCD writer
     VcdWriter vcd("out.vcd");
@@ -21,30 +27,25 @@ int main() {
     vcd.header();
 
     // write VCD signal information
+    vcd.register_real("v_in");
     vcd.register_real("v_out");
-    vcd.register_real("input");
     vcd.write_probes();
 
     // run simulation
-    long time_ps = 0;
-    for (int i = 0; i < 1500; i++) {
+    float last_change = 0;
+    for (float time = 0; time <= last_time ; time += dt) {
         // set input state waveform
-        if (i % 100 == 0){
-            state = !state;
+        if ((time-last_change) > bit_period){
+            v_in = random_bit();
+            last_change = time;
         }
 
-        // select input voltage
-        input = state ? 10 : 0;
-
         // run one timestep
-        circuit(input, &v_out);
+        model(dt, v_in, &v_out);
 
         // dump result
-        vcd.timestep(time_ps);
-        vcd.dump_real<v_out_type>("v_out", v_out);
-        vcd.dump_real<input_type>("input", input);
-
-        // increment time
-        time_ps += 10000;
+        vcd.timestep(1e12*time);
+        vcd.dump_real<float>("v_in", v_in);
+        vcd.dump_real<float>("v_out", v_out);
     }
 }

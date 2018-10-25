@@ -1,198 +1,278 @@
-from msdsl.cpp import ap_int, ap_uint, ap_fixed, ap_ufixed
-from msdsl.util import TagDict, Namespace
+from itertools import chain
+from numbers import Number
+from msdsl.cpp import CppGen, ptr, deref
 
-class AnalogSignal:
-    def __init__(self, name=None, range_=None, rel_tol=None, abs_tol=None, value=None, array=None, tags=None):
+def listify(x):
+    if isinstance(x, (list, tuple)):
+        return x
+
+    if isinstance(x, str):
+        return [x]
+
+    raise ValueError('Unknown input type: {}'.format(type(x)))
+
+class CoeffPair:
+    def __init__(self, coeff, signal):
+        self.coeff = coeff
+        self.signal = signal
+
+    def __add__(self, other):
+        assert self.signal.name == other.signal.name
+        return CoeffPair(self.coeff + other.coeff, other.signal)
+
+    __radd__ = __add__
+
+    def __sub__(self, other):
+        return (self + (-1.0*other))
+
+    __rsub__ = __sub__
+
+    def __mul__(self, other):
+        assert isinstance(other, Number)
+        return CoeffPair(coeff=other*self.coeff, signal=self.signal)
+
+    __rmul__ = __mul__
+
+    def __truediv__(self, other):
+        assert isinstance(other, Number)
+        return self*(1.0/other)
+
+    __rtruediv__ = __truediv__
+
+    def to_cpp(self):
+        if self.coeff == 0:
+            return None
+
+        if self.coeff == 1:
+            return self.signal.name
+
+        return '({}*{})'.format(self.coeff, self.signal.name)
+
+class AnalogExpr:
+    def __init__(self, signals=None, constant=None):
         # set defaults
-        if (rel_tol is None) and (abs_tol is None):
-            rel_tol = 5e-7
-        if tags is None:
-            tags = []
+        if signals is None:
+            signals = {}
+        if constant is None:
+            constant = 0
 
         # save settings
+        self.signals = signals
+        self.constant = constant
+
+    def to_cpp(self):
+        terms = [x.to_cpp() for x in self.signals.values()]
+        terms = [x for x in terms if x is not None]
+        if self.constant != 0:
+            terms += str(self.constant)
+
+        if len(terms) > 0:
+            return '+'.join(terms)
+        else:
+            return '0'
+
+    @staticmethod
+    def make(x):
+        if isinstance(x, AnalogExpr):
+            return x
+        if isinstance(x, AnalogSignal):
+            return AnalogExpr(signals={x.name: CoeffPair(coeff=1, signal=x)})
+        if isinstance(x, Number):
+            return AnalogExpr(signals={}, constant=x)
+
+        raise ValueError('Cannot make AnalogExpr from {}'.format(type(x)))
+
+    def __add__(self, other):
+        other = AnalogExpr.make(other)
+
+        # determine new signal dictionary
+        new_signals = {}
+        for name, coeff_pair in chain(self.signals.items(), other.signals.items()):
+            if name not in new_signals:
+                new_signals[name]  = coeff_pair
+            else:
+                new_signals[name] += coeff_pair
+
+        # determine new constant
+        new_constant = self.constant+other.constant
+
+        # return new expression
+        return AnalogExpr(signals=new_signals, constant=new_constant)
+
+    __radd__ = __add__
+
+    def __sub__(self, other):
+        other = AnalogExpr.make(other)
+        return (self + (-1.0*other))
+
+    __rsub__ = __sub__
+
+    def __mul__(self, other):
+        other = AnalogExpr.make(other)
+
+        if len(self.signals) > 0:
+            if len(other.signals) > 0:
+                raise ValueError('Nonlinear terms not allowed yet.')
+            else:
+                orig_signals = self.signals.copy()
+
+            mul_by = other.constant
+        else:
+            if len(other.signals) > 0:
+                orig_signals = other.signals.copy()
+            else:
+                orig_signals = {}
+
+            mul_by = self.constant
+
+        new_signals = {name: mul_by*coeff_pair for name, coeff_pair in orig_signals.items()}
+        new_constant = self.constant * other.constant
+
+        return AnalogExpr(signals=new_signals, constant=new_constant)
+
+    __rmul__ = __mul__
+
+    def __truediv__(self, other):
+        other = AnalogExpr.make(other)
+        assert len(other.signals) == 0
+
+        return (self * (1.0/other.constant))
+
+    __rtruediv__ = __truediv__
+
+class AnalogSignal:
+    def __init__(self, name, initial=None, type=None, expr=None):
+        # set defaults
+        if type is None:
+            type = 'float'
+
         self.name = name
-        self.range_ = range_
-        self.rel_tol = rel_tol
-        self.abs_tol = abs_tol
-        self.value = value
-        self.array = array
-        self.tags = tags
+        self.initial = initial
+        self.type = type
+        self.expr = expr
 
-    def to_hls(self):
-        # TODO: allow fixed point
-        return 'float'
+    @property
+    def tmpvar(self):
+        return 'tmp_' + self.name
 
-    def isa(self, tag):
-        return tag in self.tags
+    def __add__(self, other):
+        return (AnalogExpr.make(self) + AnalogExpr.make(other))
 
+    __radd__ = __add__
 
-class AnalogInput(AnalogSignal):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, tags=['analog', 'input'], **kwargs)
+    def __sub__(self, other):
+        return (AnalogExpr.make(self) - AnalogExpr.make(other))
 
+    __rsub__ = __sub__
 
-class AnalogOutput(AnalogSignal):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, tags=['analog', 'output'], **kwargs)
+    def __mul__(self, other):
+        return (AnalogExpr.make(self) * AnalogExpr.make(other))
 
+    __rmul__ = __mul__
 
-class AnalogState(AnalogSignal):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, tags=['analog', 'state'], **kwargs)
+    def __truediv__(self, other):
+        return (AnalogExpr.make(self) / AnalogExpr.make(other))
 
-
-class AnalogInternal(AnalogSignal):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, tags=['analog', 'internal'], **kwargs)
-
-
-class AnalogConstant(AnalogSignal):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, tags=['analog', 'constant'], **kwargs)
-
+    __rtruediv__ = __truediv__
 
 class DigitalSignal:
-    def __init__(self, name=None, signed=None, width=None, value=None, array=None, tags=None):
-        # set defaults
-        if signed is None:
-            signed = False
-        if width is None:
-            width = 1
-        if tags is None:
-            tags = []
-
+    def __init__(self, name, initial=None, type=None, expr=None):
         self.name = name
-        self.signed = signed
-        self.width = width
-        self.value = value
-        self.array = array
-        self.tags = tags
+        self.initial = initial
+        self.type = type
+        self.expr = expr
 
-    def to_hls(self):
-        if self.signed:
-            return ap_int(self.width)
-        else:
-            return ap_uint(self.width)
+class Model:
+    def __init__(self, a_in=None, a_out=None, d_in=None, d_out=None, a_state=None, d_state=None,
+                 name=None):
 
-    def isa(self, tag):
-        return tag in self.tags
+        # set defaults
+        if a_in is None:
+            a_in = []
+        if a_out is None:
+            a_out = []
+        if d_in is None:
+            d_in = []
+        if d_out is None:
+            d_out = []
+        if a_state is None:
+            a_state = {}
+        if d_state is None:
+            d_state = {}
+        if name is None:
+            name = 'model'
 
+        # make lists out of the arguments
+        a_in = listify(a_in)
+        a_out = listify(a_out)
+        d_in = listify(d_in)
+        d_out = listify(d_out)
 
-class DigitalInput(DigitalSignal):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, tags=['digital', 'input'], **kwargs)
+        # save inputs
+        self.a_in = [AnalogSignal(x) for x in a_in]
+        self.d_in = [DigitalSignal(x) for x in d_in]
+        self.a_out = [AnalogSignal(x) for x in a_out]
+        self.d_out = [DigitalSignal(x) for x in d_out]
+        self.a_state = [AnalogSignal(name=k, initial=v) for k,v in a_state.items()]
+        self.d_state = [DigitalSignal(name=k, initial=v) for k,v in d_state.items()]
+        self.name = name
 
+        # add a timestep input
+        self.dt = AnalogSignal('dt')
+        self.a_in.insert(0, self.dt)
 
-class DigitalOutput(DigitalSignal):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, tags=['digital', 'output'], **kwargs)
+        # create name mapping
+        self.mapping = {}
+        for x in chain(self.a_in, self.d_in, self.a_out, self.d_out, self.a_state, self.d_state):
+            self.mapping[x.name] = x
 
+    def __getattr__(self, name):
+        return self.mapping[name]
 
-class DigitalState(DigitalSignal):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, tags=['digital', 'state'], **kwargs)
+    def emit(self, target, cpp='model.cpp', hpp='model.hpp'):
+        # make IO list
+        io = []
+        io += [(x.type, x.name) for x in self.a_in]
+        io += [(ptr(x.type), x.name) for x in self.a_out]
 
+        # write header file
+        gen = CppGen(hpp)
+        include_guard_var = '__' + hpp.upper().replace('.', '_') + '__'
+        gen.start_include_guard(include_guard_var)
+        gen.print()
+        gen.function_prototype('void', self.name, io)
+        gen.print()
+        gen.end_include_guard(include_guard_var)
 
-class DigitalInternal(DigitalSignal):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, tags=['digital', 'internal'], **kwargs)
+        # write main program
+        gen = CppGen(cpp)
 
+        # start function
+        gen.start_function('void', self.name, io=io)
 
-class DigitalConstant(DigitalSignal):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, tags=['digital', 'constant'], **kwargs)
+        # initialize state variables
+        gen.comment('Initialize state variables')
+        for x in self.a_state:
+            gen.static(x.type, x.name, x.initial)
+        gen.print()
 
+        # compute new state variables values in parallel
+        gen.comment('Compute new state variables values in parallel')
+        for x in self.a_state:
+            gen.assign(lhs='{} {}'.format(x.type, x.tmpvar),
+                       rhs='{}+({}*({}))'.format(x.name, self.dt.name, AnalogExpr.make(x.expr).to_cpp()))
+        gen.print()
 
-class AssignmentGroup:
-    def __init__(self, group=None):
-        if group is None:
-            group = []
-        self.group = group
+        # assign new state values in parallel
+        gen.comment('Assign new state values in parallel')
+        for x in self.a_state:
+            gen.assign(lhs=x.name, rhs=x.tmpvar)
+        gen.print()
 
+        # assign output values in parallel
+        gen.comment('Assign output values in parallel')
+        for x in self.a_out:
+            gen.assign(lhs=deref(x.name), rhs=AnalogExpr.make(x.expr).to_cpp())
 
-class ModelAssignment:
-    def __init__(self, lhs, rhs):
-        self.lhs = lhs
-        self.rhs = rhs
-
-
-class MixedSignalModel:
-    def __init__(self, analog_signals=None, digital_signals=None, assignment_groups=None):
-        # initialize model
-        self.tag_dict = TagDict()
-        self.assignment_groups = []
-        self.namespace = Namespace()
-
-        # apply inputs when relevant
-        if analog_signals is not None:
-            for analog_signal in analog_signals:
-                self.add(analog_signal)
-
-        if digital_signals is not None:
-            for digital_signal in digital_signals:
-                self.add(digital_signal)
-
-        if assignment_groups is not None:
-            for assignment_group in assignment_groups:
-                self.assign(*[(assignment.lhs, assignment.rhs) for assignment in assignment_group])
-
-    # get specific I/O by tags
-
-    @property
-    def analog_signals(self):
-        return self.tag_dict.get_by_tag('analog')
-
-    @property
-    def digital_signals(self):
-        return self.tag_dict.get_by_tag('digital')
-
-    @property
-    def analog_inputs(self):
-        return self.tag_dict.get_by_tag('analog', 'input')
-
-    @property
-    def analog_outputs(self):
-        return self.tag_dict.get_by_tag('analog', 'output')
-
-    @property
-    def analog_states(self):
-        return self.tag_dict.get_by_tag('analog', 'state')
-
-    @property
-    def analog_constants(self):
-        return self.tag_dict.get_by_tag('analog', 'constant')
-
-    @property
-    def ios(self):
-        return self.tag_dict.get_by_tag(('input', 'output'))
-
-    @property
-    def constants(self):
-        return self.tag_dict.get_by_tag('constant')
-
-    @property
-    def states(self):
-        return self.tag_dict.get_by_tag('state')
-
-    # get specific I/O by name
-
-    def has(self, name):
-        return self.tag_dict.has(name)
-
-    def get_by_name(self, name):
-        return self.tag_dict.get_by_name(name)
-
-    def get_by_tag(self, name, *tags):
-        return self.tag_dict.get_by_tag(name, *tags)
-
-    def isa(self, name, *tags):
-        return self.tag_dict.isa(name, *tags)
-
-    # model building
-
-    def add(self, signal):
-        self.tag_dict.add(signal.name, signal, *signal.tags)
-
-    def assign(self, *assignments):
-        assignment_group = [ModelAssignment(lhs=lhs, rhs=rhs) for lhs, rhs in assignments]
-        self.assignment_groups.append(assignment_group)
+        # end function
+        gen.end_function()

@@ -1,5 +1,4 @@
-circuit.cpp
-circuit.hpp
-circuit.json
+model.cpp
+model.hpp
 out.vcd
 stim

@@ -1,9 +1,6 @@
 #ifndef __VCD_HPP__
 #define __VCD_HPP__
 
-#include "ap_int.h"
-#include "ap_fixed.h"
-
 #include <iostream>
 #include <fstream>
 #include <map>

@@ -1,39 +1,27 @@
 # Build flow for generating HLS code from a circuit model
 
 # set Vivado location if not already defined
-VIVADO_HOME ?= /Volumes/C/Xilinx/Vivado/2018.2/
+# VIVADO_HOME ?= /Volumes/C/Xilinx/Vivado/2018.2/
 
-# define circuit location
-CIRCUIT_FILE = circuit.py
+# define model location
+MODEL_FILE = model.py
 
 # tool binaries
 CC = g++
 PYTHON = python3
-GTKWAVE = gtkwave
 
-.PHONY: all analyze generate generate_fixed generate_float compile run clean
+.PHONY: all generate compile run clean
 
-all: float
-fixed: analyze generate_fixed compile run
-float: analyze generate_float compile run
+all: generate compile run
 
-analyze: 
-	$(PYTHON) $(CIRCUIT_FILE) > circuit.json
-
-generate_fixed: 
-	$(PYTHON) ../../tools/generate.py 
-
-generate_float: 
-	$(PYTHON) ../../tools/generate.py --use_float
+generate:
+	$(PYTHON) $(MODEL_FILE)
 
 compile: 
-	$(CC) -I$(VIVADO_HOME)/include -I../../msdsl ../../msdsl/vcd.cpp stim.cpp circuit.cpp -o stim
+	$(CC) -I../../msdsl ../../msdsl/vcd.cpp stim.cpp model.cpp -o stim
 
 run: 
 	./stim
 
-view: 
-	$(GTKWAVE) out.vcd -a circuit.gtkw &
-
 clean: 
-	rm -f circuit.json circuit.cpp circuit.hpp stim out.vcd
+	rm -f model.cpp model.hpp stim out.vcd

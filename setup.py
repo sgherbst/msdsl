@@ -12,7 +12,6 @@ setup(
         'scipy',
         'numpy',
         'sympy',
-        'interval',
         'marshmallow'
     ],
     include_package_data=True,

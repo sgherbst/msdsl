@@ -1,19 +1,21 @@
 from itertools import count, combinations
-from interval import interval
 from collections import Iterable
 from sympy import symbols
 
-def listify(x):
-    if not isinstance(x, Iterable):
-        return list(x)
-    else:
+def listify(x, type_):
+    if isinstance(x, (list, tuple)):
         return x
 
-def to_interval(obj):
-    if isinstance(obj, interval):
-        return obj
-    else:
-        return interval[obj[0], obj[1]]
+    if isinstance(x, type_):
+        return [x]
+
+    raise ValueError('Unknown input type: {}'.format(type(x)))
+
+# def to_interval(obj):
+#     if isinstance(obj, interval):
+#         return obj
+#     else:
+#         return interval[obj[0], obj[1]]
 
 def all_combos(vals):
     for k in range(len(vals) + 1):

@@ -8,7 +8,7 @@ MODEL_FILE = model.py
 
 # tool binaries
 CC = g++
-PYTHON = python3
+PYTHON = python3.6
 
 .PHONY: all generate compile run clean
 

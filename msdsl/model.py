@@ -1,15 +1,7 @@
 from itertools import chain
 from numbers import Number
 from msdsl.cpp import CppGen, ptr, deref
-
-def listify(x):
-    if isinstance(x, (list, tuple)):
-        return x
-
-    if isinstance(x, str):
-        return [x]
-
-    raise ValueError('Unknown input type: {}'.format(type(x)))
+from msdsl.util import listify
 
 class CoeffPair:
     def __init__(self, coeff, signal):
@@ -203,10 +195,10 @@ class Model:
             name = 'model'
 
         # make lists out of the arguments
-        a_in = listify(a_in)
-        a_out = listify(a_out)
-        d_in = listify(d_in)
-        d_out = listify(d_out)
+        a_in = listify(a_in, str)
+        a_out = listify(a_out, str)
+        d_in = listify(d_in, str)
+        d_out = listify(d_out, str)
 
         # save inputs
         self.a_in = [AnalogSignal(x) for x in a_in]

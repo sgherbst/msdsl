@@ -133,7 +133,7 @@ class AnalogExpr:
     __rtruediv__ = __truediv__
 
 class AnalogSignal:
-    def __init__(self, name, initial=None, type=None, expr=None):
+    def __init__(self, name, initial=None, type=None, expr={}):
         # set defaults
         if type is None:
             type = 'float'
@@ -174,9 +174,25 @@ class DigitalSignal:
         self.type = type
         self.expr = expr
 
+# TODO I think we can delete this
+# A list of operating modes and rules for choosing which mode every cycle
+class OperatingModes:
+    def __init__(self, name, modes):
+        self.name = name
+        self.components = {}
+
+# Nodes are boolean expressions or switch-case things, leaves are operating modes or decision trees
+class DecisionTree:
+    def __init__(self, boolean=None, children=None):
+        if boolean != None:
+            if len(children) != 2:
+                raise ValueError('DecisionTree with boolean expression must have 2 children')
+        else:
+            raise NotImplementedError('Decision tree only supports boolean decisions for now')
+
 class Model:
     def __init__(self, a_in=None, a_out=None, d_in=None, d_out=None, a_state=None, d_state=None,
-                 name=None):
+                 modes=None, name=None):
 
         # set defaults
         if a_in is None:
@@ -191,6 +207,8 @@ class Model:
             a_state = {}
         if d_state is None:
             d_state = {}
+        if modes is None:
+            modes = {}
         if name is None:
             name = 'model'
 
@@ -207,6 +225,8 @@ class Model:
         self.d_out = [DigitalSignal(x) for x in d_out]
         self.a_state = [AnalogSignal(name=k, initial=v) for k,v in a_state.items()]
         self.d_state = [DigitalSignal(name=k, initial=v) for k,v in d_state.items()]
+        # TODO copy modes
+        self.modes = {}
         self.name = name
 
         # add a timestep input
@@ -215,11 +235,60 @@ class Model:
 
         # create name mapping
         self.mapping = {}
-        for x in chain(self.a_in, self.d_in, self.a_out, self.d_out, self.a_state, self.d_state):
+        for x in chain(self.a_in, self.d_in, self.a_out, self.d_out, self.a_state, self.d_state, self.modes):
             self.mapping[x.name] = x
 
     def __getattr__(self, name):
         return self.mapping[name]
+
+    # shorthand for adding a operating mode depending on digital input(s)
+    def digital_dependence(self, digital, name=None):
+        inputs = listify(digital, str)
+        print(inputs)
+        digital_names = [d.name for d in self.d_in]
+        for d in inputs:
+            if d not in digital_names:
+                raise ValueError('digital_dependence signal "%s" is not a digital input'%d)
+
+        if name is None:
+            name = ','.join(inputs)
+        num_bits = len(inputs)
+        codes = []
+        def aux(depth, code):
+            if depth == num_bits:
+                codes.append(code)
+                return code
+            sig = inputs[depth]
+            f = aux(depth+1, code+'0')
+            t = aux(depth+1, code+'1')
+            return DecisionTree(boolean=sig, children=[f,t])
+        tree = aux(0, name+':')
+        codes = tuple(codes) # we don't want to give the client somethign mutable
+        self.modes[name] = (tree, codes)
+        print(codes)
+        print(tree)
+        return codes
+
+
+
+        modes = ['']
+        for component in inputs:
+            if component in self.d_in:
+                TODO
+                modes = [x+'0' for x in modes]+[x+'1' for x in modes] 
+            else:
+                print('ignoring digital dependence "%s" because it is not a digital input'%component)
+        return None if modes == [''] else  modes
+
+    # so that the user does not need to worry about ordering of modes when defining expressions
+    def clean_modes():
+        for state in self.a_state:
+            if type(state) == AnalogSignal:
+                continue
+            expr_clean = {}
+            for k in state:
+                expr_clean[sorted(k)] = state.expr[k]
+            state.expr = expr_clean
 
     def emit(self, target, cpp='model.cpp', hpp='model.hpp'):
         # make IO list

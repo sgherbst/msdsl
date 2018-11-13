@@ -269,17 +269,6 @@ class Model:
         print(tree)
         return codes
 
-
-
-        modes = ['']
-        for component in inputs:
-            if component in self.d_in:
-                TODO
-                modes = [x+'0' for x in modes]+[x+'1' for x in modes] 
-            else:
-                print('ignoring digital dependence "%s" because it is not a digital input'%component)
-        return None if modes == [''] else  modes
-
     # so that the user does not need to worry about ordering of modes when defining expressions
     def clean_modes():
         for state in self.a_state:

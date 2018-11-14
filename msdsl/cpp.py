@@ -67,6 +67,39 @@ class CppGen:
     def assign(self, lhs, rhs):
         self.print(lhs + ' = ' + rhs + ';')
 
+    def start_switch_case(self, variable):
+        self.print('switch(' + variable + ') {')
+
+    def start_case(self, case):
+        self.print('case ' + case + ':')
+        self.indent()
+
+    def end_case(self):
+        self.print('break;')
+        self.dedent()
+
+    def end_switch_case(self):
+        self.print('}')
+
+    # TODO: can probably break case into lhs, operator, rhs (same for else if)
+    def start_if(self, case):
+        self.print('if (' + case + ') {')
+        self.indent()
+
+    def add_else_if(self, case):
+        self.dedent()
+        self.print('} else if (' + case + ') {')
+        self.indent()
+        
+    def add_else(self):
+        self.dedent()
+        self.print('} else {')
+        self.indent()
+
+    def end_if(self):
+        self.dedent()
+        self.print('}')
+
     def start_function(self, func_type, func_name, io):
         arg_list = ', '.join(arg_type + ' ' + arg_name for arg_type, arg_name in io)
         self.print(func_type + ' ' + func_name + '(' + arg_list + ') {')

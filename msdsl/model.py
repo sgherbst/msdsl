@@ -187,6 +187,8 @@ class DecisionTree:
         if boolean != None:
             if len(children) != 2:
                 raise ValueError('DecisionTree with boolean expression must have 2 children')
+            self.boolean = boolean
+            self.children = children
         else:
             raise NotImplementedError('Decision tree only supports boolean decisions for now')
 
@@ -270,7 +272,7 @@ class Model:
         return codes
 
     # so that the user does not need to worry about ordering of modes when defining expressions
-    def clean_modes():
+    def clean_modes(self):
         for state in self.a_state:
             if type(state) == AnalogSignal:
                 continue
@@ -280,6 +282,9 @@ class Model:
             state.expr = expr_clean
 
     def emit(self, target, cpp='model.cpp', hpp='model.hpp'):
+        # alphabetize lists of modes in keys to statevar.expr
+        self.clean_modes()
+
         # make IO list
         io = []
         io += [(x.type, x.name) for x in self.a_in]
@@ -306,11 +311,72 @@ class Model:
             gen.static(x.type, x.name, x.initial)
         gen.print()
 
+        # decide on operating modes
+        gen.comment('Decide on operating modes')
+
+        # TODO it would be nice if this counter were an enum with the same names as the codes
+        code_map = {name:{} for name in self.modes}
+        operating_state_var = 'operating_modes'
+        # TODO: don't use gen.print for this
+        gen.print('int {}[{}];'.format(operating_state_var, len(self.modes)))
+        mode_names = sorted(list(self.modes)) # the order of these names decides their order in operating_state_var array
+        for i, mode_name in enumerate(mode_names):
+            t, code_names = self.modes[mode_name]
+            code_counter = 0
+            def traverse_tree(t):
+                if type(t) == DecisionTree:
+                    nonlocal code_counter
+                    # only supports boolen for now
+                    print('NAME IS ', t.boolean)
+                    case = t.boolean
+                    gen.start_if(case)
+                    traverse_tree(t.children[0])
+                    gen.add_else()
+                    traverse_tree(t.children[1])
+                    gen.end_if()
+                else:
+                    # we've reached a leaf, t is actually a string, a code given to the user to tag a coresponding expression
+                    gen.assign(lhs = '{}[{}]'.format(operating_state_var, i),
+                               rhs = '{}'.format(code_counter))
+                    code_map[mode_name][code_counter] = t
+                    code_counter += 1
+            traverse_tree(t)
+        gen.print()
+
         # compute new state variables values in parallel
         gen.comment('Compute new state variables values in parallel')
-        for x in self.a_state:
-            gen.assign(lhs='{} {}'.format(x.type, x.tmpvar),
-                       rhs='{}+({}*({}))'.format(x.name, self.dt.name, AnalogExpr.make(x.expr).to_cpp()))
+
+        for state_var in self.a_state:
+            gen.print('{} {};'.format(state_var.type, state_var.tmpvar))
+
+        # utility function for recursively creating tree of switch cases on various modes
+        def switch_case_on_mode(unused_modes, used_mode_cases):
+            if len(unused_modes) == 0:
+                # emit expressions for each state var under modes in used_mode_cases
+                for state_var in self.a_state:
+                    if type(state_var.expr == dict):
+                        print(state_var.expr)
+                        # this key expression is ugly, but it has to do with the way the client specifies codes
+                        key = tuple(used_mode_cases) if len(used_mode_cases) > 1 else used_mode_cases[0]
+                        expr = state_var.expr[key]
+                    else:
+                        expr = state_var.expr
+                gen.assign(lhs='{}'.format(x.tmpvar),
+                           rhs='{}+({}*({}))'.format(x.name, self.dt.name, AnalogExpr.make(expr).to_cpp()))
+
+            else:
+                # continue making tree of switch cases
+                mode = unused_modes[0]
+                new_unused_modes = unused_modes[1:]
+                mode_num = mode_names.index(mode)
+                gen.start_switch_case('{}[{}]'.format(operating_state_var, mode_num))
+                for code in sorted(list(code_map[mode])):
+                    gen.start_case(str(code))
+                    switch_case_on_mode(new_unused_modes, used_mode_cases+[code_map[mode][code]])
+                    gen.end_case()
+                gen.end_switch_case()
+
+        switch_case_on_mode(mode_names, [])
         gen.print()
 
         # assign new state values in parallel

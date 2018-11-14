@@ -169,6 +169,10 @@ class AnalogSignal:
 
 class DigitalSignal:
     def __init__(self, name, initial=None, type=None, expr=None):
+        # set defaults
+        if type is None:
+            type = 'int'
+
         self.name = name
         self.initial = initial
         self.type = type
@@ -267,8 +271,6 @@ class Model:
         tree = aux(0, name+':')
         codes = tuple(codes) # we don't want to give the client somethign mutable
         self.modes[name] = (tree, codes)
-        print(codes)
-        print(tree)
         return codes
 
     # so that the user does not need to worry about ordering of modes when defining expressions
@@ -282,13 +284,12 @@ class Model:
             state.expr = expr_clean
 
     def emit(self, target, cpp='model.cpp', hpp='model.hpp'):
-        # alphabetize lists of modes in keys to statevar.expr
-        self.clean_modes()
-
         # make IO list
         io = []
         io += [(x.type, x.name) for x in self.a_in]
+        io += [(x.type, x.name) for x in self.d_in]
         io += [(ptr(x.type), x.name) for x in self.a_out]
+        print(io)
 
         # write header file
         gen = CppGen(hpp)
@@ -313,11 +314,12 @@ class Model:
 
         # decide on operating modes
         gen.comment('Decide on operating modes')
-
+        # alphabetize lists of modes in keys to statevar.expr
+        self.clean_modes()
         # TODO it would be nice if this counter were an enum with the same names as the codes
         code_map = {name:{} for name in self.modes}
         operating_state_var = 'operating_modes'
-        # TODO: don't use gen.print for this
+        # TODO: don't use gen.print for this, maybe make a gen.declare?
         gen.print('int {}[{}];'.format(operating_state_var, len(self.modes)))
         mode_names = sorted(list(self.modes)) # the order of these names decides their order in operating_state_var array
         for i, mode_name in enumerate(mode_names):
@@ -354,15 +356,14 @@ class Model:
             if len(unused_modes) == 0:
                 # emit expressions for each state var under modes in used_mode_cases
                 for state_var in self.a_state:
-                    if type(state_var.expr == dict):
-                        print(state_var.expr)
+                    if type(state_var.expr) == dict:
                         # this key expression is ugly, but it has to do with the way the client specifies codes
                         key = tuple(used_mode_cases) if len(used_mode_cases) > 1 else used_mode_cases[0]
                         expr = state_var.expr[key]
                     else:
                         expr = state_var.expr
-                gen.assign(lhs='{}'.format(x.tmpvar),
-                           rhs='{}+({}*({}))'.format(x.name, self.dt.name, AnalogExpr.make(expr).to_cpp()))
+                    gen.assign(lhs='{}'.format(state_var.tmpvar),
+                               rhs='{}+({}*({}))'.format(state_var.name, self.dt.name, AnalogExpr.make(expr).to_cpp()))
 
             else:
                 # continue making tree of switch cases

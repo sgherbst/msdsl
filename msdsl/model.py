@@ -250,7 +250,6 @@ class Model:
     # shorthand for adding a operating mode depending on digital input(s)
     def digital_dependence(self, digital, name=None):
         inputs = listify(digital, str)
-        print(inputs)
         digital_names = [d.name for d in self.d_in]
         for d in inputs:
             if d not in digital_names:
@@ -289,7 +288,6 @@ class Model:
         io += [(x.type, x.name) for x in self.a_in]
         io += [(x.type, x.name) for x in self.d_in]
         io += [(ptr(x.type), x.name) for x in self.a_out]
-        print(io)
 
         # write header file
         gen = CppGen(hpp)
@@ -329,7 +327,6 @@ class Model:
                 if type(t) == DecisionTree:
                     nonlocal code_counter
                     # only supports boolen for now
-                    print('NAME IS ', t.boolean)
                     case = t.boolean
                     gen.start_if(case)
                     traverse_tree(t.children[0])

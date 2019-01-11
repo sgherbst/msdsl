@@ -16,6 +16,8 @@ def main():
     parser.add_argument('-o', '--output', type=str, default=None)
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('--float', action='store_true')
+    parser.add_argument('--dt', type=float, default=2)
+    parser.add_argument('--tstop', type=float, default=10)
 
     args = parser.parse_args()
 
@@ -36,7 +38,7 @@ def main():
 
     # create models
     gen = os.path.join(args.input, 'gen.py')
-    call_python([gen, '-o', args.output])
+    call_python([gen, '-o', args.output, '--dt', str(args.dt), '--tstop', str(args.tstop)])
 
     # change directory to output
     os.chdir(args.output)
@@ -55,9 +57,18 @@ def main():
     svreal_include_dir = os.path.join(SVREAL_INSTALL_PATH, 'include')
     svreal_src_dir = os.path.join(SVREAL_INSTALL_PATH, 'src')
 
+    # compute definitions
+    defines = []
+
+    if args.float:
+        defines.append('FLOAT_REAL')
+    if args.debug:
+        defines.append('DEBUG_REAL')
+
     xvlog(src_files=[os.path.join(args.output, 'test.sv')],
           lib_dirs=[svreal_src_dir, model_lib_dir],
-          inc_dirs=[svreal_include_dir])
+          inc_dirs=[svreal_include_dir],
+          defines=defines)
 
     ###############
     # elaborate

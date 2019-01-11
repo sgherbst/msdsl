@@ -5,10 +5,6 @@
 
 `timescale 1ns/1ps
 
-`include "real.sv"
-
-`default_nettype none
-
 module tb(
     input wire logic clk,
     input wire logic rst
@@ -18,5 +14,3 @@ module tb(
         $finish;
     end
 endmodule
-
-`default_nettype wire

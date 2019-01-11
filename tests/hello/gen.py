@@ -5,6 +5,8 @@ def main():
     parser = ArgumentParser()
 
     parser.add_argument('-o', '--output', type=str)
+    parser.add_argument('--dt', type=float)
+    parser.add_argument('--tstop', type=float)
 
     args = parser.parse_args()
 

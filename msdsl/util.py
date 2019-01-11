@@ -1,57 +1,23 @@
-from itertools import count, combinations
-from interval import interval
-from collections import Iterable
-from sympy import symbols
+import subprocess
+import sys
 
-def listify(x):
-    if not isinstance(x, Iterable):
-        return list(x)
-    else:
-        return x
+from msdsl.files import get_full_path
 
-def to_interval(obj):
-    if isinstance(obj, interval):
-        return obj
-    else:
-        return interval[obj[0], obj[1]]
+def call(cmd):
+    ret = subprocess.call(cmd, stdout=sys.stdout, stderr=sys.stdout)
 
-def all_combos(vals):
-    for k in range(len(vals) + 1):
-        for combo in combinations(vals, k):
-            yield(set(combo))
+    if ret != 0:
+        raise RuntimeError('Command exited with non-zero code.')
 
-class Namespace:
-    def __init__(self):
-        self.prefixes = {}
-        self.names = set()
+def call_python(cmd):
+    # get path to python executable
+    python = sys.executable
+    if python is None:
+        raise ValueError('Python path empty.')
+    python = get_full_path(python)
 
-    def make(self, name=None, prefix=None, tries=None) :
-        # set defaults
-        if tries is None:
-            tries = 100
+    # prepend python executable to command
+    cmd = [python] + cmd
 
-        if name is not None:
-            assert name not in self.names, 'Name already defined: ' + name
-        else:
-            assert prefix is not None, "Must provide prefix if name isn't provided."
-
-            if prefix not in self.prefixes:
-                self.prefixes[prefix] = count()
-
-            for _ in range(tries):
-                name = prefix + str(next(self.prefixes[prefix]))
-                if name not in self.names:
-                    break
-            else:
-                raise Exception('Could not define name with prefix: ' + prefix)
-
-
-        self.names.add(name)
-
-        return name
-
-
-class SymbolNamespace(Namespace):
-    def make(self, name=None, prefix=None, tries=None):
-        name = super().make(name=name, prefix=prefix, tries=tries)
-        return symbols(name)
+    # call python
+    call(cmd)

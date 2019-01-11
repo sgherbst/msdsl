@@ -10,10 +10,7 @@ setup(
     packages=['msdsl'],
     install_requires=[
         'scipy',
-        'numpy',
-        'sympy',
-        'interval',
-        'marshmallow'
+        'numpy'
     ],
     include_package_data=True,
     zip_safe=False,

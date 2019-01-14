@@ -22,10 +22,26 @@ def call_python(cmd):
     # call python
     call(cmd)
 
-##############################################
-# chunks function from https://stackoverflow.com/questions/312443/how-do-you-split-a-list-into-evenly-sized-chunks
-def chunks(l, n):
-    """Yield successive n-sized chunks from l."""
-    for i in range(0, len(l), n):
-        yield l[i:i + n]
-##############################################
+def adder_tree(terms, zero_func, add_func):
+    if len(terms) == 0:
+        return zero_func()
+    elif len(terms) == 1:
+        return terms[0]
+    else:
+        a = adder_tree(terms[:len(terms)//2], zero_func=zero_func, add_func=add_func)
+        b = adder_tree(terms[len(terms)//2:], zero_func=zero_func, add_func=add_func)
+        return add_func(a, b)
+
+def main():
+    zero_func = lambda: 0
+    add_func = lambda a, b: a+b
+
+    print(adder_tree([], zero_func=zero_func, add_func=add_func))
+    print(adder_tree([1], zero_func=zero_func, add_func=add_func))
+    print(adder_tree([1, 2], zero_func=zero_func, add_func=add_func))
+    print(adder_tree([1, 2, 3], zero_func=zero_func, add_func=add_func))
+    print(adder_tree([1, 2, 3, 4], zero_func=zero_func, add_func=add_func))
+    print(adder_tree([1, 2, 3, 4, 5], zero_func=zero_func, add_func=add_func))
+
+if __name__ == '__main__':
+    main()

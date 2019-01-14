@@ -6,7 +6,7 @@
 
 1. Python 3 must be installed.  (These instructions were tested with Python 3.6.5)
 2. Xilinx Vivado must be installed.  (These instructions were tested with Xilinx Vivado 2018.2)
-3. **svreal** must be installed (Clone from [https://github.com/sgherbst/svreal.git])
+3. **svreal** must be installed (Clone it from [https://github.com/sgherbst/svreal.git](https://github.com/sgherbst/svreal.git))
 
 # Path Setup
 

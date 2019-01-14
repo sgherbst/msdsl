@@ -1,10 +1,29 @@
 # Introduction
 
-**msdsl** is a Python3 package for generating real number models (RNMs) from analog circuits.  
+**msdsl** is a Python3 package for generating synthesizable real number models (RNMs) from analog circuits.  
+
+# Prerequisites
+
+1. Python 3 must be installed.  (These instructions were tested with Python 3.6.5)
+2. Xilinx Vivado must be installed.  (These instructions were tested with Xilinx Vivado 2018.2)
+3. **svreal** must be installed (Clone from [https://github.com/sgherbst/svreal.git])
+
+# Path Setup
+
+Two environment variables must be defined: SVREAL_INSTALL_PATH and VIVADO_INSTALL_PATH.  For instructions on defining VIVADO_INSTALL_PATH, see the readme for **svreal**.
+
+To add the SVREAL_INSTALL_PATH environment variable in Windows:
+
+1. Click on the lower-left search bar ("Type here to search"), then type "environment".
+2. Click on the option "Edit the system environment variables" that appears.  
+3. Click "Environment Variables".
+4. In the window that appears, click "New..." under "User variables".
+5. In the window that appears, enter "SVREAL_INSTALL_PATH" as the variable name.  For the variable value, enter the path to the top level directory of the cloned **svreal** repository.
+6. Click "OK" to close all three of the open windows.
 
 # Installation
 
-Cloning the repository, navigate to the top-level directory, and **pip** install the package.
+Clone the **mdsl** repository, navigate to the top-level directory, and use **pip** to install the package.
 
 ```shell
 > git clone https://github.com/sgherbst/msdsl/
@@ -12,61 +31,36 @@ Cloning the repository, navigate to the top-level directory, and **pip** install
 > pip install -e .
 ```
 
-# Example
+# Examples
 
-A variety of example circuits are maintained in the **examples/** directory.  In each case, running the example code will produce a real-number model covering the various operating states.
+A variety of examples examples are maintained in the **tests/** directory.  All of the tests are run using the script **tests/test.py**.
+
+## tests/hello
+
+This example is just to test whether the simulation environment is set up properly.
 
 ```shell
-> cd msdsl/examples
-> python buck.py
+> cd msdsl/tests
+> python tests.py -i hello
+Hello, world!
+```
 
-*********************************** Case 1 ************************************
-Switch States
-M0: off
-D0: off
+## tests/filter
 
-State Variables
-i_L0: 0
-dv_dt_C0: -100000.0*output
+This example is a simple first-order low-pass filter.  As shown in line 22 of **tests/filter/gen.py**, the filter dynamics are specified in a single line in the form of a differential equation.  The output printed by this example is the filter's response to a constant input after its output is initialized to zero.
 
-Output Variables
-i_D0: 0
-v_D0: -1.0*v_C0
-*******************************************************************************
-
-*********************************** Case 2 ************************************
-Switch States
-M0: on
-D0: off
-
-State Variables
-di_dt_L0: 100000.0*input - 100000.0*v_C0
-dv_dt_C0: 100000.0*i_L0 - 100000.0*output
-
-Output Variables
-i_D0: 0
-v_D0: -1.0*input
-*******************************************************************************
-
-*********************************** Case 3 ************************************
-Switch States
-M0: off
-D0: on
-
-State Variables
-di_dt_L0: -100000.0*v_C0
-dv_dt_C0: 100000.0*i_L0 - 100000.0*output
-
-Output Variables
-i_D0: 1.0*i_L0
-v_D0: 0
-*******************************************************************************
-
-*********************************** Case 4 ************************************
-Switch States
-M0: on
-D0: on
-
-No solutions found.
-*******************************************************************************
+```shell
+> cd msdsl/tests
+> python tests.py -i filter
+v_out = 0.000000
+v_out = 0.000000
+v_out = 0.333332
+v_out = 0.555552
+v_out = 0.703699
+v_out = 0.802463
+v_out = 0.868305
+v_out = 0.912200
+v_out = 0.941463
+v_out = 0.960972
+v_out = 0.973977
 ```

@@ -3,8 +3,9 @@ from argparse import ArgumentParser
 import shutil
 import os
 import os.path
+from math import ceil
 
-from msdsl.files import get_file, get_full_path, get_dir
+from msdsl.files import get_full_path, get_dir, get_file
 from msdsl.util import call_python
 from msdsl.vivado import xvlog, xelab, xsim
 
@@ -12,12 +13,12 @@ def main():
     # parse command line arguments
     parser = ArgumentParser()
 
-    parser.add_argument('-i', '--input', type=str, default=get_file('tests', 'hello'))
+    parser.add_argument('-i', '--input', type=str, default=get_dir('tests', 'hello'))
     parser.add_argument('-o', '--output', type=str, default=None)
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('--float', action='store_true')
-    parser.add_argument('--dt', type=float, default=2)
-    parser.add_argument('--tstop', type=float, default=10)
+    parser.add_argument('--dt', type=float, default=1e-6)
+    parser.add_argument('--tstop', type=float, default=10e-6)
 
     args = parser.parse_args()
 
@@ -29,16 +30,16 @@ def main():
         args.output = get_dir('build')
 
     # make the model output directory
-    model_lib_dir = os.path.join(args.output, 'lib')
-    os.makedirs(model_lib_dir, exist_ok=True)
+    model_dir = os.path.join(args.output, 'models')
+    os.makedirs(model_dir, exist_ok=True)
 
     # copy files
-    shutil.copyfile(os.path.join(args.input, 'tb.sv'), os.path.join(model_lib_dir, 'tb.sv'))
+    shutil.copyfile(os.path.join(args.input, 'tb.sv'), os.path.join(args.output, 'tb.sv'))
     shutil.copyfile(get_file('tests', 'test.sv'), os.path.join(args.output, 'test.sv'))
 
     # create models
     gen = os.path.join(args.input, 'gen.py')
-    call_python([gen, '-o', args.output, '--dt', str(args.dt), '--tstop', str(args.tstop)])
+    call_python([gen, '-o', model_dir, '--dt', str(args.dt)])
 
     # change directory to output
     os.chdir(args.output)
@@ -65,10 +66,13 @@ def main():
     if args.debug:
         defines.append('DEBUG_REAL')
 
-    xvlog(src_files=[os.path.join(args.output, 'test.sv')],
-          lib_dirs=[svreal_src_dir, model_lib_dir],
+    # run the compiler
+    xvlog(src_files=[os.path.join(args.output, 'test.sv'),
+                     os.path.join(args.output, 'tb.sv')],
+          lib_dirs=[svreal_src_dir, model_dir],
           inc_dirs=[svreal_include_dir],
-          defines=defines)
+          defines=defines
+    )
 
     ###############
     # elaborate
@@ -80,7 +84,8 @@ def main():
     # elaborate
     ###############
 
-    xsim()
+    xsim(time=int(ceil(args.tstop/args.dt))*2,
+         unit='ns')
 
 if __name__ == "__main__":
     main()

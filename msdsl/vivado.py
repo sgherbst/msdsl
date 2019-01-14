@@ -55,13 +55,14 @@ def xelab(top_module_name, snapshot='snapshot'):
 
     call(cmd)
 
-def xsim(snapshot='snapshot', gui=False):
+def xsim(time=20, unit='ns', snapshot='snapshot', tcl_file_name='xsim.tcl'):
+    with open(tcl_file_name, 'w') as f:
+        f.write('run {} {}\n'.format(time, unit))
+        f.write('exit\n')
+
     cmd = [find_vivado_command('xsim'),
            snapshot,
-           '-R']
-
-    if gui:
-        cmd.append('-gui')
+           '-t', tcl_file_name]
 
     call(cmd)
 

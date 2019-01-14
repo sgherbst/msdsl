@@ -11,6 +11,5 @@ module tb(
 );
     initial begin
         $display("Hello, world!");
-        $finish;
     end
 endmodule

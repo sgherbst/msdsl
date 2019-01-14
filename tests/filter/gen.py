@@ -18,8 +18,8 @@ def main():
     args = parser.parse_args()
 
     # create the model
-    model = AnalogModel(inputs=['in'], outputs=['out'], dt=args.dt)
-    model.signals['out'] = {'in': args.dt/args.tau, 'out':  1-args.dt/args.tau}
+    model = AnalogModel(name='filter', inputs=['v_in'], outputs=['v_out'], dt=args.dt)
+    model.derivs['v_out'] = (model.v_in - model.v_out) / args.tau
 
     # determine the output filename
     filename = os.path.join(args.output, 'filter.sv')

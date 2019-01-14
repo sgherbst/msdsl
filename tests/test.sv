@@ -5,15 +5,15 @@ module test;
     logic rst = 1'b1;
     
     initial begin
-        #2 rst = 1'b0;
+        #1 rst = 1'b0;
     end
 
     // clock generator
     logic clk=1'b0;
     
     always begin
-        #1 clk = 1'b1;
-        #1 clk = 1'b0;
+        #0.5 clk = 1'b1;
+        #0.5 clk = 1'b0;
     end
 
     // instantiate testbench

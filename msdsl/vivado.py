@@ -55,11 +55,7 @@ def xelab(top_module_name, snapshot='snapshot'):
 
     call(cmd)
 
-def xsim(time=20, unit='ns', snapshot='snapshot', tcl_file_name='xsim.tcl'):
-    with open(tcl_file_name, 'w') as f:
-        f.write('run {} {}\n'.format(time, unit))
-        f.write('exit\n')
-
+def xsim(snapshot='snapshot', tcl_file_name='sim.tcl'):
     cmd = [find_vivado_command('xsim'),
            snapshot,
            '-t', tcl_file_name]

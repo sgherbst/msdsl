@@ -3,14 +3,7 @@ from msdsl.generator import CodeGenerator
 
 class VerilogGenerator(CodeGenerator):
     def __init__(self, filename, tab_string='    ', line_ending='\n'):
-        self.filename = filename
-        self.tab_string = tab_string
-        self.line_ending = line_ending
-
-        # initialize variables
-        self.tab_level = 0
-        self.tmp_counter = 0
-        self.variable_names = set()
+        super().__init__(filename=filename, tab_string=tab_string, line_ending=line_ending)
 
         # initialize model file
         self.init_file()
@@ -21,29 +14,35 @@ class VerilogGenerator(CodeGenerator):
     def section(self, label):
         self.comment(label)
 
-    def mul_const_real(self, coeff, var, out=None):
-        if out is None:
+    def mul_const_real(self, coeff, var):
+        if coeff == 1:
+            # special case -- return the variable itself; no need to perform multiplication
+            return var
+        else:
             out = self.tmpvar()
+            self.macro_call('MUL_CONST_REAL', self.real2str(coeff), var, out)
+            return out
 
-        self.macro_call('MUL_CONST_REAL', self.real2str(coeff), var, out)
+    def make_real(self, name, range):
+        self.macro_call('MAKE_REAL', name, self.real2str(range))
+        self.add_to_namespace(name)
 
-        return out
+    def copy_format_real(self, input_, output):
+        self.macro_call('COPY_FORMAT_REAL', input_, output)
+        self.add_to_namespace(output)
 
-    def make_const_real(self, value, out=None):
-        if out is None:
-            out = self.tmpvar()
-
+    def make_const_real(self, value):
+        out = self.tmpvar()
         self.macro_call('MAKE_CONST_REAL', self.real2str(value), out)
-
         return out
 
-    def add_real(self, a, b, out=None):
-        if out is None:
-            out = self.tmpvar()
-
+    def add_real(self, a, b):
+        out = self.tmpvar()
         self.macro_call('ADD_REAL', a, b, out)
-
         return out
+
+    def assign_real(self, input_, output):
+        self.macro_call('ASSIGN_REAL', input_, output)
 
     def mem_into_real(self, next, curr):
         self.macro_call('MEM_INTO_REAL', next, curr)
@@ -74,20 +73,6 @@ class VerilogGenerator(CodeGenerator):
         self.default_nettype('none')
         self.println()
 
-    def tmpvar(self, prefix='tmp'):
-        """
-        Returns a new variable name that doesn't conflict with any currently defined variables.
-        """
-
-        name = f'{prefix}{self.tmp_counter}'
-        self.tmp_counter += 1
-
-        while name in self.variable_names:
-            name = f'{prefix}{self.tmp_counter}'
-            self.tmp_counter += 1
-
-        return name
-
     def header(self):
         self.comment(f'Model generated on {datetime.datetime.now()}')
 
@@ -113,19 +98,16 @@ class VerilogGenerator(CodeGenerator):
             self.println(lines[0] + (',' if len(lines) > 1 else ''))
             self.comma_separated_lines(lines[1:])
 
-    def indent(self):
-        self.tab_level += 1
-
-    def dedent(self):
-        self.tab_level -= 1
-        assert self.tab_level >= 0
-
     def start_module(self, name, inputs, outputs):
         # set defaults
         if inputs is None:
             inputs = []
         if outputs is None:
             outputs = []
+
+        # update namespace to reflect module name, inputs, and outputs
+        for string in [name] + inputs + outputs:
+            self.add_to_namespace(string)
 
         # module name
         self.println(f'module {name} #(')
@@ -154,18 +136,6 @@ class VerilogGenerator(CodeGenerator):
         self.println('endmodule')
         self.println()
         self.default_nettype('wire')
-
-    # file I/O operations
-
-    def write(self, string='', mode='a'):
-        with open(self.filename, mode) as f:
-            f.write(string)
-
-    def println(self, line=''):
-        self.write(self.tab_level*self.tab_string + line + self.line_ending)
-
-    def clear(self):
-        self.write(mode='w')
 
     # formatting
 

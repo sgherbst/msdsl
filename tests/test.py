@@ -14,20 +14,14 @@ def main():
     parser = ArgumentParser()
 
     parser.add_argument('-i', '--input', type=str, default=get_dir('tests', 'hello'))
-    parser.add_argument('-o', '--output', type=str, default=None)
+    parser.add_argument('-o', '--output', type=str, default=get_dir('build'))
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('--float', action='store_true')
-    parser.add_argument('--dt', type=float, default=1e-6)
-    parser.add_argument('--tstop', type=float, default=10e-6)
 
     args = parser.parse_args()
 
     # expand path of input directory
     args.input = get_full_path(args.input)
-
-    # set the output directory if necessary
-    if args.output is None:
-        args.output = get_dir('build')
 
     # make the model output directory
     model_dir = os.path.join(args.output, 'models')
@@ -35,11 +29,16 @@ def main():
 
     # copy files
     shutil.copyfile(os.path.join(args.input, 'tb.sv'), os.path.join(args.output, 'tb.sv'))
+    shutil.copyfile(os.path.join(args.input, 'sim.tcl'), os.path.join(args.output, 'sim.tcl'))
     shutil.copyfile(get_file('tests', 'test.sv'), os.path.join(args.output, 'test.sv'))
 
-    # create models
+    ###############
+    # model generation
+    ###############
+
     gen = os.path.join(args.input, 'gen.py')
-    call_python([gen, '-o', model_dir, '--dt', str(args.dt)])
+    if os.path.isfile(gen):
+        call_python([gen, '-o', model_dir])
 
     # change directory to output
     os.chdir(args.output)
@@ -84,8 +83,15 @@ def main():
     # elaborate
     ###############
 
-    xsim(time=int(ceil(args.tstop/args.dt))*2,
-         unit='ns')
+    xsim()
+
+    ###############
+    # post-processing
+    ###############
+
+    post = os.path.join(args.input, 'post.py')
+    if os.path.isfile(post):
+        call_python([post, '-o', args.output])
 
 if __name__ == "__main__":
     main()

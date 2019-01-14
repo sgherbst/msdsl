@@ -14,8 +14,8 @@ module tb (
     // input is a fixed value
     `PROBE `MAKE_CONST_REAL(1.0, v_in);
 
-    // output has range range +/- 1.5
-    `PROBE `MAKE_REAL(v_out, 1.5);
+    // output has range range +/- 5.0
+    `PROBE `MAKE_REAL(v_out, 5.0);
 
     filter #(
         `PASS_REAL(v_in, v_in),

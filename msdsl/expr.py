@@ -2,6 +2,9 @@ from typing import Optional
 from numbers import Number
 from itertools import chain
 
+from msdsl.generator import CodeGenerator
+from msdsl.util import adder_tree
+
 class LinearExpr:
     def __init__(self, mapping=None, const: Optional[Number] = 0):
         # set defaults
@@ -61,6 +64,21 @@ class LinearExpr:
 
     def __truediv__(self, other):
         return (1.0/other) * self
+
+    # implementation
+
+    def run_generator(self, gen: CodeGenerator):
+        # compute products of coefficients with signals
+        prod_vars = [gen.mul_const_real(coeff, var) for var, coeff in self.mapping.items() if coeff != 0]
+
+        # if there is a non-zero constant in the update expression, include it in the list of terms to be summed
+        if self.const != 0:
+            prod_vars.append(gen.make_const_real(self.const))
+
+        # add up all of these products
+        return adder_tree(prod_vars,
+                          zero_func=lambda: gen.make_const_real(0),
+                          add_func=lambda a, b: gen.add_real(a, b))
 
 def main():
     a = LinearExpr({'a': 1.2}, 3.4)

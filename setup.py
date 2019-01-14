@@ -10,7 +10,8 @@ setup(
     packages=['msdsl'],
     install_requires=[
         'scipy',
-        'numpy'
+        'numpy',
+        'matplotlib'
     ],
     include_package_data=True,
     zip_safe=False,

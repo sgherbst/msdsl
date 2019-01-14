@@ -6,10 +6,16 @@ class VerilogGenerator:
 
         # initialize variables
         self.tab_level = 0
+        self.tmp_counter = 0
 
         # clear output file
         with open(self.filename, 'w') as f:
             f.write('')
+
+    def tmpvar(self):
+        retval = f'tmp{self.tmp_counter}'
+        self.tmp_counter += 1
+        return retval
 
     def timescale(self, unit='ns', precision='ps'):
         self.println(f'`timescale 1{unit}/1{precision}')
@@ -25,6 +31,9 @@ class VerilogGenerator:
         else:
             self.println(lines[0] + ',')
             self.comma_separated_lines(lines[1:])
+
+    def comment(self, content=''):
+        self.println(f'// {content}')
 
     def indent(self):
         self.tab_level += 1

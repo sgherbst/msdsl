@@ -1,4 +1,19 @@
 from msdsl.verilog import VerilogGenerator
+from msdsl.util import chunks
+
+def adder_tree(terms, gen):
+    if len(terms) == 0:
+        raise Exception('Summation of zero terms not handled yet.')
+    elif len(terms) == 1:
+        return terms[0]
+    elif len(terms) == 2:
+        sum_var = gen.tmpvar()
+        gen.println(f'`ADD_REAL({terms[0]}, {terms[1]}, {sum_var});')
+        return sum_var
+    else:
+        sum_vars = [adder_tree(chunk, gen) for chunk in chunks(terms, 2)]
+        sum_var = adder_tree(sum_vars, gen)
+        return sum_var
 
 class AnalogModel:
     def __init__(self, name='analog_model', inputs=None, outputs=None):
@@ -7,11 +22,29 @@ class AnalogModel:
         if outputs is None:
             outputs = []
 
+        # save settings
         self.name = name
         self.inputs = inputs
         self.outputs = outputs
 
-    def write(self, filename):
+        # create signal objects
+        self.signals = {}
+
+    def implement_output(self, output, dt, gen):
+        # multiplications
+        prod_vars = []
+        for var, coeff in self.signals[output].items():
+            prod_var = gen.tmpvar()
+            gen.println(f'`MUL_CONST_REAL({coeff}, {var}, {prod_var});')
+            prod_vars.append(prod_var)
+
+        # additions
+        sum_var = adder_tree(prod_vars, gen)
+
+        # memory update
+        gen.println(f'`MEM_INTO_REAL({sum_var}, {output});')
+
+    def generate(self, dt, filename):
         gen = VerilogGenerator(filename)
 
         # set timescale
@@ -34,16 +67,10 @@ class AnalogModel:
         gen.start_module(name=self.name, parameters=parameters, ios=ios)
 
         # main model
-        filler = """
-// compute the next state as a blend of the input and output
-`MUL_CONST_REAL(0.3, in, prod_1);
-`MUL_CONST_REAL(0.7, out, prod_2);
-`ADD_REAL(prod_1, prod_2, next);
+        for output in self.outputs:
+            gen.comment(f'Updating signal: {output}')
+            self.implement_output(output=output, dt=dt, gen=gen)
+            gen.println()
 
-// update the state on every clock edge
-`MEM_INTO_REAL(next, out);
-        """
-        for line in filler.split('\n'):
-            gen.println(line)
-
+        # end module
         gen.end_module()

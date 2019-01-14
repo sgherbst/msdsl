@@ -4,6 +4,8 @@ from argparse import ArgumentParser
 from msdsl.files import get_dir
 from msdsl.model import AnalogModel
 
+TAU = 3e-6
+
 def main():
     print('Running model generator...')
 
@@ -15,15 +17,16 @@ def main():
 
     args = parser.parse_args()
 
-    out_file = os.path.join(args.output, 'filter.sv')
-    print('Model will be written to: ' + out_file)
+    # create the model
+    model = AnalogModel(inputs=['in'], outputs=['out'])
+    model.signals['out'] = {'in': args.dt/TAU, 'out':  1-args.dt/TAU}
 
-    model = AnalogModel(
-        inputs=['in'],
-        outputs=['out']
-    )
+    # determine the output filename
+    filename = os.path.join(args.output, 'filter.sv')
+    print('Model will be written to: ' + filename)
 
-    model.write(out_file)
+    # generate the model
+    model.generate(dt=args.dt, filename=filename)
 
 if __name__ == '__main__':
     main()

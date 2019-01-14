@@ -52,15 +52,13 @@ This example is a simple first-order low-pass filter.  As shown in line 22 of **
 ```shell
 > cd msdsl/tests
 > python tests.py -i filter
-v_out = 0.000000
-v_out = 0.000000
-v_out = 0.333332
-v_out = 0.555552
-v_out = 0.703699
-v_out = 0.802463
-v_out = 0.868305
-v_out = 0.912200
-v_out = 0.941463
-v_out = 0.960972
-v_out = 0.973977
+```
+
+## tests/tf
+
+This is an example of creating a model for a rational transfer function.  Line 27 of the example shows how the numerator and denominator of the transfer function serve as the direct input for the model generator.
+
+```shell
+> cd msdsl/tests
+> python tests.py -i tf
 ```

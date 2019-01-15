@@ -1,7 +1,8 @@
 import os.path
+import json
 from argparse import ArgumentParser
 
-from msdsl.files import get_dir
+from msdsl.files import get_dir, get_full_path
 from msdsl.model import AnalogModel
 from msdsl.verilog import VerilogGenerator
 
@@ -10,16 +11,16 @@ def main():
 
     # parse command line arguments
     parser = ArgumentParser()
-
     parser.add_argument('-o', '--output', type=str, default=get_dir('build', 'models'))
-    parser.add_argument('--dt', type=float, default=0.1e-6)
-    parser.add_argument('--tau', type=float, default=1e-6)
-
     args = parser.parse_args()
 
+    # load config options
+    config_file_path = os.path.join(os.path.dirname(get_full_path(__file__)), 'config.json')
+    config = json.load(open(config_file_path, 'r'))
+
     # create the model
-    model = AnalogModel(name='filter', inputs=['v_in'], outputs=['v_out'], dt=args.dt)
-    model.set_deriv('v_out', (model.v_in - model.v_out) / args.tau)
+    model = AnalogModel(name='filter', inputs=['v_in'], outputs=['v_out'], dt=config['dt'])
+    model.set_deriv('v_out', (model.v_in - model.v_out) / config['tau'])
 
     # determine the output filename
     filename = os.path.join(args.output, 'filter.sv')

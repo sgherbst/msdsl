@@ -2,32 +2,30 @@ import os.path
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.signal
+import json
 from argparse import ArgumentParser
 
-from msdsl.files import get_dir
+from msdsl.files import get_dir, get_full_path
 
 def main():
     print('Running model generator...')
 
     # parse command line arguments
     parser = ArgumentParser()
-
     parser.add_argument('-o', '--output', type=str, default=get_dir('build'))
-    parser.add_argument('--dt', type=float, default=0.1e-6)
-    parser.add_argument('--omega', type=float, default=1e6)
-    parser.add_argument('--zeta', type=float, default=0.4)
-
     args = parser.parse_args()
+
+    # load config options
+    config_file_path = os.path.join(os.path.dirname(get_full_path(__file__)), 'config.json')
+    config = json.load(open(config_file_path, 'r'))
 
     # load data
     output = os.path.join(args.output, 'output.txt')
     y_emu = [float(line.strip()) for line in open(output, 'r').readlines()]
-    t_emu = args.dt*np.arange(len(y_emu))
+    t_emu = config['dt']*np.arange(len(y_emu))
 
     # create comparison data
-    num = [args.omega**2]
-    den = [1, 2*args.zeta*args.omega, args.omega**2]
-    t_cpu, y_cpu = scipy.signal.step((num, den))
+    t_cpu, y_cpu = scipy.signal.step((config['num'], config['den']))
 
     # plot data
     plt.plot(t_emu*1e6, y_emu)

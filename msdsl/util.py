@@ -22,26 +22,26 @@ def call_python(cmd):
     # call python
     call(cmd)
 
-def adder_tree(terms, zero_func, add_func):
+def tree_op(terms, op, default):
     if len(terms) == 0:
-        return zero_func()
+        return default()
     elif len(terms) == 1:
         return terms[0]
     else:
-        a = adder_tree(terms[:len(terms)//2], zero_func=zero_func, add_func=add_func)
-        b = adder_tree(terms[len(terms)//2:], zero_func=zero_func, add_func=add_func)
-        return add_func(a, b)
+        a = tree_op(terms[:len(terms)//2], op=op, default=default)
+        b = tree_op(terms[len(terms)//2:], op=op, default=default)
+        return op(a, b)
 
 def main():
-    zero_func = lambda: 0
-    add_func = lambda a, b: a+b
+    op = lambda a, b: a+b
+    default = lambda: 0
 
-    print(adder_tree([], zero_func=zero_func, add_func=add_func))
-    print(adder_tree([1], zero_func=zero_func, add_func=add_func))
-    print(adder_tree([1, 2], zero_func=zero_func, add_func=add_func))
-    print(adder_tree([1, 2, 3], zero_func=zero_func, add_func=add_func))
-    print(adder_tree([1, 2, 3, 4], zero_func=zero_func, add_func=add_func))
-    print(adder_tree([1, 2, 3, 4, 5], zero_func=zero_func, add_func=add_func))
+    print(tree_op([], op=op, default=default))
+    print(tree_op([1], op=op, default=default))
+    print(tree_op([1, 2], op=op, default=default))
+    print(tree_op([1, 2, 3], op=op, default=default))
+    print(tree_op([1, 2, 3, 4], op=op, default=default))
+    print(tree_op([1, 2, 3, 4, 5], op=op, default=default))
 
 if __name__ == '__main__':
     main()

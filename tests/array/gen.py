@@ -1,11 +1,12 @@
 import os.path
 import json
 from argparse import ArgumentParser
+from math import log2, ceil
 
 from msdsl.files import get_dir, get_full_path
 from msdsl.model import MixedSignalModel
 from msdsl.verilog import VerilogGenerator
-from msdsl.expr import AnalogInput, AnalogOutput
+from msdsl.expr import AnalogArray, DigitalInput, AnalogOutput
 
 def main():
     print('Running model generator...')
@@ -19,12 +20,16 @@ def main():
     config_file_path = os.path.join(os.path.dirname(get_full_path(__file__)), 'config.json')
     config = json.load(open(config_file_path, 'r'))
 
+    # determine format of the lookup table
+    vals = config['vals']
+    n_addr = int(ceil(log2(len(vals))))
+
     # create the model
-    model = MixedSignalModel('filter', AnalogInput('v_in'), AnalogOutput('v_out'), dt=config['dt'])
-    model.set_deriv(model.v_out, (model.v_in - model.v_out) / config['tau'])
+    model = MixedSignalModel('array', DigitalInput('addr', n_addr), AnalogOutput('data'))
+    model.set_this_cycle(model.data, AnalogArray(config['vals'], model.addr))
 
     # determine the output filename
-    filename = os.path.join(args.output, 'filter.sv')
+    filename = os.path.join(args.output, 'array.sv')
     print('Model will be written to: ' + filename)
 
     # generate the model

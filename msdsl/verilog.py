@@ -1,5 +1,9 @@
+from typing import List
+from numbers import Number
 import datetime
+
 from msdsl.generator import CodeGenerator
+from msdsl.expr import AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, AnalogSignal, DigitalSignal, Signal
 
 class VerilogGenerator(CodeGenerator):
     def __init__(self, filename, tab_string='    ', line_ending='\n'):
@@ -11,73 +15,130 @@ class VerilogGenerator(CodeGenerator):
     #######################################################
     # implementation of abstract CodeGenerator interface
 
-    def section(self, label):
+    def make_section(self, label):
         self.comment(label)
 
-    def mul_const_real(self, coeff, var):
-        if coeff == 1:
-            # special case -- return the variable itself; no need to perform multiplication
-            return var
+    def make_times(self, a: Signal, b: Signal):
+        name = self.tmp_name()
+
+        if isinstance(a, AnalogSignal) and isinstance(b, AnalogSignal):
+            self.macro_call('MUL_REAL', a.name, b.name, name)
+            return AnalogSignal(name)
         else:
-            out = self.tmpvar()
-            self.macro_call('MUL_CONST_REAL', self.real2str(coeff), var, out)
+            raise Exception('Invalid signal type.')
+
+    def make_plus(self, a: Signal, b: Signal):
+        name = self.tmp_name()
+
+        if isinstance(a, AnalogSignal) and isinstance(b, AnalogSignal):
+            self.macro_call('ADD_REAL', a.name, b.name, name)
+            return AnalogSignal(name)
+        else:
+            raise Exception('Invalid signal type.')
+
+    def make_signal(self, s: Signal):
+        if isinstance(s, AnalogSignal):
+            if isinstance(s.range, Number):
+                self.macro_call('MAKE_REAL', s.name, self.real2str(s.range))
+            elif isinstance(s.range, str):
+                self.macro_call('COPY_FORMAT_REAL', s.range, s.name)
+            else:
+                raise Exception('Invalid range type.')
+        elif isinstance(s, DigitalSignal):
+            self.println(f'{VerilogGenerator.digital_type_string(s)} {s.name};')
+        else:
+            raise Exception('Invalid signal type.')
+
+    def make_assign(self, input_: Signal, output: Signal):
+        if isinstance(input_, AnalogSignal) and isinstance(output, AnalogSignal):
+            self.macro_call('ASSIGN_REAL', input_.name, output.name)
+        elif isinstance(input_, DigitalSignal) and isinstance(output, DigitalSignal):
+            self.println(f'assign {input_.name} = {output.name};')
+        else:
+            raise Exception('Invalid signal type.')
+
+    def make_mem(self, next: Signal, curr: Signal):
+        if isinstance(next, AnalogSignal) and isinstance(curr, AnalogSignal):
+            self.macro_call('MEM_INTO_REAL', next.name, curr.name)
+        elif isinstance(next, DigitalSignal) and isinstance(curr, DigitalSignal):
+            self.always_begin('posedge clk')
+            self.if_statement('rst == 1', f'{curr} <= 0;', f'{curr} <= {next};')
+            self.end()
+        else:
+            raise Exception('Invalid signal type.')
+
+    def make_analog_const(self, value: Number):
+        name = self.tmp_name()
+        self.macro_call('MAKE_CONST_REAL', self.real2str(value), name)
+        return AnalogSignal(name)
+
+    def make_analog_array(self, values: List[Number], addr: DigitalSignal):
+        if len(values) == 0:
+            raise Exception('Invalid table size.')
+        elif len(values) == 1:
+            return self.make_analog_const(values[0])
+        else:
+            # declare the variable
+            range = 1.01*max(abs(value) for value in values)
+            out = AnalogSignal(name=self.tmp_name(), range=range)
+            self.make_signal(out)
+
+            # create the table
+            case_entries = [(k, f'`FORCE_REAL({value}, {out.name})') for k, value in enumerate(values)]
+            self.always_begin('*')
+            self.case_statement(addr.name, case_entries)
+            self.end()
+
+            # return the variable
             return out
 
-    def make_real(self, name, range):
-        self.macro_call('MAKE_REAL', name, self.real2str(range))
-        self.add_to_namespace(name)
+    def start_module(self, name: str, ios: List[Signal]):
+        # clear default nettype to make debugging easier
+        self.default_nettype('none')
+        self.println()
 
-    def copy_format_real(self, input_, output):
-        self.macro_call('COPY_FORMAT_REAL', input_, output)
-        self.add_to_namespace(output)
+        # module name
+        self.write(f'module {name}')
 
-    def make_const_real(self, value):
-        out = self.tmpvar()
-        self.macro_call('MAKE_CONST_REAL', self.real2str(value), out)
-        return out
+        # parameters
+        parameters = [self.param_string(io) for io in ios if isinstance(io, (AnalogInput, AnalogOutput))]
+        if len(parameters) > 0:
+            self.write(' #')
+            self.comma_separated_lines(parameters)
 
-    def add_real(self, a, b):
-        out = self.tmpvar()
-        self.macro_call('ADD_REAL', a, b, out)
-        return out
+        # ports
+        ports = [self.port_string(io) for io in ios]
+        if len(ports) > 0:
+            self.write(' ')
+            self.comma_separated_lines(ports)
 
-    def assign_real(self, input_, output):
-        self.macro_call('ASSIGN_REAL', input_, output)
+        # end module definition and indent
+        self.write(';' + self.line_ending)
+        self.indent()
 
-    def mem_into_real(self, next, curr):
-        self.macro_call('MEM_INTO_REAL', next, curr)
+    def end_module(self):
+        self.dedent()
+        self.println('endmodule')
+        self.println()
+        self.default_nettype('wire')
 
     #######################################################
 
     def init_file(self):
-        """
-        Initializes the output file with a timescale and
-        """
-
         # clear model file
         self.clear()
 
         # print header
-        self.header()
+        self.comment(f'Model generated on {datetime.datetime.now()}')
         self.println()
 
         # set timescale
-        self.timescale()
+        self.println(f'`timescale 1ns/1ps')
         self.println()
 
         # include real number library
         self.include('real.sv')
         self.println()
-
-        # clear default nettype to make debugging easier
-        self.default_nettype('none')
-        self.println()
-
-    def header(self):
-        self.comment(f'Model generated on {datetime.datetime.now()}')
-
-    def timescale(self, unit='1ns', precision='1ps'):
-        self.println(f'`timescale {unit}/{precision}')
 
     def include(self, file):
         self.println(f'`include "{file}"')
@@ -92,65 +153,64 @@ class VerilogGenerator(CodeGenerator):
         self.println(f'// {content}')
 
     def comma_separated_lines(self, lines):
-        if len(lines) == 0:
-            pass
+        self.write('(' + self.line_ending)
+        self.write((',' + self.line_ending).join([self.tab_string + line for line in lines]))
+        self.write(self.line_ending)
+        self.write(')')
+
+    @staticmethod
+    def param_string(io):
+        return f'`DECL_REAL({io.name})'
+
+    @staticmethod
+    def port_string(io):
+        if isinstance(io, AnalogInput):
+            return f'`INPUT_REAL({io.name})'
+        elif isinstance(io, AnalogOutput):
+            return f'`OUTPUT_REAL({io.name})'
+        elif isinstance(io, DigitalInput):
+            type_string = VerilogGenerator.digital_type_string(io)
+            return f'input wire {type_string} {io.name}'
+        elif isinstance(io, DigitalOutput):
+            type_string = VerilogGenerator.digital_type_string(io)
+            return f'output wire {type_string} {io.name}'
         else:
-            self.println(lines[0] + (',' if len(lines) > 1 else ''))
-            self.comma_separated_lines(lines[1:])
+            raise Exception('Invalid type.')
 
-    def start_module(self, name, inputs, outputs):
-        # set defaults
-        if inputs is None:
-            inputs = []
-        if outputs is None:
-            outputs = []
+    @staticmethod
+    def digital_type_string(s: DigitalSignal):
+        retval = 'logic'
+        retval += ' signed' if s.signed else ''
+        retval += f' [{s.width-1}:0]'
 
-        # update namespace to reflect module name, inputs, and outputs
-        for string in [name] + inputs + outputs:
-            self.add_to_namespace(string)
+        return retval
 
-        # module name
-        self.println(f'module {name} #(')
-
-        # parameters
-        self.indent()
-        parameters = [self.decl_real(name) for name in inputs+outputs]
-        self.comma_separated_lines(parameters)
-        self.dedent()
-        self.println(') (')
-
-        # IO
-        self.indent()
-        ios = ['input wire logic clk', 'input wire logic rst']
-        ios += [self.input_real(name) for name in inputs]
-        ios += [self.output_real(name) for name in outputs]
-        self.comma_separated_lines(ios)
-        self.dedent()
-        self.println(');')
-
-        # set indentation level
+    def always_begin(self, sensitivity):
+        self.println(f'always @({sensitivity}) begin')
         self.indent()
 
-    def end_module(self):
+    def if_statement(self, condition, action_if_true, action_if_false):
+        self.println(f'if ({condition}) begin')
+        self.indent()
+        self.println(f'{action_if_true};')
         self.dedent()
-        self.println('endmodule')
-        self.println()
-        self.default_nettype('wire')
+        self.println('end else begin')
+        self.indent()
+        self.println(f'{action_if_false};')
+        self.end()
 
-    # formatting
+    def case_statement(self, input_, case_entries):
+        self.println(f'case ({input_})')
+        self.indent()
+        for k, action in case_entries:
+            self.println(f'{k}: {action};')
+        self.dedent()
+        self.println('endcase')
+
+    def end(self):
+        self.dedent()
+        self.println('end')
 
     @staticmethod
     def real2str(value):
         return '{:0.10f}'.format(value)
-
-    @staticmethod
-    def decl_real(name):
-        return f'`DECL_REAL({name})'
-
-    @staticmethod
-    def input_real(name):
-        return f'`INPUT_REAL({name})'
-
-    @staticmethod
-    def output_real(name):
-        return f'`OUTPUT_REAL({name})'

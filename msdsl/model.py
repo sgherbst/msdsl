@@ -1,49 +1,54 @@
-from numbers import Number
 from scipy.signal import cont2discrete
 from collections import OrderedDict
 from itertools import chain
+from enum import Enum, auto
 
 from msdsl.generator import CodeGenerator
-from msdsl.expr import LinearExpr
+from msdsl.expr import Constant, AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, Signal, AnalogSignal, ModelExpr
 
-class AnalogModel:
-    def __init__(self, name='analog_model', inputs=None, outputs=None, dt=None):
-        # set defaults
-        if inputs is None:
-            inputs = []
-        if outputs is None:
-            outputs = []
+class AssignmentType(Enum):
+    THIS_CYCLE = auto()
+    NEXT_CYCLE = auto()
 
+class Assignment:
+    def __init__(self, signal: Signal, expr: ModelExpr, assignment_type: AssignmentType):
+        self.signal = signal
+        self.expr = expr
+        self.assignment_type = assignment_type
+
+class MixedSignalModel:
+    def __init__(self, name, *ios, dt=None):
         # save settings
         self.name = name
-        self.inputs = inputs
-        self.outputs = outputs
         self.dt = dt
 
-        # create signal objects
-        self.signals = {}
-        for signal in inputs+outputs:
-            self.add_signal(signal)
+        # add ios
+        self.signals = OrderedDict()
+        for io in ios:
+            self.add_signal(io)
 
-        # internal variables
-        self.internal_variables = OrderedDict()
+        # add clock and reset pins
+        self.add_signal(DigitalInput('clk'))
+        self.add_signal(DigitalInput('rst'))
 
         # expressions used to assign internal and external signals
-        self.next_cycle = OrderedDict()
-        self.this_cycle = OrderedDict()
+        self.assignments = []
 
     def __getattr__(self, item):
         return self.signals[item]
 
-    def add_signal(self, name):
-        self.signals[name] = self.sig2expr(name)
+    def add_signal(self, signal: Signal):
+        self.signals[signal.name] = signal
 
-    def add_internal_variable(self, name, range):
-        self.internal_variables[name] = range
-        self.add_signal(name)
+    def set_next_cycle(self, signal: Signal, expr: ModelExpr):
+        self.assignments.append(Assignment(signal, expr, AssignmentType.NEXT_CYCLE))
 
-    def set_deriv(self, name, expr):
-        self.next_cycle[name] = self.dt*expr + self.signals[name]
+    def set_this_cycle(self, signal: Signal, expr: ModelExpr):
+        self.assignments.append(Assignment(signal, expr, AssignmentType.THIS_CYCLE))
+
+    def set_deriv(self, signal: Signal, deriv_expr: ModelExpr):
+        expr = self.dt*deriv_expr + signal
+        self.set_next_cycle(signal, expr)
 
     def set_tf(self, output, input_, tf):
         # discretize transfer function
@@ -54,67 +59,58 @@ class AnalogModel:
         a = [-float(val) for val in res[1].flatten()]
 
         # create input and output histories
-        i_hist = self.make_history(input_, len(b))
-        o_hist = self.make_history(output, len(a))
+        i_hist = self.make_analog_history(input_, len(b))
+        o_hist = self.make_analog_history(output, len(a))
 
         # implement the filter
-        expr = LinearExpr()
+        expr = Constant(0)
         for coeff, var in chain(zip(b, i_hist), zip(a[1:], o_hist)):
             expr += coeff*var
 
-        self.next_cycle[output] = expr
+        self.set_next_cycle(output, expr)
 
-    def make_history(self, first, length):
+    def make_analog_history(self, first, length):
         hist = []
 
         for k in range(length):
             if k == 0:
-                hist.append(self.signals[first])
+                hist.append(first)
             else:
-                curr = f'{first}_{k}'
-                self.add_internal_variable(curr, first)
-                self.next_cycle[curr] = hist[k-1]
-                hist.append(self.signals[curr])
+                curr = AnalogSignal(name=f'{first.name}_{k}', range=first.name)
+                self.add_signal(curr)
+                self.set_next_cycle(curr, hist[k-1])
+                hist.append(curr)
 
         return hist
 
-    def run_generator(self, gen: CodeGenerator):
+    def compile_model(self, gen: CodeGenerator):
         # start module
-        gen.start_module(name=self.name, inputs=self.inputs, outputs=self.outputs)
+        ios = [signal for signal in self.signals.values() if
+               isinstance(signal, (AnalogInput, AnalogOutput, DigitalInput, DigitalOutput))]
+        gen.start_module(name=self.name, ios=ios)
 
         # create internal variables
-        gen.section('Defining internal variables')
-        for var_name, var_range in self.internal_variables.items():
-            if isinstance(var_range, Number):
-                gen.make_real(var_name, var_range)
-            elif isinstance(var_name, str):
-                gen.copy_format_real(var_range, var_name)
-            else:
-                raise Exception('Invalid range type for internal variable.')
+        internals = [signal for signal in self.signals.values() if
+                     not isinstance(signal, (AnalogInput, AnalogOutput, DigitalInput, DigitalOutput))]
+        if len(internals) > 0:
+            gen.make_section('Declaring internal variables.')
+        for signal in internals:
+            gen.make_signal(signal)
 
         # update values of variables for the next cycle
-        for signal_name, next_expr in self.next_cycle.items():
+        for assignment in self.assignments:
             # label this section of the code for debugging purposes
-            gen.section(f'Updating signal: {signal_name}')
+            gen.make_section(f'Update signal: {assignment.signal.name}')
 
             # implement the update expression
-            result = next_expr.run_generator(gen)
-            gen.mem_into_real(result, signal_name)
+            update_signal = gen.compile_expr(assignment.expr)
 
-        # update values of variables for the current cycle
-        for signal_name, this_expr in self.this_cycle.items():
-            # label this section of the code for debugging purposes
-            gen.section(f'Assigning signal: {signal_name}')
-
-            # implement the update expression
-            result = this_expr.run_generator(gen)
-            gen.assign_real(result, signal_name)
+            if assignment.assignment_type == AssignmentType.THIS_CYCLE:
+                gen.make_assign(update_signal, assignment.signal)
+            elif assignment.assignment_type == AssignmentType.NEXT_CYCLE:
+                gen.make_mem(update_signal, assignment.signal)
+            else:
+                raise Exception('Invalid assignment type.')
 
         # end module
         gen.end_module()
-
-    # utility functions
-
-    @staticmethod
-    def sig2expr(sig):
-        return LinearExpr({sig: 1.0})

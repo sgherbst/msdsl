@@ -38,12 +38,12 @@ class VerilogGenerator(CodeGenerator):
 
     def make_signal(self, s: Signal):
         if isinstance(s, AnalogSignal):
-            if isinstance(s.range, Number):
+            if s.range is not None:
                 self.macro_call('MAKE_REAL', s.name, self.real2str(s.range))
-            elif isinstance(s.range, str):
-                self.macro_call('COPY_FORMAT_REAL', s.range, s.name)
+            elif s.copy_format_from is not None:
+                self.macro_call('COPY_FORMAT_REAL', s.copy_format_from.name, s.name)
             else:
-                raise Exception('Invalid range type.')
+                raise Exception('Range not specified for signal.')
         elif isinstance(s, DigitalSignal):
             self.println(f'{VerilogGenerator.digital_type_string(s)} {s.name};')
         else:
@@ -72,21 +72,29 @@ class VerilogGenerator(CodeGenerator):
         self.macro_call('MAKE_CONST_REAL', self.real2str(value), name)
         return AnalogSignal(name)
 
-    def make_analog_array(self, values: List[Number], addr: DigitalSignal):
+    def make_analog_array(self, values: List[AnalogSignal], addr: DigitalSignal):
         if len(values) == 0:
             raise Exception('Invalid table size.')
         elif len(values) == 1:
-            return self.make_analog_const(values[0])
+            return values[0]
         else:
-            # declare the variable
-            range = 1.01*max(abs(value) for value in values)
-            out = AnalogSignal(name=self.tmp_name(), range=range)
-            self.make_signal(out)
+            # declare the variable that will hold the result
+            out = AnalogSignal(name=self.tmp_name())
+            self.macro_call('MAKE_REAL', out.name, self.max_analog_range(values))
 
-            # create the table
-            case_entries = [(k, f'`FORCE_REAL({value}, {out.name})') for k, value in enumerate(values)]
+            # assign values to each entry in the table
+            entries = []
+            for k, value in enumerate(values):
+                entry = out.copy_format_to(f'{out.name}_{k}')
+                entries.append(entry)
+
+                self.make_signal(entry)
+                self.make_assign(value, entry)
+
+            # create string entries for each case
+            case_entries = [(k, f'{out.name} = {entry.name}') for k, entry in enumerate(entries)]
             self.always_begin('*')
-            self.case_statement(addr.name, case_entries)
+            self.case_statement(addr.name, case_entries, default = f'{out.name} = 0')
             self.end()
 
             # return the variable
@@ -138,6 +146,7 @@ class VerilogGenerator(CodeGenerator):
 
         # include real number library
         self.include('real.sv')
+        self.include('math.sv')
         self.println()
 
     def include(self, file):
@@ -199,11 +208,13 @@ class VerilogGenerator(CodeGenerator):
         self.println(f'{action_if_false};')
         self.end()
 
-    def case_statement(self, input_, case_entries):
+    def case_statement(self, input_, case_entries, default=None):
         self.println(f'case ({input_})')
         self.indent()
         for k, action in case_entries:
             self.println(f'{k}: {action};')
+        if default is not None:
+            self.println(f'default: {default};')
         self.dedent()
         self.println('endcase')
 
@@ -214,3 +225,12 @@ class VerilogGenerator(CodeGenerator):
     @staticmethod
     def real2str(value):
         return '{:0.10f}'.format(value)
+
+    @staticmethod
+    def max_analog_range(values: List[AnalogSignal]):
+        if len(values) == 0:
+            return '0'
+        elif len(values) == 1:
+            return f'`RANGE_PARAM_REAL({values[0].name})'
+        else:
+            return f'`MAX_MATH(`RANGE_PARAM_REAL({values[0].name}), {VerilogGenerator.max_analog_range(values[1:])})'

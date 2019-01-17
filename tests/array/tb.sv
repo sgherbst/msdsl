@@ -28,7 +28,7 @@ module tb (
     // buck instantiation
     array #(
         `PASS_REAL(data, data)
-    ) array (
+    ) array_i (
         .addr(addr),
         .data(data),
         .clk(clk),

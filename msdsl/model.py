@@ -1,10 +1,12 @@
+from typing import List
 from scipy.signal import cont2discrete
 from collections import OrderedDict
 from itertools import chain
 from enum import Enum, auto
 
 from msdsl.generator import CodeGenerator
-from msdsl.expr import Constant, AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, Signal, AnalogSignal, ModelExpr
+from msdsl.expr import (Constant, AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, Signal, AnalogSignal,
+                        ModelExpr, DigitalSignal, AnalogArray)
 
 class AssignmentType(Enum):
     THIS_CYCLE = auto()
@@ -46,9 +48,27 @@ class MixedSignalModel:
     def set_this_cycle(self, signal: Signal, expr: ModelExpr):
         self.assignments.append(Assignment(signal, expr, AssignmentType.THIS_CYCLE))
 
+    def discretize_diff_eq(self, signal: Signal, deriv_expr: ModelExpr):
+        return self.dt*deriv_expr + signal
+
     def set_deriv(self, signal: Signal, deriv_expr: ModelExpr):
-        expr = self.dt*deriv_expr + signal
-        self.set_next_cycle(signal, expr)
+        self.set_next_cycle(signal, self.discretize_diff_eq(signal, deriv_expr))
+
+    def set_dynamics_cases(self, signal: Signal, cases: List, addr: DigitalSignal):
+        # create list of potential values to be assigned to signal in the next cycle
+        terms = []
+        for type, case_expr in cases:
+            if type == 'diff_eq':
+                term = self.discretize_diff_eq(signal, case_expr)
+            elif type == 'equals':
+                term = case_expr
+            else:
+                raise Exception('Invalid dynamics type.')
+
+            terms.append(term)
+
+        # assign the appropriate value to signal
+        self.set_next_cycle(signal, AnalogArray(terms, addr))
 
     def set_tf(self, output, input_, tf):
         # discretize transfer function
@@ -69,14 +89,14 @@ class MixedSignalModel:
 
         self.set_next_cycle(output, expr)
 
-    def make_analog_history(self, first, length):
+    def make_analog_history(self, first: AnalogSignal, length: int):
         hist = []
 
         for k in range(length):
             if k == 0:
                 hist.append(first)
             else:
-                curr = AnalogSignal(name=f'{first.name}_{k}', range=first.name)
+                curr = first.copy_format_to(f'{first.name}_{k}')
                 self.add_signal(curr)
                 self.set_next_cycle(curr, hist[k-1])
                 hist.append(curr)

@@ -56,8 +56,8 @@ class Constant(ModelExpr):
         self.value = value
 
 class AnalogArray(ModelExpr):
-    def __init__(self, values, addr):
-        self.values = values
+    def __init__(self, terms, addr):
+        self.terms = terms
         self.addr = addr
 
 class Signal(ModelExpr):
@@ -65,9 +65,13 @@ class Signal(ModelExpr):
         self.name = name
 
 class AnalogSignal(Signal):
-    def __init__(self, name=None, range=None):
+    def __init__(self, name=None, range=None, copy_format_from=None):
         super().__init__(name=name)
         self.range = range
+        self.copy_format_from = copy_format_from
+
+    def copy_format_to(self, name):
+        return AnalogSignal(name=name, copy_format_from=self)
 
 class AnalogInput(AnalogSignal):
     pass

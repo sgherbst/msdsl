@@ -19,7 +19,7 @@ module tb (
     `MAKE_REAL(i_mag, 20.0);
 
     // gate drive signal
-    `PWM(0.50, 500e3, 2e-9, gate);
+    `PWM(0.50, 500e3, `DT, gate);
 
     // filter instantiation
     buck #(

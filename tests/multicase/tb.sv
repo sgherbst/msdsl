@@ -18,7 +18,7 @@ module tb (
     `MAKE_REAL(v_out, 1.5);
 
     // gate drive signal
-    `PWM(0.50, 300e3, 0.1e-6, ctrl);
+    `PWM(0.50, 300e3, `DT, ctrl);
 
     // filter instantiation
     filter #(

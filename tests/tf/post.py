@@ -6,6 +6,7 @@ import json
 from argparse import ArgumentParser
 
 from msdsl.files import get_dir, get_full_path
+from msdsl.vivado import get_sim_dir
 
 def main():
     print('Running model generator...')
@@ -20,7 +21,7 @@ def main():
     config = json.load(open(config_file_path, 'r'))
 
     # load data
-    y_emu = np.loadtxt(os.path.join(args.output, 'v_out.txt'))
+    y_emu = np.loadtxt(os.path.join(get_sim_dir(args.output), 'v_out.txt'))
     t_emu = config['dt']*np.arange(len(y_emu))
 
     # create comparison data

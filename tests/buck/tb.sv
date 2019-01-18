@@ -14,26 +14,31 @@ module tb (
     input wire logic rst
 );
     // I/O definition
-    `MAKE_CONST_REAL(1.0, v_in);
-    `MAKE_REAL(v_out, 1.5);
+    `MAKE_CONST_REAL(5.0, v_in);
+    `MAKE_REAL(v_out, 10.0);
+    `MAKE_REAL(i_mag, 20.0);
 
     // gate drive signal
-    `PWM(0.50, 300e3, 0.1e-6, ctrl);
+    `PWM(0.50, 500e3, 2e-9, gate);
 
     // filter instantiation
-    filter #(
+    buck #(
         `PASS_REAL(v_in, v_in),
-        `PASS_REAL(v_out, v_out)
-    ) filter_i (
+        `PASS_REAL(v_out, v_out),
+        `PASS_REAL(i_mag, i_mag)
+    ) buck_i (
         .v_in(v_in),
         .v_out(v_out),
-        .ctrl(ctrl),
+        .i_mag(i_mag),
+        .gate(gate),
         .clk(clk),
         .rst(rst)
     );
 
     // simulation output
+    // `DUMP_VARS(tb, "debug.vcd")
     `DUMP_REAL_TO_FILE(v_out);
+    `DUMP_REAL_TO_FILE(i_mag);
 endmodule
 
 `default_nettype wire

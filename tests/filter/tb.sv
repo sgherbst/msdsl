@@ -4,18 +4,19 @@
 `timescale 1ns/1ps
 
 `include "real.sv"
+`include "debug.sv"
 
-`define PROBE (* mark_debug = `"true`" *)
+`default_nettype none
 
 module tb (
     input wire logic clk,
     input wire logic rst
 );
     // input is a fixed value
-    `PROBE `MAKE_CONST_REAL(1.0, v_in);
+    `MAKE_CONST_REAL(1.0, v_in);
 
     // output has range range +/- 1.5
-    `PROBE `MAKE_REAL(v_out, 1.5);
+    `MAKE_REAL(v_out, 1.5);
 
     filter #(
         `PASS_REAL(v_in, v_in),
@@ -28,14 +29,7 @@ module tb (
     );
 
     // simulation output
-    integer f;
-    initial begin
-        f = $fopen("output.txt", "w");
-    end
-    always @(posedge clk) begin
-        if (rst == 1'b0) begin
-            $fwrite(f, "%f\n", `TO_REAL(v_out));
-        end
-    end
+    `DUMP_REAL_TO_FILE(v_out);
 endmodule
 
+`default_nettype wire

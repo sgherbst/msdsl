@@ -57,6 +57,10 @@ def main():
     svreal_include_dir = os.path.join(SVREAL_INSTALL_PATH, 'include')
     svreal_src_dir = os.path.join(SVREAL_INSTALL_PATH, 'src')
 
+    # compute paths to component directories
+    component_include_dir = get_dir('components', 'include')
+    component_src_dir = get_dir('components', 'src')
+
     # compute definitions
     defines = []
 
@@ -68,8 +72,8 @@ def main():
     # run the compiler
     xvlog(src_files=[os.path.join(args.output, 'test.sv'),
                      os.path.join(args.output, 'tb.sv')],
-          lib_dirs=[svreal_src_dir, model_dir],
-          inc_dirs=[svreal_include_dir],
+          lib_dirs=[svreal_src_dir, component_src_dir, model_dir],
+          inc_dirs=[svreal_include_dir, component_include_dir],
           defines=defines
     )
 

@@ -61,9 +61,8 @@ class VerilogGenerator(CodeGenerator):
         if isinstance(next, AnalogSignal) and isinstance(curr, AnalogSignal):
             self.macro_call('MEM_INTO_REAL', next.name, curr.name)
         elif isinstance(next, DigitalSignal) and isinstance(curr, DigitalSignal):
-            self.always_begin('posedge clk')
-            self.if_statement('rst == 1', f'{curr} <= 0;', f'{curr} <= {next};')
-            self.end()
+            assert next.width == curr.width
+            self.macro_call('MEM_INTO_DIGITAL', next.width, next.name, curr.name)
         else:
             raise Exception('Invalid signal type.')
 
@@ -71,6 +70,36 @@ class VerilogGenerator(CodeGenerator):
         name = self.tmp_name()
         self.macro_call('MAKE_CONST_REAL', self.real2str(value), name)
         return AnalogSignal(name)
+
+    def make_less_than(self, lhs, rhs):
+        return self.make_comp('LT_REAL', lhs, rhs)
+
+    def make_less_than_or_equals(self, lhs, rhs):
+        return self.make_comp('LE_REAL', lhs, rhs)
+
+    def make_greater_than(self, lhs, rhs):
+        return self.make_comp('GT_REAL', lhs, rhs)
+
+    def make_greater_than_or_equals(self, lhs, rhs):
+        return self.make_comp('GE_REAL', lhs, rhs)
+
+    def make_equal_to(self, lhs, rhs):
+        return self.make_comp('EQ_REAL', lhs, rhs)
+
+    def make_not_equal_to(self, lhs, rhs):
+        return self.make_comp('NE_REAL', lhs, rhs)
+
+    def make_concatenate(self, terms: List[DigitalSignal]):
+        # create the output signal
+        width = sum(term.width for term in terms)
+        out = DigitalSignal(self.tmp_name(), width=width)
+        self.make_signal(out)
+
+        # assign the output signal
+        concat_string = '{' + ', '.join(term.name for term in terms) + '}'
+        self.println(f'assign {out.name} = {concat_string};')
+
+        return out
 
     def make_analog_array(self, values: List[AnalogSignal], addr: DigitalSignal):
         if len(values) == 0:
@@ -149,6 +178,11 @@ class VerilogGenerator(CodeGenerator):
         self.include('math.sv')
         self.println()
 
+    def make_comp(self, macro_name, lhs, rhs):
+        name = self.tmp_name()
+        self.macro_call(macro_name, lhs.name, rhs.name, name)
+        return DigitalSignal(name)
+
     def include(self, file):
         self.println(f'`include "{file}"')
 
@@ -197,16 +231,6 @@ class VerilogGenerator(CodeGenerator):
     def always_begin(self, sensitivity):
         self.println(f'always @({sensitivity}) begin')
         self.indent()
-
-    def if_statement(self, condition, action_if_true, action_if_false):
-        self.println(f'if ({condition}) begin')
-        self.indent()
-        self.println(f'{action_if_true};')
-        self.dedent()
-        self.println('end else begin')
-        self.indent()
-        self.println(f'{action_if_false};')
-        self.end()
 
     def case_statement(self, input_, case_entries, default=None):
         self.println(f'case ({input_})')

@@ -1,7 +1,6 @@
 import os.path
 import matplotlib.pyplot as plt
 import numpy as np
-import scipy.signal
 import json
 from argparse import ArgumentParser
 
@@ -20,17 +19,24 @@ def main():
     config = json.load(open(config_file_path, 'r'))
 
     # load data
-    y_emu = np.loadtxt(os.path.join(args.output, 'v_out.txt'))
-    t_emu = config['dt']*np.arange(len(y_emu))
+    v_out = np.loadtxt(os.path.join(args.output, 'v_out.txt'))
+    i_mag = np.loadtxt(os.path.join(args.output, 'i_mag.txt'))
+    t_vec = config['dt']*np.arange(len(v_out))
 
-    # create comparison data
-    t_cpu, y_cpu = scipy.signal.step((config['num'], config['den']))
+    # plot v_out
+    ax1 = plt.subplot(211)
+    ax1.set_ylabel('v_out')
+    plt.plot(t_vec*1e6, v_out)
 
-    # plot data
-    plt.plot(t_emu*1e6, y_emu)
-    plt.plot(t_cpu*1e6, y_cpu)
-    plt.legend(['emu', 'cpu'])
+    # plot i_mag
+    ax2 = plt.subplot(212, sharex=ax1)
+    ax2.set_ylabel('i_mag')
+    plt.plot(t_vec*1e6, i_mag)
+
+    # set shared x-axis label
     plt.xlabel('time (us)')
+
+    # show plots
     plt.show()
 
 if __name__ == '__main__':

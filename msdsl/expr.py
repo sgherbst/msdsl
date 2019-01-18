@@ -2,58 +2,111 @@ from typing import List
 from numbers import Number
 
 class ModelExpr:
-    # addition
-    def __add__(self, other):
+    # addition and multiplication
+
+    def handle_arith(self, other, op_cls):
         if isinstance(other, Number):
             other = Constant(other)
 
         if isinstance(other, ModelExpr):
-            return Plus([self, other])
+            return op_cls([self, other])
         else:
             raise NotImplementedError
+
+    def __add__(self, other):
+        return self.handle_arith(other, Plus)
+
+    def __mul__(self, other):
+        return self.handle_arith(other, Times)
+
+    # other arithmetic operations
+
+    def __sub__(self, other):
+        return self.__add__(-other)
+
+    def __neg__(self):
+        return -1.0*self
+
+    def __truediv__(self, other):
+        return (1.0/other)*self
+
+    # reverse arithmetic operations
 
     def __radd__(self, other):
         return self.__add__(other)
 
-    # multiplication
-    def __mul__(self, other):
-        if isinstance(other, Number):
-            other = Constant(other)
-
-        if isinstance(other, ModelExpr):
-            return Times([self, other])
-        else:
-            raise NotImplementedError
-
     def __rmul__(self, other):
         return self.__mul__(other)
-
-    # subtraction
-    def __sub__(self, other):
-        return self.__add__(-other)
 
     def __rsub__(self, other):
         return (-self).__add__(other)
 
-    # negation
-    def __neg__(self):
-        return -1.0*self
+    # comparisons
 
-    # division
-    def __truediv__(self, other):
-        return (1.0/other)*self
+    def handle_comp(self, other, op_cls):
+        if isinstance(other, Number):
+            other = Constant(other)
 
-class Plus(ModelExpr):
-    def __init__(self, terms: List[ModelExpr]):
-        self.terms = terms
+        return op_cls(self, other)
 
-class Times(ModelExpr):
-    def __init__(self, terms: List[ModelExpr]):
-        self.terms = terms
+    def __le__(self, other):
+        return self.handle_comp(other, LessThanOrEquals)
+
+    def __lt__(self, other):
+        return self.handle_comp(other, LessThan)
+
+    def __ge__(self, other):
+        return self.handle_comp(other, GreaterThanOrEquals)
+
+    def __gt__(self, other):
+        return self.handle_comp(other, GreaterThan)
+
+    def __eq__(self, other):
+        return self.handle_comp(other, EqualTo)
+
+    def __ne__(self, other):
+        return self.handle_comp(other, NotEqualTo)
 
 class Constant(ModelExpr):
     def __init__(self, value: Number):
         self.value = value
+
+class ListOp(ModelExpr):
+    def __init__(self, terms: List[ModelExpr]):
+        self.terms = terms
+
+class Plus(ListOp):
+    pass
+
+class Times(ListOp):
+    pass
+
+class BinaryOp(ModelExpr):
+    def __init__(self, lhs, rhs):
+        self.lhs = lhs
+        self.rhs = rhs
+
+class LessThan(BinaryOp):
+    pass
+
+class LessThanOrEquals(BinaryOp):
+    pass
+
+class GreaterThan(BinaryOp):
+    pass
+
+class GreaterThanOrEquals(BinaryOp):
+    pass
+
+class EqualTo(BinaryOp):
+    pass
+
+class NotEqualTo(BinaryOp):
+    pass
+
+class Concatenate(ModelExpr):
+    def __init__(self, terms):
+        self.terms = terms
 
 class AnalogArray(ModelExpr):
     def __init__(self, terms, addr):

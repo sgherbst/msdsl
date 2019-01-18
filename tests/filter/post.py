@@ -20,8 +20,7 @@ def main():
     config = json.load(open(config_file_path, 'r'))
 
     # load data
-    output = os.path.join(args.output, 'output.txt')
-    y_emu = [float(line.strip()) for line in open(output, 'r').readlines()]
+    y_emu = np.loadtxt(os.path.join(args.output, 'v_out.txt'))
     t_emu = config['dt']*np.arange(len(y_emu))
 
     # create comparison data

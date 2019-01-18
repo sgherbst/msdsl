@@ -54,7 +54,7 @@ class MixedSignalModel:
     def set_deriv(self, signal: Signal, deriv_expr: ModelExpr):
         self.set_next_cycle(signal, self.discretize_diff_eq(signal, deriv_expr))
 
-    def set_dynamics_cases(self, signal: Signal, cases: List, addr: DigitalSignal):
+    def set_dynamics_cases(self, signal: Signal, cases: List, addr: ModelExpr):
         # create list of potential values to be assigned to signal in the next cycle
         terms = []
         for type, case_expr in cases:

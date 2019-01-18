@@ -4,26 +4,20 @@
 `timescale 1ns/1ps
 
 `include "real.sv"
+`include "components.sv"
+`include "debug.sv"
 
-`define PROBE (* mark_debug = `"true`" *)
+`default_nettype none
 
 module tb (
     input wire logic clk,
     input wire logic rst
 );
     // state variable definitions
-    `PROBE `MAKE_REAL(data, 10.0);
+    `MAKE_REAL(data, 10.0);
 
     // gate drive signal
-    logic [1:0] addr;
-
-    always @(posedge clk) begin
-        if (rst == 1'b1) begin
-            addr <= 0;
-        end else begin
-            addr <= addr + 1;
-        end
-    end
+    `COUNTER(2, addr);
 
     // buck instantiation
     array #(
@@ -36,8 +30,8 @@ module tb (
     );
 
     // simulation output
-    always @(posedge clk) begin
-        `PRINT_REAL(data);
-    end
+    `DUMP_REAL_TO_SCREEN(data);
 endmodule
+
+`default_nettype wire
 

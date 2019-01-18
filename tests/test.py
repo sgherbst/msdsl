@@ -75,7 +75,7 @@ def main():
 
     # compute definitions
 
-    defines = []
+    defines = ['SIMULATION']
 
     if args.float:
         defines.append("FLOAT_REAL")

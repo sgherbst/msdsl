@@ -36,9 +36,11 @@ module tb (
     );
 
     // simulation output
-    // `DUMP_VARS(tb, "debug.vcd")
-    `DUMP_REAL_TO_FILE(v_out);
-    `DUMP_REAL_TO_FILE(i_mag);
+    `ifdef SIMULATION
+        // `DUMP_VARS(tb, "debug.vcd")
+        `DUMP_REAL_TO_FILE(v_out);
+        `DUMP_REAL_TO_FILE(i_mag);
+    `endif
 endmodule
 
 `default_nettype wire

@@ -30,7 +30,9 @@ module tb (
     );
 
     // simulation output
-    `DUMP_REAL_TO_SCREEN(data);
+    `ifdef SIMULATION
+        `DUMP_REAL_TO_SCREEN(data);
+    `endif
 endmodule
 
 `default_nettype wire

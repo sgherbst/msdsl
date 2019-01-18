@@ -33,7 +33,9 @@ module tb (
     );
 
     // simulation output
-    `DUMP_REAL_TO_FILE(v_out);
+    `ifdef SIMULATION
+        `DUMP_REAL_TO_FILE(v_out);
+    `endif
 endmodule
 
 `default_nettype wire

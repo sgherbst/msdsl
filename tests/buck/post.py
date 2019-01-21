@@ -4,12 +4,9 @@ import numpy as np
 import json
 from argparse import ArgumentParser
 
-from msdsl.files import get_dir, get_full_path
-from msdsl.vivado import get_sim_dir
+from msdsl.files import get_dir, get_full_path, get_vivado_sim_dir
 
 def main():
-    print('Running model generator...')
-
     # parse command line arguments
     parser = ArgumentParser()
     parser.add_argument('-o', '--output', type=str, default=get_dir('build'))
@@ -20,8 +17,8 @@ def main():
     config = json.load(open(config_file_path, 'r'))
 
     # load data
-    v_out = np.loadtxt(os.path.join(get_sim_dir(args.output), 'v_out.txt'))
-    i_mag = np.loadtxt(os.path.join(get_sim_dir(args.output), 'i_mag.txt'))
+    v_out = np.loadtxt(os.path.join(get_vivado_sim_dir(args.output), 'v_out.txt'))
+    i_mag = np.loadtxt(os.path.join(get_vivado_sim_dir(args.output), 'i_mag.txt'))
     t_vec = config['dt']*np.arange(len(v_out))
 
     # plot v_out

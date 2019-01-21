@@ -4,7 +4,7 @@
 
 `default_nettype none
 
-module dump_real_to_file #(
+module dump_analog #(
     `DECL_REAL(in),
     parameter filename="out.txt"
 ) (

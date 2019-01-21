@@ -5,7 +5,7 @@
 
 `include "real.sv"
 `include "components.sv"
-`include "debug.sv"
+`include "probe.sv"
 
 `default_nettype none
 
@@ -21,7 +21,7 @@ module tb (
     // gate drive signal
     `PWM(0.50, 500e3, `DT, gate);
 
-    // filter instantiation
+    // buck instantiation
     buck #(
         `PASS_REAL(v_in, v_in),
         `PASS_REAL(v_out, v_out),
@@ -35,12 +35,9 @@ module tb (
         .rst(rst)
     );
 
-    // simulation output
-    `ifdef SIMULATION
-        // `DUMP_VARS(tb, "debug.vcd")
-        `DUMP_REAL_TO_FILE(v_out);
-        `DUMP_REAL_TO_FILE(i_mag);
-    `endif
+    // emulation output
+    `PROBE_ANALOG(v_out);
+    `PROBE_ANALOG(i_mag);
 endmodule
 
 `default_nettype wire

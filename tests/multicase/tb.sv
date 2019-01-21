@@ -5,7 +5,7 @@
 
 `include "real.sv"
 `include "components.sv"
-`include "debug.sv"
+`include "probe.sv"
 
 `default_nettype none
 
@@ -32,10 +32,8 @@ module tb (
         .rst(rst)
     );
 
-    // simulation output
-    `ifdef SIMULATION
-        `DUMP_REAL_TO_FILE(v_out);
-    `endif
+    // emulation output
+    `PROBE_ANALOG(v_out);
 endmodule
 
 `default_nettype wire

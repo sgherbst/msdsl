@@ -17,3 +17,9 @@ def get_dir(*args, mkdir_p=True):
         os.makedirs(path, exist_ok=True)
 
     return path
+
+def get_vivado_sim_dir(top_dir=None, project_name='test', project_dir_name='test'):
+    if top_dir is None:
+        top_dir = get_dir('build')
+
+    return os.path.join(top_dir, project_dir_name, f'{project_name}.sim', 'sim_1', 'behav', 'xsim')

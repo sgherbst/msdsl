@@ -5,7 +5,7 @@
 
 `include "real.sv"
 `include "components.sv"
-`include "debug.sv"
+`include "probe.sv"
 
 `default_nettype none
 
@@ -19,7 +19,7 @@ module tb (
     // gate drive signal
     `COUNTER(2, addr);
 
-    // buck instantiation
+    // array instantiation
     array #(
         `PASS_REAL(data, data)
     ) array_i (
@@ -29,10 +29,8 @@ module tb (
         .rst(rst)
     );
 
-    // simulation output
-    `ifdef SIMULATION
-        `DUMP_REAL_TO_SCREEN(data);
-    `endif
+    // emulation output
+    `PROBE_ANALOG(data);
 endmodule
 
 `default_nettype wire

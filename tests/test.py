@@ -7,7 +7,7 @@ import json
 
 from msdsl.files import get_full_path, get_dir, get_file
 from msdsl.util import call_python
-from msdsl.vivado import simulate
+from msdsl.vivado import VivadoSimulator
 
 def main():
     # parse command line arguments
@@ -91,12 +91,13 @@ def main():
     else:
         n_cycles = 10
 
-    # run the compiler
-    simulate(src_files=[get_file('tests', 'test.sv'), os.path.join(args.input, 'tb.sv')],
-             src_dirs=[svreal_src_dir, component_src_dir, model_dir],
-             inc_dirs=[svreal_include_dir, component_include_dir],
-             defines=defines,
-             runtime=n_cycles*1e-9
+    # run the simulator
+    sim = VivadoSimulator()
+    sim.simulate(src_files=[get_file('tests', 'test.sv'), os.path.join(args.input, 'tb.sv')],
+                 src_dirs=[svreal_src_dir, component_src_dir, model_dir],
+                 inc_dirs=[svreal_include_dir, component_include_dir],
+                 defines=defines,
+                 runtime=n_cycles*1e-9
     )
 
     ###############

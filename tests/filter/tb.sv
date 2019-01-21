@@ -4,7 +4,7 @@
 `timescale 1ns/1ps
 
 `include "real.sv"
-`include "debug.sv"
+`include "probe.sv"
 
 `default_nettype none
 
@@ -18,6 +18,7 @@ module tb (
     // output has range range +/- 1.5
     `MAKE_REAL(v_out, 1.5);
 
+    // filter instantiation
     filter #(
         `PASS_REAL(v_in, v_in),
         `PASS_REAL(v_out, v_out)
@@ -28,10 +29,8 @@ module tb (
         .rst(rst)
     );
 
-    // simulation output
-    `ifdef SIMULATION
-        `DUMP_REAL_TO_FILE(v_out);
-    `endif
+    // emulation output
+    `PROBE_ANALOG(v_out);
 endmodule
 
 `default_nettype wire

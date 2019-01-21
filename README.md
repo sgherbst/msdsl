@@ -30,35 +30,3 @@ Clone the **mdsl** repository, navigate to the top-level directory, and use **pi
 > cd msdsl
 > pip install -e .
 ```
-
-# Examples
-
-A variety of examples examples are maintained in the **tests/** directory.  All of the tests are run using the script **tests/test.py**.
-
-## tests/hello
-
-This example is just to test whether the simulation environment is set up properly.
-
-```shell
-> cd msdsl/tests
-> python tests.py -i hello
-Hello, world!
-```
-
-## tests/filter
-
-This example is a simple first-order low-pass filter.  As shown in line 22 of **tests/filter/gen.py**, the filter dynamics are specified in a single line in the form of a differential equation.  The output printed by this example is the filter's response to a constant input after its output is initialized to zero.
-
-```shell
-> cd msdsl/tests
-> python tests.py -i filter
-```
-
-## tests/tf
-
-This is an example of creating a model for a rational transfer function.  Line 27 of the example shows how the numerator and denominator of the transfer function serve as the direct input for the model generator.
-
-```shell
-> cd msdsl/tests
-> python tests.py -i tf
-```

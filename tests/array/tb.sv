@@ -5,7 +5,6 @@
 
 `include "real.sv"
 `include "components.sv"
-`include "probe.sv"
 
 `default_nettype none
 
@@ -30,7 +29,7 @@ module tb (
     );
 
     // emulation output
-    `PROBE_ANALOG(data);
+    `PROBE_REAL(data);
 endmodule
 
 `default_nettype wire

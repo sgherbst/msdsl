@@ -4,7 +4,6 @@
 `timescale 1ns/1ps
 
 `include "real.sv"
-`include "probe.sv"
 
 `default_nettype none
 
@@ -30,7 +29,7 @@ module tb (
     );
 
     // simulation output
-    `PROBE_ANALOG(v_out);
+    `PROBE_REAL(v_out);
 endmodule
 
 `default_nettype wire

@@ -3,7 +3,10 @@ from numbers import Number
 import datetime
 
 from msdsl.generator import CodeGenerator
-from msdsl.expr import AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, AnalogSignal, DigitalSignal, Signal
+from msdsl.expr import (AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, Signal, DigitalSignal, AnalogSignal,
+                        Plus, Times, Constant, AnalogArray, BinaryOp, ListOp, LessThan, LessThanOrEquals, GreaterThan,
+                        GreaterThanOrEquals, Concatenate, EqualTo, NotEqualTo, Min, Max)
+from msdsl.util import tree_op
 
 class VerilogGenerator(CodeGenerator):
     def __init__(self, filename, tab_string='    ', line_ending='\n'):
@@ -18,23 +21,65 @@ class VerilogGenerator(CodeGenerator):
     def make_section(self, label):
         self.comment(label)
 
-    def make_times(self, a: Signal, b: Signal):
-        name = self.tmp_name()
+    def compile_expr(self, expr):
+        if isinstance(expr, Number):
+            return self.make_analog_const(expr)
+        elif isinstance(expr, Signal):
+            return expr
+        elif isinstance(expr, Constant):
+            return self.make_analog_const(expr.value)
+        elif isinstance(expr, AnalogArray):
+            # compile terms and address
+            gen_terms = [self.compile_expr(term) for term in expr.terms]
+            gen_addr = self.compile_expr(expr.addr)
 
-        if isinstance(a, AnalogSignal) and isinstance(b, AnalogSignal):
-            self.macro_call('MUL_REAL', a.name, b.name, name)
-            return AnalogSignal(name)
+            # implement the lookup table
+            return self.make_analog_array(gen_terms, gen_addr)
+        elif isinstance(expr, ListOp):
+            # compile each term
+            gen_terms = [self.compile_expr(term) for term in expr.terms]
+
+            # determine the elementwise operations
+            if isinstance(expr, Plus):
+                op = lambda a, b: self.make_plus(a, b)
+                default = lambda: self.make_analog_const(0)
+            elif isinstance(expr, Times):
+                op = lambda a, b: self.make_times(a, b)
+                default = lambda: self.make_analog_const(1)
+            elif isinstance(expr, Min):
+                op = lambda a, b: self.make_min(a, b)
+                default = lambda: self.make_analog_const(0)
+            elif isinstance(expr, Max):
+                op = lambda a, b: self.make_max(a, b)
+                default = lambda: self.make_analog_const(0)
+            else:
+                raise Exception('Invalid ListOp type.')
+
+            # implement operations in a tree
+            return tree_op(gen_terms, op=op, default=default)
+        elif isinstance(expr, BinaryOp):
+            gen_lhs = self.compile_expr(expr.lhs)
+            gen_rhs = self.compile_expr(expr.rhs)
+
+            if isinstance(expr, LessThan):
+                return self.make_less_than(gen_lhs, gen_rhs)
+            elif isinstance(expr, LessThanOrEquals):
+                return self.make_less_than_or_equals(gen_lhs, gen_rhs)
+            elif isinstance(expr, GreaterThan):
+                return self.make_greater_than(gen_lhs, gen_rhs)
+            elif isinstance(expr, GreaterThanOrEquals):
+                return self.make_greater_than_or_equals(gen_lhs, gen_rhs)
+            elif isinstance(expr, EqualTo):
+                return self.make_equal_to(gen_lhs, gen_rhs)
+            elif isinstance(expr, NotEqualTo):
+                return self.make_not_equal_to(gen_lhs, gen_rhs)
+            else:
+                raise Exception('Invalid BinaryOp type.')
+        elif isinstance(expr, Concatenate):
+            gen_terms = [self.compile_expr(term) for term in expr.terms]
+            return self.make_concatenate(gen_terms)
         else:
-            raise Exception('Invalid signal type.')
-
-    def make_plus(self, a: Signal, b: Signal):
-        name = self.tmp_name()
-
-        if isinstance(a, AnalogSignal) and isinstance(b, AnalogSignal):
-            self.macro_call('ADD_REAL', a.name, b.name, name)
-            return AnalogSignal(name)
-        else:
-            raise Exception('Invalid signal type.')
+            raise Exception('Invalid expression type.')
 
     def make_signal(self, s: Signal):
         if isinstance(s, AnalogSignal):
@@ -59,12 +104,65 @@ class VerilogGenerator(CodeGenerator):
 
     def make_mem(self, next: Signal, curr: Signal):
         if isinstance(next, AnalogSignal) and isinstance(curr, AnalogSignal):
-            self.macro_call('MEM_INTO_REAL', next.name, curr.name)
+            self.macro_call('MEM_INTO_ANALOG', next.name, curr.name, "1'b1", '0')
         elif isinstance(next, DigitalSignal) and isinstance(curr, DigitalSignal):
             assert next.width == curr.width
-            self.macro_call('MEM_INTO_DIGITAL', next.width, next.name, curr.name)
+            self.macro_call('MEM_INTO_DIGITAL', next.name, curr.name, "1'b1", '0')
         else:
             raise Exception('Invalid signal type.')
+
+    def start_module(self, name: str, ios: List[Signal]):
+        # clear default nettype to make debugging easier
+        self.default_nettype('none')
+        self.println()
+
+        # module name
+        self.write(f'module {name}')
+
+        # parameters
+        parameters = [self.param_string(io) for io in ios if isinstance(io, (AnalogInput, AnalogOutput))]
+        if len(parameters) > 0:
+            self.write(' #')
+            self.comma_separated_lines(parameters)
+
+        # ports
+        ports = [self.port_string(io) for io in ios]
+        if len(ports) > 0:
+            self.write(' ')
+            self.comma_separated_lines(ports)
+
+        # end module definition and indent
+        self.write(';' + self.line_ending)
+        self.indent()
+
+    def end_module(self):
+        self.dedent()
+        self.println('endmodule')
+        self.println()
+        self.default_nettype('wire')
+
+    #######################################################
+
+    def make_bin_op(self, macro_name: str, a: Signal, b: Signal):
+        name = self.tmp_name()
+
+        if isinstance(a, AnalogSignal) and isinstance(b, AnalogSignal):
+            self.macro_call(macro_name, a.name, b.name, name)
+            return AnalogSignal(name)
+        else:
+            raise Exception('Invalid signal type.')
+
+    def make_times(self, a: Signal, b: Signal):
+        return self.make_bin_op('MUL_REAL', a, b)
+
+    def make_plus(self, a: Signal, b: Signal):
+        return self.make_bin_op('ADD_REAL', a, b)
+
+    def make_min(self, a: Signal, b: Signal):
+        return self.make_bin_op('MIN_REAL', a, b)
+
+    def make_max(self, a: Signal, b: Signal):
+        return self.make_bin_op('MAX_REAL', a, b)
 
     def make_analog_const(self, value: Number):
         name = self.tmp_name()
@@ -129,38 +227,6 @@ class VerilogGenerator(CodeGenerator):
             # return the variable
             return out
 
-    def start_module(self, name: str, ios: List[Signal]):
-        # clear default nettype to make debugging easier
-        self.default_nettype('none')
-        self.println()
-
-        # module name
-        self.write(f'module {name}')
-
-        # parameters
-        parameters = [self.param_string(io) for io in ios if isinstance(io, (AnalogInput, AnalogOutput))]
-        if len(parameters) > 0:
-            self.write(' #')
-            self.comma_separated_lines(parameters)
-
-        # ports
-        ports = [self.port_string(io) for io in ios]
-        if len(ports) > 0:
-            self.write(' ')
-            self.comma_separated_lines(ports)
-
-        # end module definition and indent
-        self.write(';' + self.line_ending)
-        self.indent()
-
-    def end_module(self):
-        self.dedent()
-        self.println('endmodule')
-        self.println()
-        self.default_nettype('wire')
-
-    #######################################################
-
     def init_file(self):
         # clear model file
         self.clear()
@@ -173,9 +239,10 @@ class VerilogGenerator(CodeGenerator):
         self.println(f'`timescale 1ns/1ps')
         self.println()
 
-        # include real number library
+        # include required libraries
         self.include('real.sv')
         self.include('math.sv')
+        self.include('msdsl.sv')
         self.println()
 
     def make_comp(self, macro_name, lhs, rhs):

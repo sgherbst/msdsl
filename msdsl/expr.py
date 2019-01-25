@@ -81,6 +81,12 @@ class Plus(ListOp):
 class Times(ListOp):
     pass
 
+class Min(ListOp):
+    pass
+
+class Max(ListOp):
+    pass
+
 class BinaryOp(ModelExpr):
     def __init__(self, lhs, rhs):
         self.lhs = lhs

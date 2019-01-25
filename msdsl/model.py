@@ -6,7 +6,7 @@ from enum import Enum, auto
 
 from msdsl.generator import CodeGenerator
 from msdsl.expr import (Constant, AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, Signal, AnalogSignal,
-                        ModelExpr, DigitalSignal, AnalogArray)
+                        ModelExpr, AnalogArray)
 
 class AssignmentType(Enum):
     THIS_CYCLE = auto()

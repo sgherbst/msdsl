@@ -4,7 +4,7 @@ from typing import List
 from msdsl.expr import Signal
 
 class CodeGenerator(ABC):
-    def __init__(self, filename, tab_string='    ', line_ending='\n', tmp_prefix='tmp'):
+    def __init__(self, filename=None, tab_string='    ', line_ending='\n', tmp_prefix='tmp'):
         self.filename = filename
         self.tab_string = tab_string
         self.line_ending = line_ending
@@ -30,8 +30,11 @@ class CodeGenerator(ABC):
         assert self.tab_level >= 0
 
     def write(self, string='', mode='a'):
-        with open(self.filename, mode) as f:
-            f.write(string)
+        if self.filename is not None:
+            with open(self.filename, mode) as f:
+                f.write(string)
+        else:
+            print(string, end='')
 
     def println(self, line=''):
         self.write(self.tab_level*self.tab_string + line + self.line_ending)
@@ -49,6 +52,10 @@ class CodeGenerator(ABC):
 
     @abstractmethod
     def make_signal(self, s: Signal):
+        pass
+
+    @abstractmethod
+    def make_probe(self, s: Signal):
         pass
 
     @abstractmethod

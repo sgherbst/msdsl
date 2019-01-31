@@ -5,7 +5,7 @@
 `default_nettype none
 
 module mem_analog #(
-    real init = 0,
+    parameter real init = 0,
     `DECL_REAL(in),
     `DECL_REAL(out)
 ) (
@@ -30,7 +30,7 @@ module mem_analog #(
 
     // create the memory unit
 
-    always_ff @(posedge clk) begin
+    always @(posedge clk) begin
         if (rst == 1'b1) begin
             out_aligned <= init_aligned;
         end else if (cke == 1'b1) begin

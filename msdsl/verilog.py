@@ -5,11 +5,11 @@ import datetime
 from msdsl.generator import CodeGenerator
 from msdsl.expr import (AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, Signal, DigitalSignal, AnalogSignal,
                         Plus, Times, Constant, AnalogArray, BinaryOp, ListOp, LessThan, LessThanOrEquals, GreaterThan,
-                        GreaterThanOrEquals, Concatenate, EqualTo, NotEqualTo, Min, Max)
+                        GreaterThanOrEquals, Concatenate, EqualTo, NotEqualTo, Min, Max, DigitalArray, ArrayOp)
 from msdsl.util import tree_op
 
 class VerilogGenerator(CodeGenerator):
-    def __init__(self, filename, tab_string='    ', line_ending='\n'):
+    def __init__(self, filename=None, tab_string='    ', line_ending='\n'):
         super().__init__(filename=filename, tab_string=tab_string, line_ending=line_ending)
 
         # initialize model file
@@ -28,13 +28,13 @@ class VerilogGenerator(CodeGenerator):
             return expr
         elif isinstance(expr, Constant):
             return self.make_analog_const(expr.value)
-        elif isinstance(expr, AnalogArray):
+        elif isinstance(expr, ArrayOp):
             # compile terms and address
             gen_terms = [self.compile_expr(term) for term in expr.terms]
             gen_addr = self.compile_expr(expr.addr)
 
             # implement the lookup table
-            return self.make_analog_array(gen_terms, gen_addr)
+            return self.make_array(gen_terms, gen_addr)
         elif isinstance(expr, ListOp):
             # compile each term
             gen_terms = [self.compile_expr(term) for term in expr.terms]
@@ -94,6 +94,14 @@ class VerilogGenerator(CodeGenerator):
         else:
             raise Exception('Invalid signal type.')
 
+    def make_probe(self, s: Signal):
+        if isinstance(s, AnalogSignal):
+            self.macro_call('PROBE_ANALOG', s.name)
+        elif isinstance(s, DigitalSignal):
+            self.macro_call('PROBE_DIGITAL', s.name, str(s.width))
+        else:
+            raise Exception('Invalid signal type.')
+
     def make_assign(self, input_: Signal, output: Signal):
         if isinstance(input_, AnalogSignal) and isinstance(output, AnalogSignal):
             self.macro_call('ASSIGN_REAL', input_.name, output.name)
@@ -107,7 +115,7 @@ class VerilogGenerator(CodeGenerator):
             self.macro_call('MEM_INTO_ANALOG', next.name, curr.name, "1'b1", '0')
         elif isinstance(next, DigitalSignal) and isinstance(curr, DigitalSignal):
             assert next.width == curr.width
-            self.macro_call('MEM_INTO_DIGITAL', next.name, curr.name, "1'b1", '0')
+            self.macro_call('MEM_INTO_DIGITAL', next.name, curr.name, "1'b1", '0', str(next.width))
         else:
             raise Exception('Invalid signal type.')
 
@@ -199,24 +207,38 @@ class VerilogGenerator(CodeGenerator):
 
         return out
 
-    def make_analog_array(self, values: List[AnalogSignal], addr: DigitalSignal):
+    def make_array(self, values: List, addr: DigitalSignal):
         if len(values) == 0:
             raise Exception('Invalid table size.')
         elif len(values) == 1:
             return values[0]
         else:
             # declare the variable that will hold the result
-            out = AnalogSignal(name=self.tmp_name())
-            self.macro_call('MAKE_REAL', out.name, self.max_analog_range(values))
+            is_analog = all(isinstance(value, AnalogSignal) for value in values)
+            is_digital = all(isinstance(value, DigitalSignal) for value in values)
 
-            # assign values to each entry in the table
-            entries = []
-            for k, value in enumerate(values):
-                entry = out.copy_format_to(f'{out.name}_{k}')
-                entries.append(entry)
+            if is_analog and not is_digital:
+                out = AnalogSignal(name=self.tmp_name())
+                self.macro_call('MAKE_REAL', out.name, self.max_analog_range(values))
 
-                self.make_signal(entry)
-                self.make_assign(value, entry)
+                # create a signal for each entry in the table that is aligned to the output format
+                # this is important because the values may have varying binary points
+                entries = []
+                for k, value in enumerate(values):
+                    entry = out.copy_format_to(f'{out.name}_{k}')
+                    entries.append(entry)
+
+                    self.make_signal(entry)
+                    self.make_assign(value, entry)
+            elif is_digital and not is_analog:
+                # TODO: deal with varying widths of input values
+                out = DigitalSignal(name=self.tmp_name(), width=values[0].width)
+                self.make_signal(out)
+
+                # for now, all values are assumed to have the same width so realignment is not required
+                entries = values
+            else:
+                raise Exception('Invalid signal type.')
 
             # create string entries for each case
             case_entries = [(k, f'{out.name} = {entry.name}') for k, entry in enumerate(entries)]

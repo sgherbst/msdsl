@@ -114,10 +114,16 @@ class Concatenate(ModelExpr):
     def __init__(self, terms):
         self.terms = terms
 
-class AnalogArray(ModelExpr):
+class ArrayOp(ModelExpr):
     def __init__(self, terms, addr):
         self.terms = terms
         self.addr = addr
+
+class AnalogArray(ArrayOp):
+    pass
+
+class DigitalArray(ArrayOp):
+    pass
 
 class Signal(ModelExpr):
     def __init__(self, name=None):
@@ -143,6 +149,9 @@ class DigitalSignal(Signal):
         super().__init__(name=name)
         self.width=width
         self.signed=signed
+
+    def copy_format_to(self, name):
+        return DigitalSignal(name=name, width=self.width, signed=self.signed)
 
 class DigitalInput(DigitalSignal):
     pass

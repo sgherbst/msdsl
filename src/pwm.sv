@@ -49,7 +49,7 @@ module pwm #(
     // create the memory unit
     logic state;
 
-    always_ff @(posedge clk) begin
+    always @(posedge clk) begin
         if (rst == 1'b1) begin
             state <= 1'b0;
             time_accum <= 0;

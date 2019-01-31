@@ -19,7 +19,7 @@ module mem_digital #(
 
     // create the memory unit
 
-    always_ff @(posedge clk) begin
+    always @(posedge clk) begin
         if (rst == 1'b1) begin
             state <= init;
         end else if (cke == 1'b1) begin

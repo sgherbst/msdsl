@@ -6,7 +6,7 @@ from enum import Enum, auto
 
 from msdsl.generator import CodeGenerator
 from msdsl.expr import (Constant, AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, Signal, AnalogSignal,
-                        ModelExpr, AnalogArray)
+                        ModelExpr, AnalogArray, DigitalArray)
 
 class AssignmentType(Enum):
     THIS_CYCLE = auto()
@@ -36,11 +36,17 @@ class MixedSignalModel:
         # expressions used to assign internal and external signals
         self.assignments = []
 
+        # probe signals
+        self.probes = []
+
     def __getattr__(self, item):
         return self.signals[item]
 
     def add_signal(self, signal: Signal):
         self.signals[signal.name] = signal
+
+    def add_probe(self, signal: Signal):
+        self.probes.append(signal)
 
     def set_next_cycle(self, signal: Signal, expr: ModelExpr):
         self.assignments.append(Assignment(signal, expr, AssignmentType.NEXT_CYCLE))
@@ -69,6 +75,9 @@ class MixedSignalModel:
 
         # assign the appropriate value to signal
         self.set_next_cycle(signal, AnalogArray(terms, addr))
+
+    def set_state_machine(self, signal: Signal, cases: List):
+        self.set_next_cycle(signal, DigitalArray(cases, signal))
 
     def set_tf(self, output, input_, tf):
         # discretize transfer function
@@ -131,6 +140,10 @@ class MixedSignalModel:
                 gen.make_mem(update_signal, assignment.signal)
             else:
                 raise Exception('Invalid assignment type.')
+
+        # add probe signals
+        for signal in self.probes:
+            gen.make_probe(signal)
 
         # end module
         gen.end_module()

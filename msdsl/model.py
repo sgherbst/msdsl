@@ -1,3 +1,6 @@
+import numpy as np
+import scipy.linalg
+
 from typing import List
 from scipy.signal import cont2discrete
 from collections import OrderedDict
@@ -47,6 +50,46 @@ class MixedSignalModel:
 
     def add_probe(self, signal: Signal):
         self.probes.append(signal)
+
+    def add_lds(self, sys, inputs=None, states=None, outputs=None):
+        # extract matrices
+        A, B, C, D = sys
+
+        # compute coefficients
+        A_tilde = scipy.linalg.expm(self.dt*A)
+        B_tilde = np.linalg.solve(A, (A_tilde-np.eye(*A.shape)).dot(B))
+
+        # add discrete-time equation for state update
+        sys_tilde = (A_tilde, B_tilde, C, D)
+        print(sys_tilde)
+        self.add_discrete_time_eqn(sys_tilde, inputs=inputs, states=states, outputs=outputs)
+
+    def add_discrete_time_eqn(self, sys, inputs=None, states=None, outputs=None):
+        # set defaults
+        inputs = inputs if inputs is not None else []
+        states = states if states is not None else []
+        outputs = outputs if outputs is not None else []
+
+        # extract matrices
+        A, B, C, D = sys
+
+        # state updates
+        for row, _ in enumerate(states):
+            expr = 0
+            for col, _ in enumerate(states):
+                expr = expr + float(A[row, col])*states[col]
+            for col, _ in enumerate(inputs):
+                expr = expr + float(B[row, col])*inputs[col]
+            self.set_next_cycle(states[row], expr)
+
+        # output updates
+        for row, _ in enumerate(outputs):
+            expr = 0
+            for col, _ in enumerate(states):
+                expr = expr + float(C[row, col])*states[col]
+            for col, _ in enumerate(inputs):
+                expr = expr + float(D[row, col])*inputs[col]
+            self.set_this_cycle(outputs[row], expr)
 
     def set_next_cycle(self, signal: Signal, expr: ModelExpr):
         self.assignments.append(Assignment(signal, expr, AssignmentType.NEXT_CYCLE))

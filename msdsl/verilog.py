@@ -106,7 +106,7 @@ class VerilogGenerator(CodeGenerator):
         if isinstance(input_, AnalogSignal) and isinstance(output, AnalogSignal):
             self.macro_call('ASSIGN_REAL', input_.name, output.name)
         elif isinstance(input_, DigitalSignal) and isinstance(output, DigitalSignal):
-            self.println(f'assign {input_.name} = {output.name};')
+            self.println(f'assign {output.name} = {input_.name};')
         else:
             raise Exception('Invalid signal type.')
 

@@ -29,9 +29,11 @@ class VerilogGenerator(CodeGenerator):
         elif isinstance(expr, Constant):
             return self.make_analog_const(expr.value)
         elif isinstance(expr, ArrayOp):
-            # compile terms and address
+            # compile terms
             gen_terms = [self.compile_expr(term) for term in expr.terms]
-            gen_addr = self.compile_expr(expr.addr)
+
+            # compile address
+            gen_addr = self.compile_expr(expr.addr) if expr.addr is not None else None
 
             # implement the lookup table
             return self.make_array(gen_terms, gen_addr)
@@ -79,7 +81,7 @@ class VerilogGenerator(CodeGenerator):
             gen_terms = [self.compile_expr(term) for term in expr.terms]
             return self.make_concatenate(gen_terms)
         else:
-            raise Exception('Invalid expression type.')
+            raise Exception(f'Invalid expression type: {type(expr)}')
 
     def make_signal(self, s: Signal):
         if isinstance(s, AnalogSignal):
@@ -250,9 +252,6 @@ class VerilogGenerator(CodeGenerator):
             return out
 
     def init_file(self):
-        # clear model file
-        self.clear()
-
         # print header
         self.comment(f'Model generated on {datetime.datetime.now()}')
         self.println()

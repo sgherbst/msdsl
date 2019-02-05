@@ -45,7 +45,6 @@ def eqn_sys_to_lds(eqns=None, internals=None, inputs=None, outputs=None, states=
         eqn = eqn.lhs - eqn.rhs
         eqn = subst_deriv(eqn)
         eqn = simplify(eqn)
-        print(eqn)
 
         for term in eqn.terms:
             if isinstance(term, AnalogSignal):

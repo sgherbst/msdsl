@@ -1,4 +1,4 @@
-from msdsl.expr import Constant, ListOp, Plus, Times, Signal
+from msdsl.expr import Constant, ListOp, Plus, Times, Signal, AnalogArray
 
 def expand_list_op_terms(expr: ListOp):
     terms = []
@@ -115,7 +115,9 @@ def simplify(expr):
 
     if isinstance(expr, Times):
         # if any of the terms in the product are a constant zero, set the result to a constant zero
-        if any(isinstance(term, Constant) and term.value==0 for term in expr.terms):
+        if any((isinstance(term, Constant) and term.value==0) or
+               (isinstance(term, AnalogArray) and all(elem==0 for elem in term.terms))
+               for term in expr.terms):
             expr = Constant(0)
 
     if isinstance(expr, Times):

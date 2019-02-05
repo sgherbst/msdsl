@@ -9,8 +9,10 @@ from enum import Enum, auto
 
 from msdsl.generator import CodeGenerator
 from msdsl.expr import (Constant, AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, Signal, AnalogSignal,
-                        ModelExpr, AnalogArray, DigitalArray)
+                        ModelExpr, AnalogArray, DigitalArray, Concatenate)
 from msdsl.eqnsys import eqn_sys_to_lds
+from msdsl.optimize import simplify
+from msdsl.cases import subst_case, addr2settings
 
 class AssignmentType(Enum):
     THIS_CYCLE = auto()
@@ -52,48 +54,86 @@ class MixedSignalModel:
     def add_probe(self, signal: Signal):
         self.probes.append(signal)
 
-    def add_eqn_sys(self, eqns=None, internals=None, inputs=None, states=None, outputs=None):
-        A, B, C, D = eqn_sys_to_lds(eqns=eqns, internals=internals, inputs=inputs, states=states, outputs=outputs)
+    def add_eqn_sys(self, eqns=None, internals=None, inputs=None, states=None, outputs=None, sel_bits=None):
+        # set defaults
+        if sel_bits is None:
+            sel_bits = []
 
-        self.add_lds(sys=(A, B, C, D), inputs=inputs, states=states, outputs=outputs)
+        # initialize lists of matrices
+        A_list, B_list, C_list, D_list = [], [], [], []
 
-    def add_lds(self, sys, inputs=None, states=None, outputs=None):
+        # iterate over all of the bit combinations
+        for k in range(2**len(sel_bits)):
+            # substitute values for this particular setting
+            sel_bit_settings = addr2settings(k, sel_bits)
+            eqns_k = [subst_case(eqn, sel_bit_settings) for eqn in eqns]
+
+            # convert system of equations to a linear dynamical system
+            lds = eqn_sys_to_lds(eqns=eqns_k, internals=internals, inputs=inputs, states=states, outputs=outputs)
+
+            # discretize linear dynamical system
+            lds = self.discretize_lds(lds)
+
+            # add to matrix list
+            A_list.append(lds[0])
+            B_list.append(lds[1])
+            C_list.append(lds[2])
+            D_list.append(lds[3])
+
+        # stack matrices
+        A = np.stack(A_list, axis=2) if all(mat is not None for mat in A_list) else None
+        B = np.stack(B_list, axis=2) if all(mat is not None for mat in B_list) else None
+        C = np.stack(C_list, axis=2) if all(mat is not None for mat in C_list) else None
+        D = np.stack(D_list, axis=2) if all(mat is not None for mat in D_list) else None
+        lds = [A, B, C, D]
+
+        # construct address for selection
+        if len(sel_bits) > 0:
+            sel = Concatenate(sel_bits)
+        else:
+            sel = None
+
+        # add the discrete-time equation
+        self.add_discrete_time_lds(lds=lds, inputs=inputs, states=states, outputs=outputs, sel=sel)
+
+    def discretize_lds(self, sys):
         # extract matrices
         A, B, C, D = sys
 
         # compute coefficients
-        A_tilde = scipy.linalg.expm(self.dt*A)
-        B_tilde = np.linalg.solve(A, (A_tilde-np.eye(*A.shape)).dot(B))
+        A_tilde = scipy.linalg.expm(self.dt*A) if A is not None else None
+        B_tilde = np.linalg.solve(A, (A_tilde-np.eye(*A.shape)).dot(B)) if (A is not None) and (B is not None) else None
+        C_tilde = C.copy() if C is not None else None
+        D_tilde = D.copy() if D is not None else None
 
-        # add discrete-time equation for state update
-        sys_tilde = (A_tilde, B_tilde, C, D)
-        self.add_discrete_time_eqn(sys_tilde, inputs=inputs, states=states, outputs=outputs)
+        # return discretized system
+        return (A_tilde, B_tilde, C_tilde, D_tilde)
 
-    def add_discrete_time_eqn(self, sys, inputs=None, states=None, outputs=None):
+    def add_discrete_time_lds(self, lds, inputs=None, states=None, outputs=None, sel=None):
         # set defaults
         inputs = inputs if inputs is not None else []
         states = states if states is not None else []
         outputs = outputs if outputs is not None else []
 
         # extract matrices
-        A, B, C, D = sys
+        A, B, C, D = lds
 
         # state updates
         for row, _ in enumerate(states):
             expr = 0
             for col, _ in enumerate(states):
-                expr = expr + float(A[row, col])*states[col]
+                expr = expr + AnalogArray(A[row, col, :], sel)*states[col]
             for col, _ in enumerate(inputs):
-                expr = expr + float(B[row, col])*inputs[col]
+                expr = expr + AnalogArray(B[row, col, :], sel)*inputs[col]
             self.set_next_cycle(states[row], expr)
 
         # output updates
         for row, _ in enumerate(outputs):
             expr = 0
             for col, _ in enumerate(states):
-                expr = expr + float(C[row, col])*states[col]
+                expr = expr + AnalogArray(C[row, col, :], sel)*states[col]
             for col, _ in enumerate(inputs):
-                expr = expr + float(D[row, col])*inputs[col]
+                expr = expr + AnalogArray(D[row, col, :], sel)*inputs[col]
             self.set_this_cycle(outputs[row], expr)
 
     def set_next_cycle(self, signal: Signal, expr: ModelExpr):
@@ -101,31 +141,6 @@ class MixedSignalModel:
 
     def set_this_cycle(self, signal: Signal, expr: ModelExpr):
         self.assignments.append(Assignment(signal, expr, AssignmentType.THIS_CYCLE))
-
-    def discretize_diff_eq(self, signal: Signal, deriv_expr: ModelExpr):
-        return self.dt*deriv_expr + signal
-
-    def set_deriv(self, signal: Signal, deriv_expr: ModelExpr):
-        self.set_next_cycle(signal, self.discretize_diff_eq(signal, deriv_expr))
-
-    def set_dynamics_cases(self, signal: Signal, cases: List, addr: ModelExpr):
-        # create list of potential values to be assigned to signal in the next cycle
-        terms = []
-        for type, case_expr in cases:
-            if type == 'diff_eq':
-                term = self.discretize_diff_eq(signal, case_expr)
-            elif type == 'equals':
-                term = case_expr
-            else:
-                raise Exception('Invalid dynamics type.')
-
-            terms.append(term)
-
-        # assign the appropriate value to signal
-        self.set_next_cycle(signal, AnalogArray(terms, addr))
-
-    def set_state_machine(self, signal: Signal, cases: List):
-        self.set_next_cycle(signal, DigitalArray(cases, signal))
 
     def set_tf(self, output, input_, tf):
         # discretize transfer function
@@ -195,3 +210,6 @@ class MixedSignalModel:
 
         # end module
         gen.end_module()
+
+        # dump model to file
+        gen.dump_to_file()

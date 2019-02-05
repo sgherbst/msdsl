@@ -86,7 +86,7 @@ class Deriv(ModelExpr):
 
 class ListOp(ModelExpr):
     def __init__(self, terms: List[ModelExpr]):
-        self.terms = terms
+        self.terms = list(terms)
 
     @staticmethod
     def func(terms):
@@ -182,6 +182,18 @@ class Concatenate(ModelExpr):
 
     def __str__(self):
         return '{' + ', '.join(str(term) for term in self.terms) + '}'
+
+class Case(ModelExpr):
+    def __init__(self, terms, sel_bits):
+        self.terms = terms
+        self.sel_bits = sel_bits
+
+    def settings2term(self, sel_bit_settings):
+        return self.terms[self.settings2addr(sel_bit_settings)]
+
+    def settings2addr(self, sel_bit_settings):
+        bit_str = ''.join([str(sel_bit_settings[sel_bit.name]) for sel_bit in self.sel_bits])
+        return int(bit_str, 2)
 
 class ArrayOp(ModelExpr):
     def __init__(self, terms, addr):

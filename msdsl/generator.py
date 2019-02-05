@@ -5,6 +5,7 @@ from msdsl.expr import Signal
 
 class CodeGenerator(ABC):
     def __init__(self, filename=None, tab_string='    ', line_ending='\n', tmp_prefix='tmp'):
+        # save settings
         self.filename = filename
         self.tab_string = tab_string
         self.line_ending = line_ending
@@ -13,6 +14,7 @@ class CodeGenerator(ABC):
         # initialize variables
         self.tab_level = 0
         self.tmp_counter = 0
+        self.text = ''
 
     # concrete functions
 
@@ -29,18 +31,15 @@ class CodeGenerator(ABC):
         self.tab_level -= 1
         assert self.tab_level >= 0
 
-    def write(self, string='', mode='a'):
-        if self.filename is not None:
-            with open(self.filename, mode) as f:
-                f.write(string)
-        else:
-            print(string, end='')
+    def write(self, string=''):
+        self.text += string
 
     def println(self, line=''):
         self.write(self.tab_level*self.tab_string + line + self.line_ending)
 
-    def clear(self):
-        self.write(mode='w')
+    def dump_to_file(self):
+        with open(self.filename, 'w') as f:
+            f.write(self.text)
 
     ###############################
     # abstract methods

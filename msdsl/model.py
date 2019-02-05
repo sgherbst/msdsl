@@ -10,6 +10,7 @@ from enum import Enum, auto
 from msdsl.generator import CodeGenerator
 from msdsl.expr import (Constant, AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, Signal, AnalogSignal,
                         ModelExpr, AnalogArray, DigitalArray)
+from msdsl.eqnsys import eqn_sys_to_lds
 
 class AssignmentType(Enum):
     THIS_CYCLE = auto()
@@ -51,6 +52,11 @@ class MixedSignalModel:
     def add_probe(self, signal: Signal):
         self.probes.append(signal)
 
+    def add_eqn_sys(self, eqns=None, internals=None, inputs=None, states=None, outputs=None):
+        A, B, C, D = eqn_sys_to_lds(eqns=eqns, internals=internals, inputs=inputs, states=states, outputs=outputs)
+
+        self.add_lds(sys=(A, B, C, D), inputs=inputs, states=states, outputs=outputs)
+
     def add_lds(self, sys, inputs=None, states=None, outputs=None):
         # extract matrices
         A, B, C, D = sys
@@ -61,7 +67,6 @@ class MixedSignalModel:
 
         # add discrete-time equation for state update
         sys_tilde = (A_tilde, B_tilde, C, D)
-        print(sys_tilde)
         self.add_discrete_time_eqn(sys_tilde, inputs=inputs, states=states, outputs=outputs)
 
     def add_discrete_time_eqn(self, sys, inputs=None, states=None, outputs=None):

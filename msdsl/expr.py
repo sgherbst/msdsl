@@ -67,25 +67,85 @@ class ModelExpr:
     def __ne__(self, other):
         return self.handle_comp(other, NotEqualTo)
 
+    def __pos__(self):
+        return self
+
 class Constant(ModelExpr):
     def __init__(self, value: Number):
         self.value = value
+
+    def __str__(self):
+        return str(self.value)
+
+class Deriv(ModelExpr):
+    def __init__(self, expr: ModelExpr):
+        self.expr = expr
+
+    def __str__(self):
+        return 'D(' + str(self.expr) + ')'
 
 class ListOp(ModelExpr):
     def __init__(self, terms: List[ModelExpr]):
         self.terms = terms
 
+    @staticmethod
+    def func(terms):
+        raise NotImplementedError
+
+    @property
+    def identity(self):
+        raise NotImplementedError
+
 class Plus(ListOp):
-    pass
+    @staticmethod
+    def func(terms):
+        return sum(terms)
+
+    @property
+    def identity(self):
+        return 0
+
+    def __str__(self):
+        return '(' + '+'.join(str(term) for term in self.terms) + ')'
 
 class Times(ListOp):
-    pass
+    @staticmethod
+    def func(terms):
+        retval = 1
+        for term in terms:
+            retval *= term
+        return retval
+
+    @property
+    def identity(self):
+        return 1
+
+    def __str__(self):
+        return '(' + '*'.join(str(term) for term in self.terms) + ')'
 
 class Min(ListOp):
-    pass
+    @staticmethod
+    def func(terms):
+        return min(*terms)
+
+    @property
+    def identity(self):
+        return +float('inf')
+
+    def __str__(self):
+        return 'min(' + ', '.join(str(term) for term in self.terms) + ')'
 
 class Max(ListOp):
-    pass
+    @staticmethod
+    def func(terms):
+        return max(*terms)
+
+    @property
+    def identity(self):
+        return -float('inf')
+
+    def __str__(self):
+        return 'max(' + ', '.join(str(term) for term in self.terms) + ')'
 
 class BinaryOp(ModelExpr):
     def __init__(self, lhs, rhs):
@@ -93,26 +153,35 @@ class BinaryOp(ModelExpr):
         self.rhs = rhs
 
 class LessThan(BinaryOp):
-    pass
+    def __str__(self):
+        return f'({self.lhs} < {self.rhs})'
 
 class LessThanOrEquals(BinaryOp):
-    pass
+    def __str__(self):
+        return f'({self.lhs} <= {self.rhs})'
 
 class GreaterThan(BinaryOp):
-    pass
+    def __str__(self):
+        return f'({self.lhs} > {self.rhs})'
 
 class GreaterThanOrEquals(BinaryOp):
-    pass
+    def __str__(self):
+        return f'({self.lhs} >= {self.rhs})'
 
 class EqualTo(BinaryOp):
-    pass
+    def __str__(self):
+        return f'({self.lhs} == {self.rhs})'
 
 class NotEqualTo(BinaryOp):
-    pass
+    def __str__(self):
+        return f'({self.lhs} != {self.rhs})'
 
 class Concatenate(ModelExpr):
     def __init__(self, terms):
         self.terms = terms
+
+    def __str__(self):
+        return '{' + ', '.join(str(term) for term in self.terms) + '}'
 
 class ArrayOp(ModelExpr):
     def __init__(self, terms, addr):
@@ -128,6 +197,9 @@ class DigitalArray(ArrayOp):
 class Signal(ModelExpr):
     def __init__(self, name=None):
         self.name = name
+
+    def __str__(self):
+        return self.name
 
 class AnalogSignal(Signal):
     def __init__(self, name=None, range=None, copy_format_from=None):

@@ -49,6 +49,7 @@ class MixedSignalModel:
         return self.signals[item]
 
     def add_signal(self, signal: Signal):
+        assert signal.name not in self.signals
         self.signals[signal.name] = signal
 
     def add_probe(self, signal: Signal):

@@ -29,14 +29,22 @@ class VerilogGenerator(CodeGenerator):
         elif isinstance(expr, Constant):
             return self.make_analog_const(expr.value)
         elif isinstance(expr, ArrayOp):
-            # compile terms
-            gen_terms = [self.compile_expr(term) for term in expr.terms]
-
             # compile address
             gen_addr = self.compile_expr(expr.addr) if expr.addr is not None else None
 
+            # check the array type
+            if isinstance(expr, DigitalArray):
+                array_type = 'digital'
+                assert all(term in [0, 1] for term in expr.terms), "Only binary values are allowed in DigitalArrays at the moment."
+                gen_terms = [self.make_digital_const(term) for term in expr.terms]
+            elif isinstance(expr, AnalogArray):
+                array_type = 'analog'
+                gen_terms = [self.compile_expr(term) for term in expr.terms]
+            else:
+                raise Exception('Invalid array type.')
+
             # implement the lookup table
-            return self.make_array(gen_terms, gen_addr)
+            return self.make_array(gen_terms, gen_addr, array_type=array_type)
         elif isinstance(expr, ListOp):
             # compile each term
             gen_terms = [self.compile_expr(term) for term in expr.terms]
@@ -179,6 +187,13 @@ class VerilogGenerator(CodeGenerator):
         self.macro_call('MAKE_CONST_REAL', self.real2str(value), name)
         return AnalogSignal(name)
 
+    def make_digital_const(self, value: Number):
+        # TODO: allow multi-bit constants
+        name = self.tmp_name()
+        self.println(f'logic {name};')
+        self.println(f'assign {name} = {value};')
+        return DigitalSignal(name)
+
     def make_less_than(self, lhs, rhs):
         return self.make_comp('LT_REAL', lhs, rhs)
 
@@ -209,17 +224,13 @@ class VerilogGenerator(CodeGenerator):
 
         return out
 
-    def make_array(self, values: List, addr: DigitalSignal):
+    def make_array(self, values: List, addr: DigitalSignal, array_type: str):
         if len(values) == 0:
             raise Exception('Invalid table size.')
         elif len(values) == 1:
             return values[0]
         else:
-            # declare the variable that will hold the result
-            is_analog = all(isinstance(value, AnalogSignal) for value in values)
-            is_digital = all(isinstance(value, DigitalSignal) for value in values)
-
-            if is_analog and not is_digital:
+            if array_type == 'analog':
                 out = AnalogSignal(name=self.tmp_name())
                 self.macro_call('MAKE_REAL', out.name, self.max_analog_range(values))
 
@@ -232,7 +243,7 @@ class VerilogGenerator(CodeGenerator):
 
                     self.make_signal(entry)
                     self.make_assign(value, entry)
-            elif is_digital and not is_analog:
+            elif array_type == 'digital':
                 # TODO: deal with varying widths of input values
                 out = DigitalSignal(name=self.tmp_name(), width=values[0].width)
                 self.make_signal(out)

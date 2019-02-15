@@ -1,8 +1,8 @@
-``timescale 1ns / 1ps
+`timescale 1ns / 1ps
 
 `default_nettype none
 
-module edge_det #(
+module edge_det_msdsl #(
 	parameter init = 0,
     parameter active = 1
 ) (
@@ -23,7 +23,7 @@ module edge_det #(
 	end
 
 	// output assignment
-	assign out = (last == (~active)) && (in == active) ? 1'b1 : 1'b0;
+	assign out = ((last == (1-active)) && (in == active)) ? 1'b1 : 1'b0;
                         
 endmodule
 

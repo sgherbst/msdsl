@@ -145,10 +145,10 @@
         `PWM_INTO(duty_expr, freq_expr, out_name)
 
     `define EDGE_DET_INTO(in_name, out_name, active_expr, init_expr) \
-        edge_det #( \
-            .init(init_expr) \
+        edge_det_msdsl #( \
+            .init(init_expr), \
             .active(active_expr) \
-        ) posedge_det_``out_name``_i( \
+        ) edge_det_msdsl_``out_name``_i ( \
             .in(in_name), \
             .out(out_name), \
             .clk(`CLK_MSDSL), \

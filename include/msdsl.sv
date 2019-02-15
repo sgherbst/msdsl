@@ -127,7 +127,6 @@
 
     // Other macros
 
-
     `define PWM_INTO(duty_expr, freq_expr, out_name) \
         `MAKE_CONST_REAL(`DT_MSDSL, dt_``out_name``); \
         pwm #( \
@@ -145,4 +144,30 @@
         logic out_name; \
         `PWM_INTO(duty_expr, freq_expr, out_name)
 
+    `define EDGE_DET_INTO(in_name, out_name, active_expr, init_expr) \
+        edge_det #( \
+            .init(init_expr) \
+            .active(active_expr) \
+        ) posedge_det_``out_name``_i( \
+            .in(in_name), \
+            .out(out_name), \
+            .clk(`CLK_MSDSL), \
+            .rst(`RST_MSDSL) \
+        )
+
+    `define EDGE_DET(in_name, out_name, active_expr, init_expr) \
+        logic out_name; \
+        `EDGE_DET_INTO(in_name, out_name, active_expr, init_expr)
+
+    `define POSEDGE_INTO(in_name, out_name) \
+        `EDGE_DET_INTO(in_name, out_name, 1, 0)
+
+    `define POSEDGE(in_name, out_name) \
+        `EDGE_DET(in_name, out_name, 1, 0)
+
+    `define NEGEDGE_INTO(in_name, out_name) \
+        `EDGE_DET_INTO(in_name, out_name, 0, 1)
+
+    `define NEGEDGE(in_name, out_name) \
+        `EDGE_DET(in_name, out_name, 0, 1)
 `endif

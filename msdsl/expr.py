@@ -41,6 +41,20 @@ class ModelExpr:
     def __rsub__(self, other):
         return (-self).__add__(other)
 
+    # binary operations
+
+    def __invert__(self):
+        return BitwiseInv(self)
+
+    def __and__(self, other):
+        return BitwiseAnd(self, other)
+
+    def __or__(self, other):
+        return BitwiseOr(self, other)
+
+    def __xor__(self, other):
+        return BitwiseXor(self, other)
+
     # comparisons
 
     def handle_comp(self, other, op_cls):
@@ -147,10 +161,30 @@ class Max(ListOp):
     def __str__(self):
         return 'max(' + ', '.join(str(term) for term in self.terms) + ')'
 
+class UnaryOp(ModelExpr):
+    def __init__(self, term):
+        self.term = term
+
+class BitwiseInv(UnaryOp):
+    def __str__(self):
+        return f'(~{self.term})'
+
 class BinaryOp(ModelExpr):
     def __init__(self, lhs, rhs):
         self.lhs = lhs
         self.rhs = rhs
+
+class BitwiseAnd(BinaryOp):
+    def __str__(self):
+        return f'({self.lhs} & {self.rhs})'
+
+class BitwiseOr(BinaryOp):
+    def __str__(self):
+        return f'({self.lhs} | {self.rhs})'
+
+class BitwiseXor(BinaryOp):
+    def __str__(self):
+        return f'({self.lhs} ^ {self.rhs})'
 
 class LessThan(BinaryOp):
     def __str__(self):

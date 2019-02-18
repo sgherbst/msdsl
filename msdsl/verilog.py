@@ -5,7 +5,8 @@ import datetime
 from msdsl.generator import CodeGenerator
 from msdsl.expr import (AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, Signal, DigitalSignal, AnalogSignal,
                         Plus, Times, Constant, AnalogArray, BinaryOp, ListOp, LessThan, LessThanOrEquals, GreaterThan,
-                        GreaterThanOrEquals, Concatenate, EqualTo, NotEqualTo, Min, Max, DigitalArray, ArrayOp)
+                        GreaterThanOrEquals, Concatenate, EqualTo, NotEqualTo, Min, Max, DigitalArray, ArrayOp,
+                        BitwiseAnd, BitwiseInv, BitwiseOr, BitwiseXor, UnaryOp)
 from msdsl.util import tree_op
 
 class VerilogGenerator(CodeGenerator):
@@ -67,11 +68,24 @@ class VerilogGenerator(CodeGenerator):
 
             # implement operations in a tree
             return tree_op(gen_terms, op=op, default=default)
+        elif isinstance(expr, UnaryOp):
+            gen_term = self.compile_expr(expr.term)
+
+            if isinstance(expr, BitwiseInv):
+                return self.make_bitwise_op('~', [gen_term])
+            else:
+                raise Exception('Invalid UnaryOp type.')
         elif isinstance(expr, BinaryOp):
             gen_lhs = self.compile_expr(expr.lhs)
             gen_rhs = self.compile_expr(expr.rhs)
 
-            if isinstance(expr, LessThan):
+            if isinstance(expr, BitwiseAnd):
+                return self.make_bitwise_op('&', [gen_lhs, gen_rhs])
+            elif isinstance(expr, BitwiseOr):
+                return self.make_bitwise_op('|', [gen_lhs, gen_rhs])
+            elif isinstance(expr, BitwiseXor):
+                return self.make_bitwise_op('^', [gen_lhs, gen_rhs])
+            elif isinstance(expr, LessThan):
                 return self.make_less_than(gen_lhs, gen_rhs)
             elif isinstance(expr, LessThanOrEquals):
                 return self.make_less_than_or_equals(gen_lhs, gen_rhs)
@@ -281,6 +295,23 @@ class VerilogGenerator(CodeGenerator):
         name = self.tmp_name()
         self.macro_call(macro_name, lhs.name, rhs.name, name)
         return DigitalSignal(name)
+
+    def make_bitwise_op(self, op, terms):
+        # construct the expression
+        if len(terms) == 1:
+            value_str = f'{op}{terms[0]}'
+        elif len(terms) == 2:
+            value_str = f'{terms[0]}{op}{terms[1]}'
+        else:
+            raise Exception(f'Invalid number of terms for bitwise op: {len(terms)}')
+
+        # declare output signal and assign its value
+        result = DigitalSignal(self.tmp_name(), width=max(term.width for term in terms))
+        self.println(f'{self.digital_type_string(result)} {result.name};')
+        self.println(f'assign {result.name} = {value_str};')
+
+        # return resulting signal
+        return result
 
     def include(self, file):
         self.println(f'`include "{file}"')

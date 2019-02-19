@@ -1,5 +1,5 @@
 from typing import List
-from numbers import Number
+from numbers import Number, Integral
 
 class ModelExpr:
     # addition and multiplication
@@ -90,6 +90,17 @@ class Constant(ModelExpr):
 
     def __str__(self):
         return str(self.value)
+
+class DigitalConstant(ModelExpr):
+    def __init__(self, value: Integral, width: Integral = 1, signed: bool = False):
+        self.value = value
+        self.width = width
+        self.signed = signed
+
+    def __str__(self):
+        sign_str = '-' if self.value < 0 else ''
+        is_signed_str = 's' if self.signed else ''
+        return str(f"{sign_str}{self.width}'{is_signed_str}d{abs(self.value)}")
 
 class Deriv(ModelExpr):
     def __init__(self, expr: ModelExpr):
@@ -238,6 +249,16 @@ class AnalogArray(ArrayOp):
     pass
 
 class DigitalArray(ArrayOp):
+    pass
+
+class CaseExpr(ModelExpr):
+    def __init__(self, cases):
+        self.cases = cases
+
+class AnalogCases(CaseExpr):
+    pass
+
+class DigitalCases(CaseExpr):
     pass
 
 class Signal(ModelExpr):

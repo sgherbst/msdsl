@@ -6,7 +6,8 @@ from msdsl.generator import CodeGenerator
 from msdsl.expr import (AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, Signal, DigitalSignal, AnalogSignal,
                         Plus, Times, Constant, AnalogArray, BinaryOp, ListOp, LessThan, LessThanOrEquals, GreaterThan,
                         GreaterThanOrEquals, Concatenate, EqualTo, NotEqualTo, Min, Max, DigitalArray, ArrayOp,
-                        BitwiseAnd, BitwiseInv, BitwiseOr, BitwiseXor, UnaryOp)
+                        BitwiseAnd, BitwiseInv, BitwiseOr, BitwiseXor, UnaryOp, DigitalConstant, DigitalCases,
+                        CaseExpr, AnalogCases)
 from msdsl.util import tree_op
 
 class VerilogGenerator(CodeGenerator):
@@ -29,20 +30,37 @@ class VerilogGenerator(CodeGenerator):
             return expr
         elif isinstance(expr, Constant):
             return self.make_analog_const(expr.value)
+        elif isinstance(expr, DigitalConstant):
+            return self.make_digital_const(expr)
+        # elif isinstance(expr, CaseExpr):
+        #     addr_bits = [self.compile_expr(case[0]) for case in expr.cases]
+        #     unique_values = [self.compile_expr(case[1]) for case in expr.cases]
+        #
+        #     terms = ...
+        #
+        #     # check the array type
+        #     if isinstance(expr, DigitalCases):
+        #         array_cls = DigitalArray
+        #     elif isinstance(expr, AnalogCases):
+        #         array_cls = AnalogArray
+        #     else:
+        #         raise Exception(f'Invalid ArrayOp: {type(expr)}')
+        #
+        #     return self.compile_expr(array_cls(terms=terms, addr=Concatenate(addr_bits)))
         elif isinstance(expr, ArrayOp):
             # compile address
             gen_addr = self.compile_expr(expr.addr) if expr.addr is not None else None
 
+            # compile terms
+            gen_terms = [self.compile_expr(term) for term in expr.terms]
+
             # check the array type
             if isinstance(expr, DigitalArray):
                 array_type = 'digital'
-                assert all(term in [0, 1] for term in expr.terms), "Only binary values are allowed in DigitalArrays at the moment."
-                gen_terms = [self.make_digital_const(term) for term in expr.terms]
             elif isinstance(expr, AnalogArray):
                 array_type = 'analog'
-                gen_terms = [self.compile_expr(term) for term in expr.terms]
             else:
-                raise Exception('Invalid array type.')
+                raise Exception(f'Invalid ArrayOp: {type(expr)}')
 
             # implement the lookup table
             return self.make_array(gen_terms, gen_addr, array_type=array_type)
@@ -201,11 +219,10 @@ class VerilogGenerator(CodeGenerator):
         self.macro_call('MAKE_CONST_REAL', self.real2str(value), name)
         return AnalogSignal(name)
 
-    def make_digital_const(self, value: Number):
-        # TODO: allow multi-bit constants
+    def make_digital_const(self, digital_constant):
         name = self.tmp_name()
-        self.println(f'logic {name};')
-        self.println(f'assign {name} = {value};')
+        self.println(f'{self.digital_type_string(digital_constant)} {name};')
+        self.println(f'assign {name} = {str(digital_constant)};')
         return DigitalSignal(name)
 
     def make_less_than(self, lhs, rhs):

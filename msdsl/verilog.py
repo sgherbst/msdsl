@@ -54,16 +54,12 @@ class VerilogGenerator(CodeGenerator):
             # compile terms
             gen_terms = [self.compile_expr(term) for term in expr.terms]
 
-            # check the array type
-            if isinstance(expr, DigitalArray):
-                array_type = 'digital'
-            elif isinstance(expr, AnalogArray):
-                array_type = 'analog'
-            else:
-                raise Exception(f'Invalid ArrayOp: {type(expr)}')
+            # update expression properties
+            expr.addr = gen_addr
+            expr.terms = gen_terms
 
             # implement the lookup table
-            return self.make_array(gen_terms, gen_addr, array_type=array_type)
+            return self.make_array(expr)
         elif isinstance(expr, ListOp):
             # compile each term
             gen_terms = [self.compile_expr(term) for term in expr.terms]
@@ -223,7 +219,7 @@ class VerilogGenerator(CodeGenerator):
         name = self.tmp_name()
         self.println(f'{self.digital_type_string(digital_constant)} {name};')
         self.println(f'assign {name} = {str(digital_constant)};')
-        return DigitalSignal(name)
+        return DigitalSignal(name, width=digital_constant.width)
 
     def make_less_than(self, lhs, rhs):
         return self.make_comp('LT_REAL', lhs, rhs)
@@ -255,39 +251,40 @@ class VerilogGenerator(CodeGenerator):
 
         return out
 
-    def make_array(self, values: List, addr: DigitalSignal, array_type: str):
-        if len(values) == 0:
+    def make_array(self, array):
+        if len(array.terms) == 0:
             raise Exception('Invalid table size.')
-        elif len(values) == 1:
-            return values[0]
+        elif len(array.terms) == 1:
+            return array.terms[0]
         else:
-            if array_type == 'analog':
+            if isinstance(array, AnalogArray):
                 out = AnalogSignal(name=self.tmp_name())
-                self.macro_call('MAKE_REAL', out.name, self.max_analog_range(values))
+                range = str(array.analog_range) if array.analog_range is not None else self.max_analog_range(array.terms)
+                self.macro_call('MAKE_REAL', out.name, range)
 
                 # create a signal for each entry in the table that is aligned to the output format
                 # this is important because the values may have varying binary points
                 entries = []
-                for k, value in enumerate(values):
+                for k, value in enumerate(array.terms):
                     entry = out.copy_format_to(f'{out.name}_{k}')
                     entries.append(entry)
 
                     self.make_signal(entry)
                     self.make_assign(value, entry)
-            elif array_type == 'digital':
+            elif isinstance(array, DigitalArray):
                 # TODO: deal with varying widths of input values
-                out = DigitalSignal(name=self.tmp_name(), width=values[0].width)
+                out = DigitalSignal(name=self.tmp_name(), width=array.terms[0].width)
                 self.make_signal(out)
 
                 # for now, all values are assumed to have the same width so realignment is not required
-                entries = values
+                entries = array.terms
             else:
                 raise Exception('Invalid signal type.')
 
             # create string entries for each case
             case_entries = [(k, f'{out.name} = {entry.name}') for k, entry in enumerate(entries)]
             self.always_begin('*')
-            self.case_statement(addr.name, case_entries, default = f'{out.name} = 0')
+            self.case_statement(array.addr.name, case_entries, default = f'{out.name} = 0')
             self.end()
 
             # return the variable

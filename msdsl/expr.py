@@ -246,7 +246,9 @@ class ArrayOp(ModelExpr):
         self.addr = addr
 
 class AnalogArray(ArrayOp):
-    pass
+    def __init__(self, *args, analog_range=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.analog_range = analog_range
 
 class DigitalArray(ArrayOp):
     pass

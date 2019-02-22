@@ -4,7 +4,7 @@ import datetime
 
 from msdsl.generator import CodeGenerator
 from msdsl.expr import (AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, Signal, DigitalSignal, AnalogSignal,
-                        Plus, Times, Constant, AnalogArray, BinaryOp, ListOp, LessThan, LessThanOrEquals, GreaterThan,
+                        Plus, Times, AnalogConstant, AnalogArray, BinaryOp, ListOp, LessThan, LessThanOrEquals, GreaterThan,
                         GreaterThanOrEquals, Concatenate, EqualTo, NotEqualTo, Min, Max, DigitalArray, ArrayOp,
                         BitwiseAnd, BitwiseInv, BitwiseOr, BitwiseXor, UnaryOp, DigitalConstant, DigitalCases,
                         CaseExpr, AnalogCases)
@@ -23,30 +23,30 @@ class VerilogGenerator(CodeGenerator):
     def make_section(self, label):
         self.comment(label)
 
-    def compile_expr(self, expr):
+    def compile_expr(self, expr, type_hint='analog'):
         if isinstance(expr, Number):
             return self.make_analog_const(expr)
         elif isinstance(expr, Signal):
             return expr
-        elif isinstance(expr, Constant):
+        elif isinstance(expr, AnalogConstant):
             return self.make_analog_const(expr.value)
         elif isinstance(expr, DigitalConstant):
             return self.make_digital_const(expr)
-        # elif isinstance(expr, CaseExpr):
-        #     addr_bits = [self.compile_expr(case[0]) for case in expr.cases]
-        #     unique_values = [self.compile_expr(case[1]) for case in expr.cases]
-        #
-        #     terms = ...
-        #
-        #     # check the array type
-        #     if isinstance(expr, DigitalCases):
-        #         array_cls = DigitalArray
-        #     elif isinstance(expr, AnalogCases):
-        #         array_cls = AnalogArray
-        #     else:
-        #         raise Exception(f'Invalid ArrayOp: {type(expr)}')
-        #
-        #     return self.compile_expr(array_cls(terms=terms, addr=Concatenate(addr_bits)))
+        elif isinstance(expr, CaseExpr):
+            addr_bits = [self.compile_expr(case[0]) for case in expr.cases]
+            unique_values = [self.compile_expr(case[1]) for case in expr.cases]
+
+            terms = ...
+
+            # check the array type
+            if isinstance(expr, DigitalCases):
+                array_cls = DigitalArray
+            elif isinstance(expr, AnalogCases):
+                array_cls = AnalogArray
+            else:
+                raise Exception(f'Invalid ArrayOp: {type(expr)}')
+
+            return self.compile_expr(array_cls(terms=terms, addr=Concatenate(addr_bits)))
         elif isinstance(expr, ArrayOp):
             # compile address
             gen_addr = self.compile_expr(expr.addr) if expr.addr is not None else None
@@ -272,7 +272,10 @@ class VerilogGenerator(CodeGenerator):
                     self.make_signal(entry)
                     self.make_assign(value, entry)
             elif isinstance(array, DigitalArray):
-                # TODO: deal with varying widths of input values
+                # check term widths
+                assert all(term.width == array.terms[0].width for term in array.terms[1:]), 'All terms in a DigitalArray must have the same width.'
+
+                # make output signal
                 out = DigitalSignal(name=self.tmp_name(), width=array.terms[0].width)
                 self.make_signal(out)
 
@@ -402,3 +405,7 @@ class VerilogGenerator(CodeGenerator):
             return f'`RANGE_PARAM_REAL({values[0].name})'
         else:
             return f'`MAX_MATH(`RANGE_PARAM_REAL({values[0].name}), {VerilogGenerator.max_analog_range(values[1:])})'
+
+# sign = '-' if self.value < 0 else ''
+# is_signed = 's' if self.signed else ''
+# return f"{sign}{self.width}'{is_signed}d{abs(self.value)}"

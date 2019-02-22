@@ -8,7 +8,7 @@ from itertools import chain
 from enum import Enum, auto
 
 from msdsl.generator import CodeGenerator
-from msdsl.expr import (Constant, AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, Signal, AnalogSignal,
+from msdsl.expr import (AnalogConstant, AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, Signal, AnalogSignal,
                         ModelExpr, AnalogArray, DigitalArray, Concatenate)
 from msdsl.eqnsys import eqn_sys_to_lds
 from msdsl.optimize import simplify
@@ -156,7 +156,7 @@ class MixedSignalModel:
         o_hist = self.make_analog_history(output, len(a))
 
         # implement the filter
-        expr = Constant(0)
+        expr = AnalogConstant(0)
         for coeff, var in chain(zip(b, i_hist), zip(a[1:], o_hist)):
             expr += coeff*var
 

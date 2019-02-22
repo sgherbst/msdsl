@@ -1,26 +1,15 @@
 import numpy as np
 
 from typing import List
-from msdsl.expr import ListOp, BinaryOp, Deriv, AnalogSignal, Times, Constant
+
+from msdsl.expr import Product, AnalogConstant
+from msdsl.signals import AnalogSignal
 from msdsl.optimize import simplify
 from msdsl.util import list2dict
+from msdsl.deriv import Deriv, deriv_str, subst_deriv
 
 def names(l: List[AnalogSignal]):
     return [elem.name for elem in l]
-
-def deriv_str(name):
-    return f'D({name})'
-
-def subst_deriv(expr):
-    if isinstance(expr, Deriv):
-        assert isinstance(expr.expr, AnalogSignal)
-        return AnalogSignal(deriv_str(expr.expr.name))
-    if isinstance(expr, ListOp):
-        return type(expr)(subst_deriv(term) for term in expr.terms)
-    elif isinstance(expr, BinaryOp):
-        return type(expr)(subst_deriv(expr.lhs), subst_deriv(expr.rhs))
-    else:
-        return expr
 
 def eqn_sys_to_lds(eqns=None, internals=None, inputs=None, outputs=None, states=None):
     # set defaults
@@ -32,7 +21,7 @@ def eqn_sys_to_lds(eqns=None, internals=None, inputs=None, outputs=None, states=
 
     # indices of known and unknown variables
     unknowns = list2dict(names(internals) + names(outputs) + [deriv_str(name) for name in names(states)])
-    knowns = list2dict(names(inputs) + names(states))
+    knowns   = list2dict(names(inputs) + names(states))
 
     # check that matrix is sensible
     assert len(unknowns) == len(eqns)
@@ -46,24 +35,24 @@ def eqn_sys_to_lds(eqns=None, internals=None, inputs=None, outputs=None, states=
         eqn = subst_deriv(eqn)
         eqn = simplify(eqn)
 
-        for term in eqn.terms:
-            if isinstance(term, AnalogSignal):
-                coeff, variable = 1.0, term.name
-            elif isinstance(term, Times):
-                assert len(term.terms) == 2
-                if isinstance(term.terms[0], Constant) and isinstance(term.terms[1], AnalogSignal):
-                    coeff, variable = term.terms[0].value, term.terms[1].name
-                elif isinstance(term.terms[1], Constant) and isinstance(term.terms[0], AnalogSignal):
-                    coeff, variable = term.terms[1].value, term.terms[0].name
+        for operand in eqn.operands:
+            if isinstance(operand, AnalogSignal):
+                coeff, variable = 1.0, operand.name
+            elif isinstance(operand, Product):
+                assert len(operand.operands) == 2
+                if isinstance(operand.operands[0], AnalogConstant) and isinstance(operand.operands[1], AnalogSignal):
+                    coeff, variable = operand.operands[0].value, operand.operands[1].name
+                elif isinstance(operand.operands[1], AnalogConstant) and isinstance(operand.operands[0], AnalogSignal):
+                    coeff, variable = operand.operands[1].value, operand.operands[0].name
                 else:
                     raise Exception('Cannot handle this type of expression yet.')
             else:
                 raise Exception('Cannot handle this type of expression yet.')
 
             if variable in unknowns:
-                U[row, unknowns[variable]] = coeff
+                U[row, unknowns[variable]] = +coeff
             elif variable in knowns:
-                V[row, knowns[variable]] = -coeff
+                V[row,   knowns[variable]] = -coeff
             else:
                 raise Exception('Cannot determine if variable is known or unknown!')
 
@@ -104,6 +93,8 @@ def eqn_sys_to_lds(eqns=None, internals=None, inputs=None, outputs=None, states=
         D = None
 
     return A, B, C, D
+
+# additional classes
 
 def main():
     x = AnalogSignal('x')

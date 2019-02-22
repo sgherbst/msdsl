@@ -1,3 +1,6 @@
+def warn(s):
+    print('WARNING: ' + str(s))
+
 def tree_op(terms, op, default):
     if len(terms) == 0:
         return default()
@@ -12,6 +15,7 @@ def list2dict(l):
     return {elem: k for k, elem in enumerate(l)}
 
 def main():
+    # tree_op tests
     op = lambda a, b: a+b
     default = lambda: 0
 
@@ -22,7 +26,7 @@ def main():
     print(tree_op([1, 2, 3, 4], op=op, default=default))
     print(tree_op([1, 2, 3, 4, 5], op=op, default=default))
 
+    # list2dict tests
     print(list2dict(['a', 'b', 'c']))
-
 if __name__ == '__main__':
     main()

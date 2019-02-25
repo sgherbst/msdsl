@@ -1,5 +1,5 @@
 from msdsl.expr.expr import ModelExpr
-from msdsl.expr.format import RealFormat, IntegerFormat
+from msdsl.expr.format import RealFormat, UIntFormat, SIntFormat
 from msdsl.expr.range import RangeOf
 
 class Signal(ModelExpr):
@@ -14,8 +14,16 @@ class Signal(ModelExpr):
         return self.name
 
 class AnalogSignal(Signal):
-    def __init__(self, name, range=None):
-        super().__init__(name=name, format=RealFormat(range=range))
+    def __init__(self, name, range=None, width=None):
+        # set defaults
+        if range is None:
+            range = RangeOf(name)
+
+        # determine the format
+        format = RealFormat(range=range, width=width)
+
+        # call the super constructor
+        super().__init__(name=name, format=format)
 
 class AnalogInput(AnalogSignal):
     def __init__(self, name):
@@ -26,8 +34,15 @@ class AnalogOutput(AnalogSignal):
         super().__init__(name=name, range=RangeOf(name))
 
 class DigitalSignal(Signal):
-    def __init__(self, name, width=None, signed=None):
-        super().__init__(name=name, format=IntegerFormat(width=width, signed=signed))
+    def __init__(self, name, width=1, signed=False):
+        # determine the foramt
+        if signed:
+            format = SIntFormat(width=width)
+        else:
+            format = UIntFormat(width=width)
+
+        # call the super constructor
+        super().__init__(name=name, format=format)
 
 class DigitalInput(DigitalSignal):
     pass
@@ -36,8 +51,8 @@ class DigitalOutput(DigitalSignal):
     pass
 
 def main():
-    a = AnalogSignal('a', 30)
-    b = AnalogSignal('b', 60)
+    a = DigitalSignal('a', width=8, signed=True)
+    b = AnalogSignal('b')
 
     expr = (a+b)/3
     print(expr)

@@ -2,59 +2,78 @@ import numpy as np
 
 from typing import List
 
-from msdsl.expr import Product, AnalogConstant
-from msdsl.signals import AnalogSignal
-from msdsl.optimize import simplify
-from msdsl.util import list2dict
-from msdsl.deriv import Deriv, deriv_str, subst_deriv
+from msdsl.expr.expr import ModelOperator
+from msdsl.expr.signals import AnalogSignal
+from msdsl.expr.simplify import distribute_mult, extract_coeffs
+from msdsl.util import list2dict, warn
+from msdsl.eqn.deriv import deriv_str, Deriv
 
 def names(l: List[AnalogSignal]):
     return [elem.name for elem in l]
 
-def eqn_sys_to_lds(eqns=None, internals=None, inputs=None, outputs=None, states=None):
+def walk_expr(expr, cond_fun):
+    retval = []
+
+    if cond_fun(expr):
+        retval.append(expr)
+
+    if isinstance(expr, ModelOperator):
+        retval = []
+        for operand in expr.operands:
+            retval.extend(walk_expr(operand, cond_fun))
+
+    return retval
+
+def get_all_signals(expr):
+    return walk_expr(expr, lambda e: isinstance(e, AnalogSignal))
+
+def get_all_derivs(expr):
+    return walk_expr(expr, lambda e: isinstance(e, Deriv))
+
+def eqn_sys_to_lds(eqns=None, inputs=None, states=None, outputs=None):
     # set defaults
-    eqns = eqns if eqns is not None else []
-    internals = internals if internals is not None else []
     inputs = inputs if inputs is not None else []
-    outputs = outputs if outputs is not None else []
     states = states if states is not None else []
+    outputs = outputs if outputs is not None else []
+
+    # create list of derivatives of state variables
+    derivs = [Deriv(state) for state in states]
+
+    # create list of all internal signals, then use it to figure out what signals are completely internal
+    all_signals = [signal for eqn in eqns for signal in get_all_signals(eqn)]
+    internal_name_set = set(names(all_signals)) - set(names(inputs)+names(outputs)+names(states)+names(derivs))
 
     # indices of known and unknown variables
-    unknowns = list2dict(names(internals) + names(outputs) + [deriv_str(name) for name in names(states)])
+    unknowns = list2dict(list(internal_name_set) + names(outputs) + names(derivs))
     knowns   = list2dict(names(inputs) + names(states))
 
-    # check that matrix is sensible
-    assert len(unknowns) == len(eqns)
+    # sanity checks
+    if len(eqns) > len(unknowns):
+        warn(f'System of equations is over-constrained with {len(eqns)} equations and {len(unknowns)} unknowns.')
+    elif len(eqns) < len(unknowns):
+        warn(f'System of equations is under-constrained with {len(eqns)} equations and {len(unknowns)} unknowns.')
 
     # build up matrices
     U = np.zeros((len(eqns), len(unknowns)), dtype=float)
     V = np.zeros((len(eqns), len(knowns)), dtype=float)
 
     for row, eqn in enumerate(eqns):
+        # prepare equation for analysis
         eqn = eqn.lhs - eqn.rhs
-        eqn = subst_deriv(eqn)
-        eqn = simplify(eqn)
+        eqn = distribute_mult(eqn)
 
-        for operand in eqn.operands:
-            if isinstance(operand, AnalogSignal):
-                coeff, variable = 1.0, operand.name
-            elif isinstance(operand, Product):
-                assert len(operand.operands) == 2
-                if isinstance(operand.operands[0], AnalogConstant) and isinstance(operand.operands[1], AnalogSignal):
-                    coeff, variable = operand.operands[0].value, operand.operands[1].name
-                elif isinstance(operand.operands[1], AnalogConstant) and isinstance(operand.operands[0], AnalogSignal):
-                    coeff, variable = operand.operands[1].value, operand.operands[0].name
-                else:
-                    raise Exception('Cannot handle this type of expression yet.')
-            else:
-                raise Exception('Cannot handle this type of expression yet.')
+        # extract coefficients of signals (note that some signals may be repeated - we deal with this in the next step
+        coeffs, others = extract_coeffs(eqn)
+        assert len(others) == 0, \
+            'The following terms are not yet handled: ['+ ', '.join(str(other) for other in others)+']'
 
-            if variable in unknowns:
-                U[row, unknowns[variable]] = +coeff
-            elif variable in knowns:
-                V[row,   knowns[variable]] = -coeff
+        for coeff, signal in coeffs:
+            if signal.name in unknowns:
+                U[row, unknowns[signal.name]] = +coeff
+            elif signal.name in knowns:
+                V[row,   knowns[signal.name]] = -coeff
             else:
-                raise Exception('Cannot determine if variable is known or unknown!')
+                raise Exception('Variable is not marked as known vs. unknown: ' + signal.name)
 
     # solve for unknowns in terms of knowns
     M = np.linalg.solve(U, V)

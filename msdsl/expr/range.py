@@ -1,5 +1,19 @@
 from numbers import Number
 
+# Handling symbolic widths
+
+class WidthExpr:
+    pass
+
+class WidthOf(WidthExpr):
+    def __init__(self, name):
+        self.name = name
+
+    def __str__(self):
+        return 'WidthOf(' + self.name + ')'
+
+# Handling symbolic ranges
+
 class RangeExpr:
     def __add__(self, other):
         return range_sum([self, other])

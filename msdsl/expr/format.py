@@ -23,8 +23,9 @@ class Format:
         raise NotImplementedError
 
 class RealFormat(Format):
-    def __init__(self, range: Union[Number, RangeExpr]):
+    def __init__(self, range: Union[Number, RangeExpr], width=None):
         self.range = range
+        self.width = width
 
     @classmethod
     def from_values(cls, values):

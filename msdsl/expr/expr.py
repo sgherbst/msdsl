@@ -2,58 +2,58 @@ from functools import reduce
 from typing import List, Tuple
 from numbers import Number, Integral, Real
 
-from msdsl.expr.format import RealFormat, IntegerFormat, Format, is_real_fmt, is_sint_fmt, is_uint_fmt
-from msdsl.expr.range import make_range_min, make_range_max, make_range_product, make_range_sum
+from msdsl.expr.format import RealFormat, SIntFormat, UIntFormat, Format
 
 # constant wrapping
 
-def wrap_if_necessary(expr: List):
-    if isinstance(expr, Integral):
-        return IntegerConstant(expr)
-    elif isinstance(expr, Real):
-        return RealConstant(expr)
+def wrap_constant(operand):
+    if isinstance(operand, Integral):
+        if operand < 0:
+            return SIntConstant(operand)
+        else:
+            return UIntConstant(operand)
+    elif isinstance(operand, Real):
+        return RealConstant(operand)
     else:
-        return expr
+        return operand
+
+def wrap_constants(operands):
+    return [wrap_constant(operand) for operand in operands]
 
 # type promotion
 
-def promote(operands):
-    # determine promoted format
-    if any(is_real_fmt(operand.format) for operand in operands):
-        promoted_format = RealFormat()
-    elif any(is_sint_fmt(operand.format) for operand in operands):
-        promoted_format = IntegerFormat(signed=True)
+def get_highest_format_cls(operands):
+    if any(isinstance(operand.format, RealFormat) for operand in operands):
+        return RealFormat
+    elif any(isinstance(operand.format, SIntFormat) for operand in operands):
+        return SIntFormat
     else:
-        promoted_format = IntegerFormat(signed=False)
+        return UIntFormat
 
-    # apply promotion where needed
-    promoted_operands = []
-    for operand in operands:
-        if is_uint_fmt(operand.format) and is_sint_fmt(operand.format):
-            promoted_operand = uint_to_sint(operand)
-        elif is_uint_fmt(operand.format) and is_real_fmt(operand.format):
-            promoted_operand = sint_to_real(uint_to_sint(operand))
-        elif is_sint_fmt(operand.format) and is_real_fmt(operand.format):
-            promoted_operand = sint_to_real(operand)
-        else:
-            promoted_operand = operand
+def promote_operand(operand, promoted_cls):
+    if isinstance(operand.format, UIntFormat) and issubclass(promoted_cls, SIntFormat):
+        return uint_to_sint(operand)
+    elif isinstance(operand.format, UIntFormat) and issubclass(promoted_cls, RealFormat):
+        return sint_to_real(uint_to_sint(operand))
+    elif isinstance(operand.format, SIntFormat) and issubclass(promoted_cls, RealFormat):
+        return sint_to_real(operand)
+    else:
+        return operand
 
-        promoted_operands.append(promoted_operand)
-
-    # return promoted operands
-    return promoted_operands, promoted_format
+def promote_operands(operands, promoted_cls):
+    return [promote_operand(operand=operand, promoted_cls=promoted_cls) for operand in operands]
 
 class ModelExpr:
-    def __init__(self, format: Format):
+    def __init__(self, format):
         self.format = format
 
     # arithmetic operations
 
     def __add__(self, other):
-        return make_sum([self, other])
+        return sum_op([self, other])
 
     def __mul__(self, other):
-        return make_product([self, other])
+        return prod_op([self, other])
 
     def __sub__(self, other):
         return self.__add__(-other)
@@ -116,15 +116,15 @@ class ModelExpr:
 # general operator types -- not intended to be instantiated directly
 
 class ModelOperator(ModelExpr):
-    def __init__(self, operands: List, format: Format):
+    def __init__(self, operands: List, format):
         # call the super constructor
         super().__init__(format=format)
 
         # save the operand list
-        self.operands = [wrap_if_necessary(operand) for operand in operands]
+        self.operands = wrap_constants(operands)
 
 class UnaryOperator(ModelOperator):
-    def __init__(self, operand, format: Format):
+    def __init__(self, operand, format):
         super().__init__(operands=[operand], format=format)
 
     @property
@@ -132,7 +132,7 @@ class UnaryOperator(ModelOperator):
         return self.operands[0]
 
 class BinaryOperator(ModelOperator):
-    def __init__(self, lhs, rhs, format: Format):
+    def __init__(self, lhs, rhs, format):
         super().__init__(operands=[lhs, rhs], format=format)
 
     @property
@@ -145,18 +145,29 @@ class BinaryOperator(ModelOperator):
 
 class ComparisonOperator(BinaryOperator):
     def __init__(self, lhs, rhs):
-        operands, format = promote([wrap_if_necessary(lhs), wrap_if_necessary(rhs)])
-        super().__init__(lhs=operands[0], rhs=operands[1], format=IntegerFormat(width=1, signed=False))
+        # wrap constants as needed
+        lhs = wrap_constant(lhs)
+        rhs = wrap_constant(rhs)
+
+        # apply promotion as needed
+        format_cls = get_highest_format_cls([lhs, rhs])
+        lhs, rhs = promote_operands([lhs, rhs], format_cls)
+
+        # call the super constructor
+        super().__init__(lhs=lhs, rhs=rhs, format=UIntFormat(width=1))
 
 class ArithmeticOperator(ModelOperator):
     initial = None
 
-    @classmethod
-    def function(cls, a, b):
-        raise NotImplementedError
+    def __init__(self, operands):
+        # determine the output format
+        format = reduce(self.function, [operand.format for operand in operands])
+
+        # call the super constructor
+        super().__init__(operands=operands, format=format)
 
     @classmethod
-    def range_function(cls, a, b):
+    def function(cls, a, b):
         raise NotImplementedError
 
     @classmethod
@@ -173,7 +184,7 @@ class ArithmeticOperator(ModelOperator):
         return new_operands
 
     @classmethod
-    def merge_constants(cls, operands, format):
+    def merge_constants(cls, operands, format_cls):
         # extract and process constants
         new_operands = []
         const_term = cls.initial
@@ -185,44 +196,50 @@ class ArithmeticOperator(ModelOperator):
 
         # add the const_term as a new operand if necessary
         if const_term != cls.initial:
-            new_operands.append(Constant(value=const_term, format=format))
+            new_operands.append(Constant(value=const_term, format_cls=format_cls))
 
         return new_operands
 
     @classmethod
-    def flatten(cls, operands, format):
+    def flatten(cls, operands):
         if len(operands) == 0:
-            return Constant(value=cls.initial, format=format)
+            return wrap_constant(cls.initial)
         elif len(operands) == 1:
             return operands[0]
         else:
-            return cls(operands, format=format)
+            return cls(operands)
 
 class BitwiseOperator(ModelOperator):
     def __init__(self, operands):
         # wrap constants as needed
-        operands = [wrap_if_necessary(operand) for operand in operands]
+        operands = wrap_constants(operands)
 
         # Make sure that all operands are unsigned
-        assert all(is_uint_fmt(operand.format) for operand in operands), 'Bitwise operations only currently support unsigned operands.'
+        assert all(isinstance(operand.format, UIntFormat) for operand in operands), \
+               'Bitwise operations only currently support unsigned operands.'
 
         # Compute the width of the output
         width = max(operand.format.width for operand in operands)
 
         # Call the super constructor
-        super().__init__(operands=operands, format=IntegerFormat(width=width, signed=False))
+        super().__init__(operands=operands, format=UIntFormat(width=width))
 
 # Sum
 
-def make_sum(operands):
-    operands, format = promote([wrap_if_necessary(operand) for operand in operands])
+def sum_op(operands):
+    # wrap constants as necessary
+    operands = wrap_constants(operands)
+
+    # apply promotion if needed
+    format_cls = get_highest_format_cls(operands)
+    operands = promote_operands(operands, format_cls)
 
     # perform optimizations
     operands = Sum.merge_with_same_operator(operands)
-    operands = Sum.merge_constants(operands, format)
+    operands = Sum.merge_constants(operands, format_cls)
 
     # generate output
-    return Sum.flatten(operands, format)
+    return Sum.flatten(operands)
 
 class Sum(ArithmeticOperator):
     initial = 0
@@ -231,74 +248,39 @@ class Sum(ArithmeticOperator):
     def function(cls, a, b):
         return a + b
 
-    def __init__(self, operands, format):
-        if is_real_fmt(format):
-            if format.range is None:
-                out_range = make_range_sum([operand.format.range for operand in operands])
-                out_format = RealFormat(range=out_range)
-            else:
-                out_format = format
-        elif is_uint_fmt(format) or is_sint_fmt(format):
-            if format.width is None:
-                min_val = sum(operand.format.min_val for operand in operands)
-                max_val = sum(operand.format.max_val for operand in operands)
-                out_width = max(format.width_of(min_val), format.width_of(max_val))
-                out_format = IntegerFormat(width=out_width, signed=format.signed)
-            else:
-                out_format = format
-        else:
-            raise Exception('Unknown format type.')
-
-        super().__init__(operands=operands, format=out_format)
-
     def __str__(self):
         return '(' + '+'.join(str(operand) for operand in self.operands) + ')'
 
 # Product
 
-def make_product(operands):
-    operands, format = promote([wrap_if_necessary(operand) for operand in operands])
+def prod_op(operands):
+    # wrap constants as necessary
+    operands = wrap_constants(operands)
+
+    # apply promotion if needed
+    format_cls = get_highest_format_cls(operands)
+    operands = promote_operands(operands, format_cls)
 
     # perform optimizations
     operands = Product.merge_with_same_operator(operands)
-    operands = Product.merge_constants(operands, format)
-    operands = Product.check_for_zero(operands, format)
+    operands = Product.merge_constants(operands, format_cls)
+    operands = Product.check_for_zero(operands)
 
     # generate output
-    return Product.flatten(operands, format)
+    return Product.flatten(operands)
 
 class Product(ArithmeticOperator):
     initial = 1
 
     @classmethod
     def function(cls, a, b):
-        return a*b
-
-    def __init__(self, operands, format):
-        if is_real_fmt(format):
-            if format.range is None:
-                out_range = make_range_product([operand.format.range for operand in operands])
-                out_format = RealFormat(range=out_range)
-            else:
-                out_format = format
-        elif is_sint_fmt(format) or is_uint_fmt(format):
-            if format.width is None:
-                operand_ranges = [max(abs(operand.format.min_val), abs(operand.format.max_val)) for operand in operands]
-                out_range = reduce(lambda x, y: x*y, operand_ranges)
-                out_width = format.width_of(out_range)
-                out_format = IntegerFormat(width=out_width, signed=format.signed)
-            else:
-                out_format = format
-        else:
-            raise Exception('Unknown format type.')
-
-        super().__init__(operands=operands, format=out_format)
+        return a * b
 
     @classmethod
-    def check_for_zero(cls, operands, format):
+    def check_for_zero(cls, operands):
         if any(((isinstance(operand, Constant) and operand.value == 0) or
                 (isinstance(operand, Array) and operand.all_zeros)) for operand in operands):
-            return [Constant(value=0, format=format)]
+            return [wrap_constant(0)]
         else:
             return operands
 
@@ -307,80 +289,64 @@ class Product(ArithmeticOperator):
 
 # Min
 
-def make_min(operands):
-    operands, format = promote([wrap_if_necessary(operand) for operand in operands])
+def min_op(operands):
+    # wrap constants as necessary
+    operands = wrap_constants(operands)
+
+    # apply promotion if needed
+    format_cls = get_highest_format_cls(operands)
+    operands = promote_operands(operands, format_cls)
 
     # perform optimizations
     operands = Min.merge_with_same_operator(operands)
-    operands = Min.merge_constants(operands, format)
+    operands = Min.merge_constants(operands, format_cls)
 
     # generate output
-    return Min.flatten(operands, format)
+    return Min.flatten(operands)
 
 class Min(ArithmeticOperator):
     initial = +float('inf')
 
     @classmethod
     def function(cls, a, b):
-        return min(a, b)
-
-    def __init__(self, operands, format):
-        if is_real_fmt(format):
-            if format.range is None:
-                out_range = make_range_min([operand.format.range for operand in operands])
-                out_format = RealFormat(range=out_range)
-            else:
-                out_format = format
-        elif is_sint_fmt(format) or is_uint_fmt(format):
-            if format.width is None:
-                out_width = min(operand.format.width for operand in operands)
-                out_format = IntegerFormat(width=out_width, signed=format.signed)
-            else:
-                out_format = format
+        if isinstance(a, Format) and isinstance(b, Format):
+            return a.min_with(b)
+        elif isinstance(a, Number) and isinstance(b, Number):
+            return min(a, b)
         else:
-            raise Exception('Unknown format type.')
-
-        super().__init__(operands=operands, format=out_format)
+            raise NotImplementedError
 
     def __str__(self):
         return 'min(' + ', '.join(str(operand) for operand in self.operands) + ')'
 
 # Max
 
-def make_max(operands):
-    operands, format = promote([wrap_if_necessary(operand) for operand in operands])
+def max_op(operands):
+    # wrap constants as necessary
+    operands = wrap_constants(operands)
+
+    # apply promotion if needed
+    format_cls = get_highest_format_cls(operands)
+    operands = promote_operands(operands, format_cls)
 
     # perform optimizations
     operands = Max.merge_with_same_operator(operands)
-    operands = Max.merge_constants(operands, format)
+    operands = Max.merge_constants(operands, format_cls)
 
     # generate output
-    return Max.flatten(operands, format)
+    return Max.flatten(operands)
 
 class Max(ArithmeticOperator):
     initial = -float('inf')
 
     @classmethod
     def function(cls, a, b):
-        return max(a, b)
-
-    def __init__(self, operands, format):
-        if is_real_fmt(format):
-            if format.range is None:
-                out_range = make_range_max([operand.format.range for operand in operands])
-                out_format = RealFormat(range=out_range)
-            else:
-                out_format = format
-        elif is_sint_fmt(format) or is_uint_fmt(format):
-            if format.width is None:
-                out_width = max(operand.format.width for operand in operands)
-                out_format = IntegerFormat(width=out_width, signed=format.signed)
-            else:
-                out_format = format
+        if isinstance(a, Format) and isinstance(b, Format):
+            return a.max_with(b)
+        elif isinstance(a, Number) and isinstance(b, Number):
+            return max(a, b)
         else:
-            raise Exception('Unknown format type.')
-
-        super().__init__(operands=operands, format=out_format)
+            raise NotImplementedError
 
     def __str__(self):
         return 'max(' + ', '.join(str(operand) for operand in self.operands) + ')'
@@ -438,27 +404,52 @@ class NotEqualTo(ComparisonOperator):
 
 # concatenation of digital signals
 
+def concatenate(operands):
+    # wrap constants as necessary
+    operands = wrap_constants(operands)
+
+    # sanity check
+    format_cls = get_highest_format_cls(operands)
+    assert issubclass(format_cls, UIntFormat)
+
+    # return result
+    if len(operands) == 0:
+        raise ValueError('Concatenation requires at least one operand.')
+    elif len(operands) == 1:
+        return operands[0]
+    else:
+        return Concatenate(operands)
+
 class Concatenate(ModelOperator):
     def __init__(self, operands):
-        # wrap constants as needed
-        operands = [wrap_if_necessary(operand) for operand in operands]
-
-        # Make sure that all operands are unsigned
-        assert all(is_uint_fmt(operand.format) for operand in operands), 'Concatenation only currently support unsigned operands.'
-
-        # Compute the width of the output
         width = sum(operand.format.width for operand in operands)
-
-        # Call the super constructor
-        super().__init__(operands=operands, format=IntegerFormat(width=width, signed=False))
+        super().__init__(operands=operands, format=UIntFormat(width=width))
 
     def __str__(self):
         return '{' + ', '.join(str(operand) for operand in self.operands) + '}'
 
 # array types
 
+def array(elements, address):
+    # wrap constants as necessary
+    elements = wrap_constants(elements)
+    address = wrap_constants(address)
+
+    # apply promotion if needed
+    format_cls = get_highest_format_cls(elements)
+    elements = promote_operands(elements, format_cls)
+
+    # return the result
+    if len(elements) == 0:
+        raise ValueError('An array must have at least one element.')
+    elif len(elements) == 1:
+        return elements[0]
+    else:
+        return Array(elements=elements, address=address)
+
 class Array(ModelOperator):
     def __init__(self, elements: List, address):
+        format = reduce(lambda x, y: x.union_with(y), [element.format for element in elements])
         super().__init__(operands=elements+[address], format=format)
 
     @property
@@ -473,58 +464,88 @@ class Array(ModelOperator):
     def address(self):
         return self.operands[-1]
 
+    def __str__(self):
+        elements = '[' + ', '.join(str(element) for element in self.elements) + ']'
+        return f'Array({elements}, {str(self.address)})'
+
 # case statement mimicking
 
-class Cases(Array):
-    def __init__(self, cases: List[Tuple], default):
-        # unpack the cases
-        bits, values = zip(*cases)
+def cases(cases: List[Tuple], default):
+    # unpack input
+    bits, values = zip(*cases)
 
-        # call the super constructor
-        super().__init__(elements=self.case_table(values, default=default), address=Concatenate(bits))
+    # wrap constants as necessary
+    bits = wrap_constants(bits)
+    values = wrap_constants(values)
+    default = wrap_constant(default)
 
-    @classmethod
-    def case_table(cls, values: List, default):
-        # set up the table
-        table_length = 1<<len(values)
-        table = [None for _ in range(table_length)]
+    # sanity check -- all cases should have a single selection bit
+    assert all(isinstance(bit.format, UIntFormat) and bit.format.width==1 for bit in bits)
 
-        # fill the table
-        for k, value in enumerate(values):
-            for idx in range(1<<(len(values)-k-1), 1<<(len(values)-k)):
-                table[idx] = value
-        table[0] = default
+    # apply promotion as needed
+    format_cls = get_highest_format_cls(values + [default])
+    values = promote_operands(values, format_cls)
+    default = promote_operand(default, format_cls)
 
-        # return the table
-        return table
+    if len(values) == 0:
+        return default
+    else:
+        return Array(elements=case_table(values=values, default=default), address=Concatenate(bits))
+
+def case_table(values: List, default):
+    # set up the table
+    table_length = 1<<len(values)
+    table = [None for _ in range(table_length)]
+
+    # fill the table
+    for k, value in enumerate(values):
+        for idx in range(1<<(len(values)-k-1), 1<<(len(values)-k)):
+            table[idx] = value
+    table[0] = default
+
+    # return the table
+    return table
 
 # type conversions
 
 def uint_to_sint(operand):
     if isinstance(operand, Constant):
-        return IntegerConstant(value=operand.value, signed=True)
+        return SIntConstant(operand.value)
     else:
         return UIntToSInt(operand)
 
 class UIntToSInt(UnaryOperator):
     def __init__(self, operand: ModelExpr):
-        assert is_uint_fmt(operand.format), 'Operand provided to UIntToSInt is not an unsigned integer.'
-        super().__init__(operand, format=IntegerFormat(width=operand.format.width+1, signed=True))
+        # input checking
+        assert isinstance(operand.format, UIntFormat), \
+               'Operand provided to UIntToSInt is not an unsigned integer.'
+
+        # construct new format
+        format = SIntFormat.from_values([operand.format.min_val, operand.format.max_val])
+
+        # call the super constructor
+        super().__init__(operand, format=format)
 
     def __str__(self):
         return 'uint2sint(' + str(self.operand) + ')'
 
 def sint_to_real(operand):
     if isinstance(operand, Constant):
-        return RealConstant(value=operand.value)
+        return RealConstant(operand.value)
     else:
         return SIntToReal(operand)
 
 class SIntToReal(UnaryOperator):
     def __init__(self, operand):
-        assert is_sint_fmt(operand.format), 'Operand provided to SIntToReal is not a signed integer.'
-        range = max(abs(operand.format.min_val), abs(operand.format.max_val))
-        super().__init__(operand, format=RealFormat(range=range))
+        # input checking
+        assert isinstance(operand.format, SIntFormat), \
+               'Operand provided to SIntToReal is not a signed integer.'
+
+        # construct new format
+        format = RealFormat.from_values([operand.format.min_val, operand.format.max_val])
+
+        # call the super constructor
+        super().__init__(operand, format=format)
 
     def __str__(self):
         return 'sint2real(' + str(self.operand) + ')'
@@ -532,29 +553,32 @@ class SIntToReal(UnaryOperator):
 # numeric constants
 
 class Constant(ModelExpr):
-    def __init__(self, value: Number, format: Format):
+    def __init__(self, value: Number, format_cls):
         self.value = value
-        super().__init__(format=format.from_value(value))
+        super().__init__(format=format_cls.from_value(value))
 
     def __str__(self):
         return str(self.value)
 
 class RealConstant(Constant):
-    def __init__(self, value: Number, range=None):
-        super().__init__(value=value, format=RealFormat(range=range))
+    def __init__(self, value: Number):
+        super().__init__(value=value, format_cls=RealFormat)
 
-    @property
-    def range(self):
-        return self.format.range
+class SIntConstant(Constant):
+    def __init__(self, value: Number):
+        super().__init__(value=value, format_cls=SIntFormat)
 
-class IntegerConstant(Constant):
-    def __init__(self, value: Number, width=None, signed=None):
-        super().__init__(value=value, format=IntegerFormat(width=width, signed=signed))
+class UIntConstant(Constant):
+    def __init__(self, value: Number):
+        super().__init__(value=value, format_cls=UIntFormat)
 
-    @property
-    def width(self):
-        return self.format.width
+# testing
 
-    @property
-    def signed(self):
-        return self.format.signed
+def main():
+    a = RealConstant(1)
+    b = RealConstant(2)
+    c = RealConstant(3)
+    print(cases([(a>b, 1.23), (b>c, 4.56)], 7.89))
+
+if __name__ == '__main__':
+    main()

@@ -2,10 +2,10 @@ from numbers import Number
 
 class RangeExpr:
     def __add__(self, other):
-        return make_range_sum([self, other])
+        return range_sum([self, other])
 
     def __mul__(self, other):
-        return make_range_product([self, other])
+        return range_product([self, other])
 
     def __radd__(self, other):
         return self.__add__(other)
@@ -73,9 +73,12 @@ class RangeOperator(RangeExpr):
 
 # Sum
 
-def make_range_sum(operands):
+def range_sum(operands):
+    # optimizations
     operands = RangeSum.merge_with_same_operator(operands)
     operands = RangeSum.merge_constants(operands)
+
+    # return result
     return RangeSum.flatten(operands)
 
 class RangeSum(RangeOperator):
@@ -90,10 +93,13 @@ class RangeSum(RangeOperator):
 
 # Product
 
-def make_range_product(operands):
+def range_product(operands):
+    # optimizations
     operands = RangeProduct.merge_with_same_operator(operands)
     operands = RangeProduct.merge_constants(operands)
     operands = RangeProduct.check_for_zero(operands)
+
+    # return result
     return RangeProduct.flatten(operands)
 
 class RangeProduct(RangeOperator):
@@ -113,28 +119,14 @@ class RangeProduct(RangeOperator):
     def __str__(self):
         return '(' + '*'.join(str(operand) for operand in self.operands) + ')'
 
-# Min
-
-def make_range_min(operands):
-    operands = RangeMin.merge_with_same_operator(operands)
-    operands = RangeMin.merge_constants(operands)
-    return RangeMin.flatten(operands)
-
-class RangeMin(RangeOperator):
-    initial = +float('inf')
-
-    @classmethod
-    def function(cls, a, b):
-        return min(a, b)
-
-    def __str__(self):
-        return 'min(' + ', '.join(str(operand) for operand in self.operands) + ')'
-
 # Max
 
-def make_range_max(operands):
+def range_max(operands):
+    # optimizations
     operands = RangeMax.merge_with_same_operator(operands)
     operands = RangeMax.merge_constants(operands)
+
+    # return result
     return RangeMax.flatten(operands)
 
 class RangeMax(RangeOperator):
@@ -150,9 +142,9 @@ class RangeMax(RangeOperator):
 # Testing
 
 def main():
-    print(str(3+RangeOf('a')))
-    print(str(make_range_max([3, 4, 5, RangeOf('b'), RangeOf('c')])))
-    print(str(make_range_max([3, 4, 5])))
+    print(3+RangeOf('a'))
+    print(range_max([3, 4, 5, RangeOf('b'), RangeOf('c')]))
+    print(range_max([3, 4, 5]))
 
 if __name__ == '__main__':
     main()

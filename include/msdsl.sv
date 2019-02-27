@@ -125,6 +125,31 @@
         `MEM_INTO_ANALOG(emu_time_next, emu_time, 1'b1, 0); \
         `PROBE_TIME(emu_time) \
 
+    // Decimation counter
+
+    `define MAKE_DEC_PROBE \
+        logic [(`DEC_BITS_MSDSL-1):0] emu_dec_cnt; \
+        logic [(`DEC_BITS_MSDSL-1):0] emu_dec_nxt; \
+        logic emu_dec_cmp; \
+        assign emu_dec_cmp = (emu_dec_cnt == `DEC_THR_MSDSL) ? 1'b1 : 0; \
+        assign emu_dec_nxt = (emu_dec_cmp == 1'b1) ? 'd0 : (emu_dec_cnt + 'd1); \
+        `MEM_INTO_DIGITAL(emu_dec_nxt, emu_dec_cnt, 1'b1, 'd0, `DEC_BITS_MSDSL); \
+        `ifdef SIMULATION_MODE_MSDSL \
+            logic emu_dec_cmp_probe; \
+            `DUMP_VAR(emu_dec_cmp_probe) \
+            assign emu_dec_cmp_probe = emu_dec_cmp \
+        `else \
+            (* `MARK_DEBUG, `MARK_DIGITAL *) logic emu_dec_cmp_probe; \
+            assign emu_dec_cmp_probe = emu_dec_cmp \
+        `endif
+
+    //
+
+    `define MAKE_EMU_CTRL_PROBES \
+        `MAKE_RESET_PROBE; \
+        `MAKE_TIME_PROBE; \
+        `MAKE_DEC_PROBE
+
     // Other macros
 
     `define PWM_INTO(duty_expr, freq_expr, out_name) \

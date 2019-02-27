@@ -35,10 +35,6 @@ class MixedSignalModel:
         for io in ios:
             self.add_signal(io)
 
-        # add clock and reset pins
-        self.add_signal(DigitalInput('clk'))
-        self.add_signal(DigitalInput('rst'))
-
         # expressions used to assign internal and external signals
         self.assignments = []
 

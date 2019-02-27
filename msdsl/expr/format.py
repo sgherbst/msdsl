@@ -2,7 +2,7 @@ from typing import Union
 from numbers import Number
 from math import log2, ceil
 
-from msdsl.expr.range import RangeExpr, range_max
+from msdsl.expr.svreal import RangeExpr, range_max
 
 class Format:
     @classmethod
@@ -23,9 +23,10 @@ class Format:
         raise NotImplementedError
 
 class RealFormat(Format):
-    def __init__(self, range: Union[Number, RangeExpr], width=None):
+    def __init__(self, range: Union[Number, RangeExpr], width=None, exponent=None):
         self.range = range
         self.width = width
+        self.exponent = exponent
 
     @classmethod
     def from_values(cls, values):
@@ -59,8 +60,8 @@ class RealFormat(Format):
 
     def min_with(self, other):
         if isinstance(other, RealFormat):
-            # not a typo -- consider range_1 = [-a, +a] and range_2 = [-b, +b], with a < b.  then the output spans [-b, +a],
-            # which necessitates a range of "b"
+            # not a typo -- consider range_1 = [-a, +a] and range_2 = [-b, +b], with a < b.  then the output spans
+            # [-b, +a], and since a < b, the output range needs to be [-b, +b].  or, in other words, +/- max(a, b)
             range = range_max([self.range, other.range])
             return RealFormat(range=range)
         else:

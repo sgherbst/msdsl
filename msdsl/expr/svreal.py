@@ -1,5 +1,17 @@
 from numbers import Number
 
+# Handling symbolic exponents
+
+class ExponentExpr:
+    pass
+
+class ExponentOf(ExponentExpr):
+    def __init__(self, name):
+        self.name = name
+
+    def __str__(self):
+        return 'ExponentOf(' + self.name + ')'
+
 # Handling symbolic widths
 
 class WidthExpr:
@@ -33,6 +45,10 @@ class RangeOf(RangeExpr):
 
     def __str__(self):
         return 'RangeOf(' + self.name + ')'
+
+class UndefinedRange(RangeExpr):
+    def __str__(self):
+        return 'UndefinedRange'
 
 # Generic range operator -- not be directly instantiated
 

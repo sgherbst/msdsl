@@ -1,37 +1,34 @@
 from msdsl.expr.expr import ModelExpr
 from msdsl.expr.format import RealFormat, UIntFormat, SIntFormat
-from msdsl.expr.range import RangeOf
+from msdsl.expr.svreal import RangeOf, WidthOf, ExponentOf, UndefinedRange
 
 class Signal(ModelExpr):
-    def __init__(self, name=None, format=None):
-        # save settings
+    def __init__(self, name, format):
         self.name = name
-
-        # call the super constructor
         super().__init__(format=format)
 
     def __str__(self):
         return self.name
 
 class AnalogSignal(Signal):
-    def __init__(self, name, range=None, width=None):
-        # set defaults
-        if range is None:
-            range = RangeOf(name)
-
-        # determine the format
-        format = RealFormat(range=range, width=width)
-
-        # call the super constructor
+    def __init__(self, name, range=None, width=None, exponent=None):
+        range = range if range is not None else UndefinedRange()
+        format = RealFormat(range=range, width=width, exponent=exponent)
         super().__init__(name=name, format=format)
+
+class AnalogState(AnalogSignal):
+    def __init__(self, name, range, width=None, exponent=None, init=0):
+        self.init = init
+        super().__init__(name=name, range=range, width=width, exponent=exponent)
+
+class AnalogOutput(AnalogSignal):
+    def __init__(self, name, init=0):
+        self.init = init
+        super().__init__(name=name, range=RangeOf(name), width=WidthOf(name), exponent=ExponentOf(name))
 
 class AnalogInput(AnalogSignal):
     def __init__(self, name):
-        super().__init__(name=name, range=RangeOf(name))
-
-class AnalogOutput(AnalogSignal):
-    def __init__(self, name):
-        super().__init__(name=name, range=RangeOf(name))
+        super().__init__(name=name, range=RangeOf(name), width=WidthOf(name), exponent=ExponentOf(name))
 
 class DigitalSignal(Signal):
     def __init__(self, name, width=1, signed=False):
@@ -44,10 +41,17 @@ class DigitalSignal(Signal):
         # call the super constructor
         super().__init__(name=name, format=format)
 
-class DigitalInput(DigitalSignal):
-    pass
+class DigitalState(DigitalSignal):
+    def __init__(self, name, width=1, signed=False, init=0):
+        self.init = init
+        super().__init__(name=name, width=width, signed=signed)
 
 class DigitalOutput(DigitalSignal):
+    def __init__(self, name, width=1, signed=False, init=0):
+        self.init = init
+        super().__init__(name=name, width=width, signed=signed)
+
+class DigitalInput(DigitalSignal):
     pass
 
 def main():

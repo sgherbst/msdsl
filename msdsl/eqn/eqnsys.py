@@ -1,34 +1,11 @@
 import numpy as np
 
-from typing import List
-
-from msdsl.expr.expr import ModelOperator
 from msdsl.expr.signals import AnalogSignal
 from msdsl.expr.simplify import distribute_mult, extract_coeffs
 from msdsl.util import list2dict, warn
 from msdsl.eqn.deriv import deriv_str, Deriv
-
-def names(l: List[AnalogSignal]):
-    return [elem.name for elem in l]
-
-def walk_expr(expr, cond_fun):
-    retval = []
-
-    if cond_fun(expr):
-        retval.append(expr)
-
-    if isinstance(expr, ModelOperator):
-        retval = []
-        for operand in expr.operands:
-            retval.extend(walk_expr(operand, cond_fun))
-
-    return retval
-
-def get_all_signals(expr):
-    return walk_expr(expr, lambda e: isinstance(e, AnalogSignal))
-
-def get_all_derivs(expr):
-    return walk_expr(expr, lambda e: isinstance(e, Deriv))
+from msdsl.eqn.analyze import get_all_signal_names, names
+from msdsl.eqn.lds import LDS
 
 def eqn_sys_to_lds(eqns=None, inputs=None, states=None, outputs=None):
     # set defaults
@@ -40,8 +17,7 @@ def eqn_sys_to_lds(eqns=None, inputs=None, states=None, outputs=None):
     derivs = [Deriv(state) for state in states]
 
     # create list of all internal signals, then use it to figure out what signals are completely internal
-    all_signals = [signal for eqn in eqns for signal in get_all_signals(eqn)]
-    internal_name_set = set(names(all_signals)) - set(names(inputs)+names(outputs)+names(states)+names(derivs))
+    internal_name_set = get_all_signal_names(eqns) - set(names(inputs) + names(outputs) + names(states) + names(derivs))
 
     # indices of known and unknown variables
     unknowns = list2dict(list(internal_name_set) + names(outputs) + names(derivs))
@@ -111,7 +87,7 @@ def eqn_sys_to_lds(eqns=None, inputs=None, states=None, outputs=None):
     else:
         D = None
 
-    return A, B, C, D
+    return LDS(A=A, B=B, C=C, D=D)
 
 # additional classes
 

@@ -1,7 +1,9 @@
 from abc import ABC, abstractmethod
 from typing import List
+from numbers import Number
 
-from msdsl.expr import Signal
+from msdsl.expr.signals import Signal
+from msdsl.expr.expr import ModelExpr
 
 class CodeGenerator(ABC):
     def __init__(self, filename=None, tab_string='    ', line_ending='\n', tmp_prefix='tmp'):
@@ -13,16 +15,9 @@ class CodeGenerator(ABC):
 
         # initialize variables
         self.tab_level = 0
-        self.tmp_counter = 0
         self.text = ''
 
     # concrete functions
-
-    def tmp_name(self):
-        name = f'{self.tmp_prefix}{self.tmp_counter}'
-        self.tmp_counter += 1
-
-        return name
 
     def indent(self):
         self.tab_level += 1
@@ -58,11 +53,15 @@ class CodeGenerator(ABC):
         pass
 
     @abstractmethod
-    def make_assign(self, input_: Signal, output: Signal):
+    def set_this_cycle(self, signal: Signal, expr: ModelExpr):
         pass
 
     @abstractmethod
-    def make_mem(self, next: Signal, curr: Signal) -> Signal:
+    def set_next_cycle(self, signal: Signal, expr: ModelExpr, init: Number):
+        pass
+
+    @abstractmethod
+    def bind_name(self, name: str, expr: ModelExpr):
         pass
 
     @abstractmethod

@@ -1,10 +1,10 @@
-from functools import reduce
 from numbers import Integral
 from typing import List
 
 from msdsl.expr.format import RealFormat, UIntFormat
 from msdsl.expr.expr import wrap_constants, promote_operands, EqualTo, Sum, Product, prod_op, sum_op, ModelExpr
 from msdsl.expr.signals import DigitalSignal
+from msdsl.expr.svreal import UndefinedRange
 
 def subst_case(expr, sel_bit_settings):
     if isinstance(expr, EqnCase):
@@ -62,12 +62,8 @@ class EqnCase(ModelExpr):
         self.cases = cases
         self.sel_bits = sel_bits
 
-        # determine the output format (needed so that EqnCase interacts nicely with other expressions, even
-        # though it will never appear in the final output)
-        format = reduce(RealFormat.union_with, [case.format for case in cases])
-
         # call the super constructor
-        super().__init__(format=format)
+        super().__init__(format=RealFormat(range=UndefinedRange()))
 
     def get_address(self, sel_bit_settings):
         # returns the case table address corresponding to the given sel_bit_settings.  note that some sel_bits
@@ -104,8 +100,10 @@ def main():
     print(address_to_settings(7, sel_bits))
 
     expr = 1 + eqn_case([-1, 1], [a])
-    print(expr)
-    print(subst_case(expr, {'a': 0}))
+    print(expr, expr.format.range)
+
+    expr = subst_case(expr, {'a': 1})
+    print(expr, expr.format.range)
 
 if __name__ == '__main__':
     main()

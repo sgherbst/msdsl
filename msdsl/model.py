@@ -1,16 +1,15 @@
 from collections import OrderedDict
 from itertools import chain
-from numbers import Number, Integral
-from typing import List
+from numbers import Integral
+from typing import List, Set, Union
 
 from msdsl.assignment import ThisCycleAssignment, NextCycleAssignment, BindingAssignment
-from msdsl.eqn.analyze import (get_state_names, get_analog_input_names, get_all_signal_names,
-                               get_sel_bit_names, get_deriv_names, names)
-from msdsl.eqn.cases import subst_case, address_to_settings
-from msdsl.eqn.eqnsys import eqn_sys_to_lds
+from msdsl.expr.analyze import signal_names
+from msdsl.eqn.cases import address_to_settings
+from msdsl.eqn.eqn_sys import EqnSys
 from msdsl.expr.expr import ModelExpr, Array, Concatenate, sum_op, wrap_constant
 from msdsl.expr.signals import (AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, Signal, AnalogSignal,
-                                AnalogState, DigitalState)
+                   AnalogState, DigitalState)
 from msdsl.generator.generator import CodeGenerator
 from msdsl.util import Namer
 from msdsl.eqn.lds import LdsCollection
@@ -77,8 +76,20 @@ class MixedSignalModel:
         assert self.has_signal(name), 'The signal ' + name + ' has not been defined.'
         return self.signals[name]
 
-    def get_signals(self, names: List[str]):
+    def get_signals(self, names: Union[List[str], Set[str]]):
         return [self.get_signal(name) for name in names]
+
+    def get_analog_inputs(self):
+        return [signal for signal in self.signals.values() if isinstance(signal, AnalogInput)]
+
+    def get_analog_outputs(self):
+        return [signal for signal in self.signals.values() if isinstance(signal, AnalogOutput)]
+
+    def get_digital_inputs(self):
+        return [signal for signal in self.signals.values() if isinstance(signal, DigitalInput)]
+
+    def get_digital_outputs(self):
+        return [signal for signal in self.signals.values() if isinstance(signal, DigitalOutput)]
 
     # functions to assign signals
 
@@ -115,7 +126,7 @@ class MixedSignalModel:
         return name in self.assignments
 
     def get_assignment(self, name: str):
-        assert self.has_assignment(name), 'The signal ' + name + ' has not been assigned.'
+        assert self.has_assignment(name), f'The signal {name} has not been assigned.'
         return self.assignments[name]
 
     def get_assignments(self, names: List[str]):
@@ -128,38 +139,45 @@ class MixedSignalModel:
 
     # signal assignment functions
 
-    def get_equation_io(self, eqns):
+    def get_equation_io(self, eqn_sys: EqnSys):
         # determine all signals present in the set of equations
-        all_signal_names = get_all_signal_names(eqns)
+        all_signal_names = set(signal_names(eqn_sys.get_all_signals()))
 
         # determine inputs
-        input_names = all_signal_names & (get_analog_input_names(self.signals) | self.assignments.keys())
+        input_names = (signal_names(self.get_analog_inputs()) | self.assignments.keys()) & all_signal_names
         inputs = self.get_signals(input_names)
 
         # determine states
-        state_names = get_state_names(eqns)
+        state_names = set(signal_names(eqn_sys.get_states()))
+        deriv_names = set(signal_names(eqn_sys.get_derivs()))
         states = self.get_signals(state_names)
 
         # determine outputs
-        output_names = (all_signal_names - input_names - get_deriv_names(eqns) - state_names) & self.signals.keys()
+        output_names  = (all_signal_names - input_names - state_names - deriv_names) & self.signals.keys()
         outputs = self.get_signals(output_names)
 
         # determine sel_bits
-        sel_bit_names = get_sel_bit_names(eqns)
+        sel_bit_names = set(signal_names(eqn_sys.get_sel_bits()))
         sel_bits = self.get_signals(sel_bit_names)
 
         # return result
         return inputs, states, outputs, sel_bits
 
-    def add_eqn_sys(self, eqns, extra_outputs=None):
+    def add_eqn_sys(self, eqns: List[ModelExpr], extra_outputs=None):
+        # set defaults
+        extra_outputs = extra_outputs if extra_outputs is not None else []
+
+        # create object to hold system of equations
+        eqn_sys = EqnSys(eqns)
+
         # analyze equation to find out knowns and unknowns
-        inputs, states, outputs, sel_bits = self.get_eqn_io(eqns)
+        inputs, states, outputs, sel_bits = self.get_eqn_io(eqn_sys)
 
         # add the extra outputs as needed
         for extra_output in extra_outputs:
             if not isinstance(extra_output, Signal):
                 print('Skipping extra output ' + str(extra_output) + ' since it is not a Signal.')
-            elif extra_output.name in names(outputs):
+            elif extra_output.name in signal_names(outputs):
                 print('Skipping extra output ' + extra_output.name + \
                       ' since it is already included by default in the outputs of the system of equations.')
             else:
@@ -172,10 +190,10 @@ class MixedSignalModel:
         for k in range(2 ** len(sel_bits)):
             # substitute values for this particular setting
             sel_bit_settings = address_to_settings(k, sel_bits)
-            eqns_k = [subst_case(eqn, sel_bit_settings) for eqn in eqns]
+            eqn_sys_k = eqn_sys.subst_case(sel_bit_settings)
 
             # convert system of equations to a linear dynamical system
-            lds = eqn_sys_to_lds(eqns=eqns_k, inputs=inputs, states=states, outputs=outputs)
+            lds = eqn_sys_k.to_lds(inputs=inputs, states=states, outputs=outputs)
 
             # discretize linear dynamical system
             lds = self.discretize_lds(lds)
@@ -217,7 +235,7 @@ class MixedSignalModel:
             else:
                 self.bind_name(outputs[row].name, expr)
 
-    def set_tf(self, input_, output, tf, in_init: Number = 0, out_init: Number = 0):
+    def set_tf(self, input_, output, tf):
         # discretize transfer function
         res = cont2discrete(tf, self.dt)
 
@@ -226,8 +244,8 @@ class MixedSignalModel:
         a = [-float(val) for val in res[1].flatten()]
 
         # create input and output histories
-        i_hist = self.make_history(input_, len(b), init=in_init)
-        o_hist = self.make_history(output, len(a), init=out_init)
+        i_hist = self.make_history(input_, len(b))
+        o_hist = self.make_history(output, len(a))
 
         # implement the filter
         expr = sum_op([coeff * var for coeff, var in chain(zip(b, i_hist), zip(a[1:], o_hist))])
@@ -235,7 +253,7 @@ class MixedSignalModel:
         # make the assignment
         self.set_next_cycle(signal=output, expr=expr)
 
-    def make_history(self, first: Signal, length: Integral, init: Number = 0):
+    def make_history(self, first: Signal, length: Integral):
         # initialize
         hist = []
 
@@ -315,17 +333,17 @@ def main():
     z = model.add_signal(AnalogSignal('z', 10))
     s = model.add_signal(DigitalSignal('s'))
 
-    eqns = [
+    eqn_sys = EqnSys([
         y == model.x + 1,
         Deriv(z) == (y - z) * eqn_case([2, 3], [s])
-    ]
+    ])
 
-    inputs, states, outputs, sel_bits = model.get_equation_io(eqns)
+    inputs, states, outputs, sel_bits = model.get_equation_io(eqn_sys)
 
-    print('inputs:', names(inputs))
-    print('states:', names(states))
-    print('outputs:', names(outputs))
-    print('sel_bits:', names(sel_bits))
+    print('inputs:', signal_names(inputs))
+    print('states:', signal_names(states))
+    print('outputs:', signal_names(outputs))
+    print('sel_bits:', signal_names(sel_bits))
 
 
 if __name__ == '__main__':

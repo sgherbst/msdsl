@@ -40,6 +40,21 @@ class LDS:
         # return result
         return LDS(A=A_tilde, B=B_tilde, C=C_tilde, D=D_tilde)
 
+    # overloaded methods
+
+    def __str__(self):
+        # build up list of lines
+        retval = ['*** Linear Dynamical System ***']
+        for k, (name, mat) in enumerate([('A', self.A), ('B', self.B), ('C', self.C), ('D', self.D)]):
+            retval.append('')
+            retval.append(f'{name} matrix')
+            retval.append(str(mat))
+
+        # add newlines
+        retval = '\n'.join(retval)
+
+        # return result
+        return retval
 
 class LdsCollection:
     def __init__(self):

@@ -2,12 +2,12 @@ from typing import List
 from numbers import Number
 import datetime
 
-from msdsl.generator import CodeGenerator
-from msdsl.expr import (AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, Signal, DigitalSignal, AnalogSignal,
-                        Plus, Times, AnalogConstant, AnalogArray, BinaryOp, ListOp, LessThan, LessThanOrEquals, GreaterThan,
-                        GreaterThanOrEquals, Concatenate, EqualTo, NotEqualTo, Min, Max, DigitalArray, ArrayOp,
-                        BitwiseAnd, BitwiseInv, BitwiseOr, BitwiseXor, UnaryOp, DigitalConstant, DigitalCases,
-                        CaseExpr, AnalogCases)
+from msdsl.generator.generator import CodeGenerator
+from msdsl.expr.expr import (AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, Signal, DigitalSignal, AnalogSignal,
+                   Plus, Times, AnalogConstant, AnalogArray, BinaryOp, ListOp, LessThan, LessThanOrEquals, GreaterThan,
+                   GreaterThanOrEquals, Concatenate, EqualTo, NotEqualTo, Min, Max, DigitalArray, ArrayOp,
+                   BitwiseAnd, BitwiseInv, BitwiseOr, BitwiseXor, UnaryOp, DigitalConstant, DigitalCases,
+                   CaseExpr, AnalogCases)
 from msdsl.util import tree_op
 
 class VerilogGenerator(CodeGenerator):

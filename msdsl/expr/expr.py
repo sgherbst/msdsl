@@ -508,13 +508,16 @@ def case_table(values: List, default):
 
 # type conversions
 
+class TypeConversion(UnaryOperator):
+    pass
+
 def uint_to_sint(operand):
     if isinstance(operand, Constant):
         return SIntConstant(operand.value)
     else:
         return UIntToSInt(operand)
 
-class UIntToSInt(UnaryOperator):
+class UIntToSInt(TypeConversion):
     def __init__(self, operand: ModelExpr):
         # input checking
         assert isinstance(operand.format, UIntFormat), \
@@ -535,7 +538,7 @@ def sint_to_real(operand):
     else:
         return SIntToReal(operand)
 
-class SIntToReal(UnaryOperator):
+class SIntToReal(TypeConversion):
     def __init__(self, operand):
         # input checking
         assert isinstance(operand.format, SIntFormat), \

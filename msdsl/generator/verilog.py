@@ -1,20 +1,59 @@
-from typing import List
+from typing import List, Union
 from numbers import Number
 import datetime
 
 from msdsl.generator.generator import CodeGenerator
-from msdsl.expr.expr import (AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, Signal, DigitalSignal, AnalogSignal,
-                   Plus, Times, AnalogConstant, AnalogArray, BinaryOp, ListOp, LessThan, LessThanOrEquals, GreaterThan,
-                   GreaterThanOrEquals, Concatenate, EqualTo, NotEqualTo, Min, Max, DigitalArray, ArrayOp,
-                   BitwiseAnd, BitwiseInv, BitwiseOr, BitwiseXor, UnaryOp, DigitalConstant, DigitalCases,
-                   CaseExpr, AnalogCases)
-from msdsl.util import tree_op
+from msdsl.expr.expr import ModelExpr, wrap_constant, ModelOperator, Constant, ArithmeticOperator, ComparisonOperator, \
+    BitwiseOperator, Concatenate, Array, TypeConversion, SIntToReal, UIntToSInt, BitwiseInv
+from msdsl.expr.format import UIntFormat, SIntFormat, RealFormat, IntFormat
+from msdsl.expr.signals import Signal, AnalogSignal, DigitalSignal, AnalogInput, AnalogOutput, DigitalOutput, \
+    DigitalInput
+from msdsl.generator.tree_op import tree_op
+from msdsl.generator.svreal import compile_range_expr, compile_width_expr, compile_exponent_expr
+from msdsl.expr.analyze import signal_names, signal_name
+
+BITWISE_OP = {
+    'BitwiseInv': '~',
+    'BitwiseAnd': '&',
+    'BitwiseOr': '|',
+    'BitwiseXor': '^'
+}
+
+INT_COMP_OP = {
+    'LessThan': '<',
+    'LessThanOrEquals': '<=',
+    'GreaterThan': '>',
+    'GreaterThanOrEquals': '>=',
+    'EqualTo': '==',
+    'NotEqualTo': '!='
+}
+
+REAL_COMP_OP = {
+    'LessThan': 'LT_REAL',
+    'LessThanOrEquals': 'LE_REAL',
+    'GreaterThan': 'GT_REAL',
+    'GreaterThanOrEquals': 'GE_REAL',
+    'EqualTo': 'EQ_REAL',
+    'NotEqualTo': 'NE_REAL'
+}
+
+REAL_ARITH_OP = {
+    'Sum': 'ADD_REAL',
+    'Product': 'MUL_REAL',
+    'Min': 'MIN_REAL',
+    'Max': 'MAX_REAL'
+}
+
+INT_ARITH_OP = {
+    'Sum':     lambda a, b: f'({a}+{b})',
+    'Product': lambda a, b: f'({a}*{b})',
+    'Min':     lambda a, b: f'(({a} < {b}) ? {a} : {b})',
+    'Max':     lambda a, b: f'(({a} > {b}) ? {a} : {b})'
+}
 
 class VerilogGenerator(CodeGenerator):
-    def __init__(self, filename=None, tab_string='    ', line_ending='\n'):
-        super().__init__(filename=filename, tab_string=tab_string, line_ending=line_ending)
-
-        # initialize model file
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.init_file()
 
     #######################################################
@@ -23,112 +62,48 @@ class VerilogGenerator(CodeGenerator):
     def make_section(self, label):
         self.comment(label)
 
-    def compile_expr(self, expr, type_hint='analog'):
-        if isinstance(expr, Number):
-            return self.make_analog_const(expr)
-        elif isinstance(expr, Signal):
+    def expr_to_signal(self, expr: ModelExpr):
+        # wrap number as constant if needed
+        expr = wrap_constant(expr)
+
+        # handle expression
+        if isinstance(expr, Signal):
             return expr
-        elif isinstance(expr, AnalogConstant):
-            return self.make_analog_const(expr.value)
-        elif isinstance(expr, DigitalConstant):
-            return self.make_digital_const(expr)
-        elif isinstance(expr, CaseExpr):
-            addr_bits = [self.compile_expr(case[0]) for case in expr.cases]
-            unique_values = [self.compile_expr(case[1]) for case in expr.cases]
-
-            terms = ...
-
-            # check the array type
-            if isinstance(expr, DigitalCases):
-                array_cls = DigitalArray
-            elif isinstance(expr, AnalogCases):
-                array_cls = AnalogArray
-            else:
-                raise Exception(f'Invalid ArrayOp: {type(expr)}')
-
-            return self.compile_expr(array_cls(terms=terms, addr=Concatenate(addr_bits)))
-        elif isinstance(expr, ArrayOp):
-            # compile address
-            gen_addr = self.compile_expr(expr.addr) if expr.addr is not None else None
-
-            # compile terms
-            gen_terms = [self.compile_expr(term) for term in expr.terms]
-
-            # update expression properties
-            expr.addr = gen_addr
-            expr.terms = gen_terms
-
-            # implement the lookup table
-            return self.make_array(expr)
-        elif isinstance(expr, ListOp):
-            # compile each term
-            gen_terms = [self.compile_expr(term) for term in expr.terms]
-
-            # determine the elementwise operations
-            if isinstance(expr, Plus):
-                op = lambda a, b: self.make_plus(a, b)
-                default = lambda: self.make_analog_const(0)
-            elif isinstance(expr, Times):
-                op = lambda a, b: self.make_times(a, b)
-                default = lambda: self.make_analog_const(1)
-            elif isinstance(expr, Min):
-                op = lambda a, b: self.make_min(a, b)
-                default = lambda: self.make_analog_const(0)
-            elif isinstance(expr, Max):
-                op = lambda a, b: self.make_max(a, b)
-                default = lambda: self.make_analog_const(0)
-            else:
-                raise Exception('Invalid ListOp type.')
-
-            # implement operations in a tree
-            return tree_op(gen_terms, op=op, default=default)
-        elif isinstance(expr, UnaryOp):
-            gen_term = self.compile_expr(expr.term)
-
-            if isinstance(expr, BitwiseInv):
-                return self.make_bitwise_op('~', [gen_term])
-            else:
-                raise Exception('Invalid UnaryOp type.')
-        elif isinstance(expr, BinaryOp):
-            gen_lhs = self.compile_expr(expr.lhs)
-            gen_rhs = self.compile_expr(expr.rhs)
-
-            if isinstance(expr, BitwiseAnd):
-                return self.make_bitwise_op('&', [gen_lhs, gen_rhs])
-            elif isinstance(expr, BitwiseOr):
-                return self.make_bitwise_op('|', [gen_lhs, gen_rhs])
-            elif isinstance(expr, BitwiseXor):
-                return self.make_bitwise_op('^', [gen_lhs, gen_rhs])
-            elif isinstance(expr, LessThan):
-                return self.make_less_than(gen_lhs, gen_rhs)
-            elif isinstance(expr, LessThanOrEquals):
-                return self.make_less_than_or_equals(gen_lhs, gen_rhs)
-            elif isinstance(expr, GreaterThan):
-                return self.make_greater_than(gen_lhs, gen_rhs)
-            elif isinstance(expr, GreaterThanOrEquals):
-                return self.make_greater_than_or_equals(gen_lhs, gen_rhs)
-            elif isinstance(expr, EqualTo):
-                return self.make_equal_to(gen_lhs, gen_rhs)
-            elif isinstance(expr, NotEqualTo):
-                return self.make_not_equal_to(gen_lhs, gen_rhs)
-            else:
-                raise Exception('Invalid BinaryOp type.')
+        elif isinstance(expr, Constant):
+            return self.handle_constant(expr=expr)
+        elif isinstance(expr, ArithmeticOperator):
+            operands = [self.expr_to_signal(operand) for operand in expr.operands]
+            return self.make_arithmetic_operator(expr=expr, operands=operands)
+        elif isinstance(expr, BitwiseIv)
+        elif isinstance(expr, BitwiseOperator):
+            return self.make_bitwise_operator(expr=expr, operands=operands)
+        elif isinstance(expr, ComparisonOperator):
+            return self.make_comparison_operator(expr=expr, operands=operands)
         elif isinstance(expr, Concatenate):
-            gen_terms = [self.compile_expr(term) for term in expr.terms]
-            return self.make_concatenate(gen_terms)
+            return self.make_concatenation(expr=expr, operands=operands)
+        elif isinstance(expr, Array):
+            return self.make_array(expr=expr, operands=operands)
+        elif isinstance(expr, TypeConversion):
+            return self.make_type_conversion(expr=expr, operands=operands)
         else:
-            raise Exception(f'Invalid expression type: {type(expr)}')
+            raise Exception(f'Unknown expression type: {type(expr)}')
 
     def make_signal(self, s: Signal):
-        if isinstance(s, AnalogSignal):
-            if s.range is not None:
-                self.macro_call('MAKE_REAL', s.name, self.real2str(s.range))
-            elif s.copy_format_from is not None:
-                self.macro_call('COPY_FORMAT_REAL', s.copy_format_from.name, s.name)
+        if isinstance(s.format, RealFormat):
+            # compile the range, width, and exponent expressions
+            range = compile_range_expr(s.format.range)
+            width = compile_width_expr(s.format.width)
+            exponent = compile_exponent_expr(s.format.exponent)
+
+            # call the appropriate macro
+            if width is None:
+                self.macro_call('MAKE_REAL', s.name, range)
+            elif exponent is None:
+                self.macro_call('MAKE_GENERIC_REAL', s.name, range, width)
             else:
-                raise Exception('Range not specified for signal.')
-        elif isinstance(s, DigitalSignal):
-            self.println(f'{VerilogGenerator.digital_type_string(s)} {s.name};')
+                self.macro_call('MAKE_FORMAT_REAL', s.name, range, width, exponent)
+        elif isinstance(s.format, IntFormat):
+            self.writeln(f'{self.int_type_str(s.format)} {s.name};')
         else:
             raise Exception('Invalid signal type.')
 
@@ -136,43 +111,53 @@ class VerilogGenerator(CodeGenerator):
         if isinstance(s, AnalogSignal):
             self.macro_call('PROBE_ANALOG', s.name)
         elif isinstance(s, DigitalSignal):
-            self.macro_call('PROBE_DIGITAL', s.name, str(s.width))
+            self.macro_call('PROBE_DIGITAL', s.name, str(s.format.width))
         else:
             raise Exception('Invalid signal type.')
 
     def make_assign(self, input_: Signal, output: Signal):
-        if isinstance(input_, AnalogSignal) and isinstance(output, AnalogSignal):
+        if isinstance(input_.format, RealFormat) and isinstance(output.format, RealFormat):
             self.macro_call('ASSIGN_REAL', input_.name, output.name)
-        elif isinstance(input_, DigitalSignal) and isinstance(output, DigitalSignal):
-            self.println(f'assign {output.name} = {input_.name};')
+        elif (isinstance(input_.format, SIntFormat) and isinstance(output.format, SIntFormat)) or \
+             (isinstance(input_.format, UIntFormat) and isinstance(output.format, UIntFormat)):
+            self.writeln(f'assign {output.name} = {input_.name};')
         else:
-            raise Exception('Invalid signal type.')
+            raise Exception(f'Input and output formats do not match: {input_.format} vs. {output.format}')
 
-    def make_mem(self, next: Signal, curr: Signal):
-        if isinstance(next, AnalogSignal) and isinstance(curr, AnalogSignal):
-            self.macro_call('MEM_INTO_ANALOG', next.name, curr.name, "1'b1", '0')
-        elif isinstance(next, DigitalSignal) and isinstance(curr, DigitalSignal):
-            assert next.width == curr.width
-            self.macro_call('MEM_INTO_DIGITAL', next.name, curr.name, "1'b1", '0', str(next.width))
+    def make_mem(self, next_: Signal, curr: Signal, init: Number=0):
+        # create memory for real number
+        if isinstance(next_.format, RealFormat) and isinstance(curr.format, RealFormat):
+            self.macro_call('MEM_INTO_ANALOG', next_.name, curr.name, "1'b1", str(init))
+        # create memory for integer
+        elif (isinstance(next_.format, SIntFormat) and isinstance(curr.format, SIntFormat)) or \
+             (isinstance(next_.format, UIntFormat) and isinstance(curr.format, UIntFormat)):
+            # check that initial value is valid
+            assert (curr.format.min_val <= init <= curr.format.max_val), \
+                f'Initial value {init} does not fit in the range [{curr.format.min_val}, {curr.format.max_val}] of signal {curr.name}.'
+
+            # check that the widths match
+            assert next_.format.width == curr.format.width, f'The widths of {next_.name} and {curr.name} do not match.'
+
+            self.macro_call('MEM_INTO_DIGITAL', next_.name, curr.name, "1'b1", str(init), str(next_.format.width))
         else:
-            raise Exception('Invalid signal type.')
+            raise Exception(f'Next and current formats do not match: {next_.format} vs. {curr.format}')
 
     def start_module(self, name: str, ios: List[Signal]):
         # clear default nettype to make debugging easier
         self.default_nettype('none')
-        self.println()
+        self.writeln()
 
         # module name
         self.write(f'module {name}')
 
         # parameters
-        parameters = [self.param_string(io) for io in ios if isinstance(io, (AnalogInput, AnalogOutput))]
+        parameters = [self.real_param_str(io) for io in ios if isinstance(io.format, RealFormat)]
         if len(parameters) > 0:
             self.write(' #')
             self.comma_separated_lines(parameters)
 
         # ports
-        ports = [self.port_string(io) for io in ios]
+        ports = [self.port_str(io) for io in ios]
         if len(ports) > 0:
             self.write(' ')
             self.comma_separated_lines(ports)
@@ -183,164 +168,129 @@ class VerilogGenerator(CodeGenerator):
 
     def end_module(self):
         self.dedent()
-        self.println('endmodule')
-        self.println()
+        self.writeln('endmodule')
+        self.writeln()
         self.default_nettype('wire')
 
     #######################################################
 
-    def make_bin_op(self, macro_name: str, a: Signal, b: Signal):
-        name = self.tmp_name()
+    def handle_constant(self, expr):
+        name = next(self.namer)
 
-        if isinstance(a, AnalogSignal) and isinstance(b, AnalogSignal):
-            self.macro_call(macro_name, a.name, b.name, name)
-            return AnalogSignal(name)
-        else:
-            raise Exception('Invalid signal type.')
+        if isinstance(expr.format, RealFormat):
+            # compile the range, width, and exponent expressions
+            const = str(expr.value)
+            range = compile_range_expr(expr.format.range)
+            width = compile_width_expr(expr.format.width)
+            exponent = compile_exponent_expr(expr.format.exponent)
 
-    def make_times(self, a: Signal, b: Signal):
-        return self.make_bin_op('MUL_REAL', a, b)
-
-    def make_plus(self, a: Signal, b: Signal):
-        return self.make_bin_op('ADD_REAL', a, b)
-
-    def make_min(self, a: Signal, b: Signal):
-        return self.make_bin_op('MIN_REAL', a, b)
-
-    def make_max(self, a: Signal, b: Signal):
-        return self.make_bin_op('MAX_REAL', a, b)
-
-    def make_analog_const(self, value: Number):
-        name = self.tmp_name()
-        self.macro_call('MAKE_CONST_REAL', self.real2str(value), name)
-        return AnalogSignal(name)
-
-    def make_digital_const(self, digital_constant):
-        name = self.tmp_name()
-        self.println(f'{self.digital_type_string(digital_constant)} {name};')
-        self.println(f'assign {name} = {str(digital_constant)};')
-        return DigitalSignal(name, width=digital_constant.width)
-
-    def make_less_than(self, lhs, rhs):
-        return self.make_comp('LT_REAL', lhs, rhs)
-
-    def make_less_than_or_equals(self, lhs, rhs):
-        return self.make_comp('LE_REAL', lhs, rhs)
-
-    def make_greater_than(self, lhs, rhs):
-        return self.make_comp('GT_REAL', lhs, rhs)
-
-    def make_greater_than_or_equals(self, lhs, rhs):
-        return self.make_comp('GE_REAL', lhs, rhs)
-
-    def make_equal_to(self, lhs, rhs):
-        return self.make_comp('EQ_REAL', lhs, rhs)
-
-    def make_not_equal_to(self, lhs, rhs):
-        return self.make_comp('NE_REAL', lhs, rhs)
-
-    def make_concatenate(self, terms: List[DigitalSignal]):
-        # create the output signal
-        width = sum(term.width for term in terms)
-        out = DigitalSignal(self.tmp_name(), width=width)
-        self.make_signal(out)
-
-        # assign the output signal
-        concat_string = '{' + ', '.join(term.name for term in terms) + '}'
-        self.println(f'assign {out.name} = {concat_string};')
-
-        return out
-
-    def make_array(self, array):
-        if len(array.terms) == 0:
-            raise Exception('Invalid table size.')
-        elif len(array.terms) == 1:
-            return array.terms[0]
-        else:
-            if isinstance(array, AnalogArray):
-                out = AnalogSignal(name=self.tmp_name())
-                range = str(array.analog_range) if array.analog_range is not None else self.max_analog_range(array.terms)
-                self.macro_call('MAKE_REAL', out.name, range)
-
-                # create a signal for each entry in the table that is aligned to the output format
-                # this is important because the values may have varying binary points
-                entries = []
-                for k, value in enumerate(array.terms):
-                    entry = out.copy_format_to(f'{out.name}_{k}')
-                    entries.append(entry)
-
-                    self.make_signal(entry)
-                    self.make_assign(value, entry)
-            elif isinstance(array, DigitalArray):
-                # check term widths
-                assert all(term.width == array.terms[0].width for term in array.terms[1:]), 'All terms in a DigitalArray must have the same width.'
-
-                # make output signal
-                out = DigitalSignal(name=self.tmp_name(), width=array.terms[0].width)
-                self.make_signal(out)
-
-                # for now, all values are assumed to have the same width so realignment is not required
-                entries = array.terms
+            # call the appropriate macro
+            if width is None:
+                self.macro_call('MAKE_CONST_REAL', const, name)
+            elif exponent is None:
+                self.macro_call('MAKE_GENERIC_CONST_REAL', const, name, width)
             else:
-                raise Exception('Invalid signal type.')
+                self.macro_call('MAKE_FORMAT_REAL', name, range, width, exponent)
+                self.macro_call('ASSIGN_CONST_REAL', const, name)
+        elif isinstance(expr.format, IntFormat):
+            self.decl_digital(fmt=expr.format, name=name)
+            self.assign_digital(name=name, value=expr.value)
+        else:
+            raise ValueError(f'Unknown expression format type: ' + expr.format.__class__.__name__)
 
-            # create string entries for each case
-            case_entries = [(k, f'{out.name} = {entry.name}') for k, entry in enumerate(entries)]
-            self.always_begin('*')
-            self.case_statement(array.addr.name, case_entries, default = f'{out.name} = 0')
-            self.end()
+        return Signal(name=name, format=expr.format)
 
-            # return the variable
-            return out
+    def make_arithmetic_operator(self, expr, operands):
+        pass
+
+    def make_bitwise_operator(self, expr, operands):
+        op = BITWISE_OP[expr.__class__.__name__]
+
+        if op == '~':
+            assert len(operands) == 1, 'Bitwise inversion can only be applied to one operand.'
+            value = f'~{signal_name(operands[0])}'
+        else:
+            value = op.join(signal_names(operands))
+
+        name = next(self.namer)
+        self.decl_digital(fmt=expr.format, name=name)
+        self.assign_digital(name=name, value=value)
+
+        return Signal(name=name, format=expr.format)
+
+    def make_comparison_operator(self, expr, operands):
+        name = next(self.namer)
+        self.decl_digital(fmt=expr.format, name=name)
+
+        lhs = operands[0]
+        rhs = operands[1]
+        assert len(operands) == 2, 'Comparison operation must have exactly two operands.'
+
+        if isinstance(lhs.format, RealFormat):
+            op = REAL_COMP_OP[expr.__class__.__name__]
+            self.macro_call(op, lhs, rhs, name)
+        elif isinstance(lhs.format, IntFormat):
+            op = INT_COMP_OP[expr.__class__.__name__]
+            self.assign_digital(name, f'{lhs} {op} {rhs}')
+        else:
+            raise ValueError(f'Unknown LHS format type: ' + lhs.format.__class__.__name__)
+
+        return Signal(name=name, format=expr.format)
+
+    def make_concatenation(self, expr, operands):
+        value = '{' + ', '.join(signal_names(operands)) + '}'
+
+        name = next(self.namer)
+        self.decl_digital(fmt=expr.format, name=name)
+        self.assign_digital(name=name, value=value)
+
+        return Signal(name=name, format=expr.format)
+
+    def make_array(self, expr, operands):
+        pass
+
+    def make_type_conversion(self, expr, operands):
+        name = next(self.namer)
+
+        operand = operands[0]
+        assert len(operands) == 1, 'Type conversion must have exactly one operand.'
+
+        if isinstance(expr, SIntToReal):
+            self.macro_call('INT_TO_REAL', operand, operand.format.width, name)
+        elif isinstance(expr, UIntToSInt):
+            self.decl_digital(fmt=expr.format, name=name)
+            self.assign_digital(name=name, value="{1'b0, " + signal_name(operand) + "}")
+        else:
+            raise ValueError(f'Unknown type conversion: ' + expr.__class__.__name__)
+
+        return Signal(name=name, format=expr.format)
 
     def init_file(self):
         # print header
         self.comment(f'Model generated on {datetime.datetime.now()}')
-        self.println()
+        self.writeln()
 
         # set timescale
-        self.println(f'`timescale 1ns/1ps')
-        self.println()
+        self.writeln(f'`timescale 1ns/1ps')
+        self.writeln()
 
         # include required libraries
         self.include('real.sv')
         self.include('math.sv')
         self.include('msdsl.sv')
-        self.println()
-
-    def make_comp(self, macro_name, lhs, rhs):
-        name = self.tmp_name()
-        self.macro_call(macro_name, lhs.name, rhs.name, name)
-        return DigitalSignal(name)
-
-    def make_bitwise_op(self, op, terms):
-        # construct the expression
-        if len(terms) == 1:
-            value_str = f'{op}{terms[0]}'
-        elif len(terms) == 2:
-            value_str = f'{terms[0]}{op}{terms[1]}'
-        else:
-            raise Exception(f'Invalid number of terms for bitwise op: {len(terms)}')
-
-        # declare output signal and assign its value
-        result = DigitalSignal(self.tmp_name(), width=max(term.width for term in terms))
-        self.println(f'{self.digital_type_string(result)} {result.name};')
-        self.println(f'assign {result.name} = {value_str};')
-
-        # return resulting signal
-        return result
+        self.writeln()
 
     def include(self, file):
-        self.println(f'`include "{file}"')
+        self.writeln(f'`include "{file}"')
 
     def default_nettype(self, type):
-        self.println(f'`default_nettype {type}')
+        self.writeln(f'`default_nettype {type}')
 
     def macro_call(self, macro_name, *args):
-        self.println(f"`{macro_name}({', '.join(args)});")
+        self.writeln(f"`{macro_name}({', '.join(args)});")
 
     def comment(self, content=''):
-        self.println(f'// {content}')
+        self.writeln(f'// {content}')
 
     def comma_separated_lines(self, lines):
         self.write('(' + self.line_ending)
@@ -348,64 +298,87 @@ class VerilogGenerator(CodeGenerator):
         self.write(self.line_ending)
         self.write(')')
 
-    @staticmethod
-    def param_string(io):
-        return f'`DECL_REAL({io.name})'
+    def decl_digital(self, fmt: Union[SIntFormat, UIntFormat], name):
+        self.writeln(f'{self.int_type_str(fmt)} {name};')
+
+    def assign_digital(self, name, value):
+        self.writeln(f'assign {name} = {value};')
 
     @staticmethod
-    def port_string(io):
+    def real_param_str(io):
+        return f'`DECL_REAL({io.name})'
+
+    @classmethod
+    def port_str(cls, io):
         if isinstance(io, AnalogInput):
             return f'`INPUT_REAL({io.name})'
         elif isinstance(io, AnalogOutput):
             return f'`OUTPUT_REAL({io.name})'
         elif isinstance(io, DigitalInput):
-            type_string = VerilogGenerator.digital_type_string(io)
-            return f'input wire {type_string} {io.name}'
+            return f'input wire {cls.int_type_str(io)} {io.name}'
         elif isinstance(io, DigitalOutput):
-            type_string = VerilogGenerator.digital_type_string(io)
-            return f'output wire {type_string} {io.name}'
+            return f'output wire {cls.int_type_str(io)} {io.name}'
         else:
             raise Exception('Invalid type.')
 
     @staticmethod
-    def digital_type_string(s: DigitalSignal):
+    def int_type_str(fmt: Union[SIntFormat, UIntFormat]):
         retval = 'logic'
-        retval += ' signed' if s.signed else ''
-        retval += f' [{s.width-1}:0]'
+
+        if isinstance(fmt, UIntFormat):
+            pass
+        elif isinstance(fmt, SIntFormat):
+            retval += ' signed'
+        else:
+            raise Exception('Cannot determine if format is signed or unsigned.')
+
+        retval += f' [{fmt.width-1}:0]'
 
         return retval
-
-    def always_begin(self, sensitivity):
-        self.println(f'always @({sensitivity}) begin')
-        self.indent()
-
-    def case_statement(self, input_, case_entries, default=None):
-        self.println(f'case ({input_})')
-        self.indent()
-        for k, action in case_entries:
-            self.println(f'{k}: {action};')
-        if default is not None:
-            self.println(f'default: {default};')
-        self.dedent()
-        self.println('endcase')
-
-    def end(self):
-        self.dedent()
-        self.println('end')
 
     @staticmethod
     def real2str(value):
         return '{:0.10f}'.format(value)
 
-    @staticmethod
-    def max_analog_range(values: List[AnalogSignal]):
-        if len(values) == 0:
-            return '0'
-        elif len(values) == 1:
-            return f'`RANGE_PARAM_REAL({values[0].name})'
-        else:
-            return f'`MAX_MATH(`RANGE_PARAM_REAL({values[0].name}), {VerilogGenerator.max_analog_range(values[1:])})'
+    # if len(array.terms) == 0:
+    #     raise Exception('Invalid table size.')
+    # elif len(array.terms) == 1:
+    #     return array.terms[0]
+    # else:
+    #     if isinstance(array, AnalogArray):
+    #         out = AnalogSignal(name=self.tmp_name())
+    #         range = str(array.analog_range) if array.analog_range is not None else self.max_analog_range(array.terms)
+    #         self.macro_call('MAKE_REAL', out.name, range)
+    #
+    #         # create a signal for each entry in the table that is aligned to the output format
+    #         # this is important because the values may have varying binary points
+    #         entries = []
+    #         for k, value in enumerate(array.terms):
+    #             entry = out.copy_format_to(f'{out.name}_{k}')
+    #             entries.append(entry)
+    #
+    #             self.make_signal(entry)
+    #             self.make_assign(value, entry)
+    #     elif isinstance(array, DigitalArray):
+    #         # check term widths
+    #         assert all(term.width == array.terms[0].width for term in
+    #                    array.terms[1:]), 'All terms in a DigitalArray must have the same width.'
+    #
+    #         # make output signal
+    #         out = DigitalSignal(name=self.tmp_name(), width=array.terms[0].width)
+    #         self.make_signal(out)
+    #
+    #         # for now, all values are assumed to have the same width so realignment is not required
+    #         entries = array.terms
+    #     else:
+    #         raise Exception('Invalid signal type.')
+    #
+    #     # create string entries for each case
+    #     case_entries = [(k, f'{out.name} = {entry.name}') for k, entry in enumerate(entries)]
+    #     self.always_begin('*')
+    #     self.case_statement(array.addr.name, case_entries, default=f'{out.name} = 0')
+    #     self.end()
+    #
+    #     # return the variable
+    #     return out
 
-# sign = '-' if self.value < 0 else ''
-# is_signed = 's' if self.signed else ''
-# return f"{sign}{self.width}'{is_signed}d{abs(self.value)}"

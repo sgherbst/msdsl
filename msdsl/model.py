@@ -320,7 +320,7 @@ class MixedSignalModel:
         gen.end_module()
 
         # dump model to file
-        gen.dump_to_file()
+        gen.write_to_file()
 
 
 def main():

@@ -5,6 +5,8 @@ from math import log2, ceil
 from msdsl.expr.svreal import RangeExpr, range_max
 
 class Format:
+    shortname = None
+
     @classmethod
     def from_value(cls, value):
         return cls.from_values([value])
@@ -19,10 +21,14 @@ class Format:
     def max_with(self, other):
         raise NotImplementedError
 
-    def union_with(self, other):
+    @classmethod
+    def cover(cls, formats):
         raise NotImplementedError
 
 class RealFormat(Format):
+    # format shortname to aid with human-readable output
+    shortname = 'real'
+
     def __init__(self, range: Union[Number, RangeExpr], width=None, exponent=None):
         self.range = range
         self.width = width
@@ -74,31 +80,47 @@ class RealFormat(Format):
         else:
             raise NotImplementedError
 
-    def union_with(self, other):
-        if isinstance(other, RealFormat):
-            range = range_max([self.range, other.range])
-            return RealFormat(range=range)
-        else:
-            raise NotImplementedError
+    @classmethod
+    def cover(cls, formats):
+        assert all(isinstance(format, cls) for format in formats), \
+            f'Function can only be applied to a list of {cls.__name__} objects.'
+
+        range = range_max([format.range for format in formats])
+        return cls(range=range)
 
     def __str__(self):
         return (f'{self.__class__.__name__}(range={self.range})')
 
 class IntFormat(Format):
-    def __init__(self, min_val, max_val):
+    def __init__(self, width, min_val, max_val):
+        self.width = width
         self.min_val = min_val
         self.max_val = max_val
 
     def __add__(self, other):
+        # check that input types match
+        if type(self) is not type(other):
+            raise NotImplementedError
+
+        # determine possible extrema of the operation
         a = self.min_val + other.min_val
         b = self.max_val + other.max_val
+
+        # return new format
         return self.from_values([a, b])
 
     def __mul__(self, other):
+        # check that input types match
+        if type(self) is not type(other):
+            raise NotImplementedError
+
+        # determine possible extrema of the operation
         a = self.min_val * other.min_val
         b = self.min_val * other.max_val
         c = self.max_val * other.min_val
         d = self.max_val * other.max_val
+
+        # return new format
         return self.from_values([a, b, c, d])
 
     def __radd__(self, other):
@@ -108,42 +130,80 @@ class IntFormat(Format):
         return self.__mul__(other)
 
     def min_with(self, other):
+        # check that input types match
+        if type(self) is not type(other):
+            raise NotImplementedError
+
+        # determine possible extrema of the operation
         a = min(self.min_val, other.min_val)
         b = min(self.max_val, other.max_val)
+
+        # return new format
         return self.from_values([a, b])
 
     def max_with(self, other):
+        # check that input types match
+        if type(self) is not type(other):
+            raise NotImplementedError
+
+        # determine possible extrema of the operation
         a = max(self.min_val, other.min_val)
         b = max(self.max_val, other.max_val)
+
+        # return new format
         return self.from_values([a, b])
 
-    def union_with(self, other):
-        a = min(self.min_val, other.min_val)
-        b = max(self.max_val, other.max_val)
-        return self.from_values([a, b])
+    def can_represent(self, value):
+        return self.min_val <= value <= self.max_val
+
+    @classmethod
+    def width_of(cls, value):
+        raise NotImplementedError
+
+    @classmethod
+    def from_values(cls, values):
+        # compute maximum width required to represent the values
+        width = max(cls.width_of(value) for value in values)
+
+        # return new format
+        return cls(width=width, min_val=min(values), max_val=max(values))
+
+    @classmethod
+    def cover(cls, formats):
+        # check that the input types match
+        assert all(isinstance(format, cls) for format in formats), \
+            f'Function can only be applied to a list of {cls.__name__} objects.'
+
+        # determine parameters of new format
+        width   = max([format.width   for format in formats])
+        min_val = min([format.min_val for format in formats])
+        max_val = max([format.max_val for format in formats])
+
+        # return new format
+        return cls(width=width, min_val=min_val, max_val=max_val)
+
+    def __str__(self):
+        return (f'{self.__class__.__name__}(width={self.width}, min_val={self.min_val}, max_val={self.max_val})')
 
 class SIntFormat(IntFormat):
+    # format shortname to aid with human-readable output
+    shortname = 'sint'
+
     def __init__(self, width, min_val=None, max_val=None):
         # pick default minimum value (and validate input if one is provided)
         abs_min_val = -(1<<(width-1))
         min_val = min_val if min_val is not None else abs_min_val
-        assert min_val >= abs_min_val
+        assert min_val >= abs_min_val, \
+            f'The given signed integer width {width} cannot have a minimum value below {abs_min_val}'
 
         # pick default minimum value (and validate input if one is provided)
         abs_max_val = (1<<(width-1))-1
         max_val = max_val if max_val is not None else abs_max_val
-        assert max_val <= abs_max_val
-
-        # save settings
-        self.width = width
+        assert max_val <= abs_max_val, \
+            f'The given signed integer width {width} cannot have a maximum value above {abs_max_val}'
 
         # call the super constructor
-        super().__init__(min_val=min_val, max_val=max_val)
-
-    @classmethod
-    def from_values(cls, values):
-        width = max(cls.width_of(value) for value in values)
-        return cls(width=width, min_val=min(values), max_val=max(values))
+        super().__init__(width=width, min_val=min_val, max_val=max_val)
 
     @classmethod
     def width_of(cls, value):
@@ -154,61 +214,25 @@ class SIntFormat(IntFormat):
         else:
             return ceil(log2(1 + value)) + 1
 
-    def __add__(self, other):
-        if isinstance(other, SIntFormat):
-            return super().__add__(other)
-        else:
-            raise NotImplementedError
-
-    def __mul__(self, other):
-        if isinstance(other, SIntFormat):
-            return super().__mul__(other)
-        else:
-            raise NotImplementedError
-
-    def min_with(self, other):
-        if isinstance(other, SIntFormat):
-            return super().min_with(other)
-        else:
-            raise NotImplementedError
-
-    def max_with(self, other):
-        if isinstance(other, SIntFormat):
-            return super().max_with(other)
-        else:
-            raise NotImplementedError
-
-    def union_with(self, other):
-        if isinstance(other, SIntFormat):
-            return super().union_with(other)
-        else:
-            raise NotImplementedError
-
-    def __str__(self):
-        return (f'{self.__class__.__name__}(width={self.width}, min_val={self.min_val}, max_val={self.max_val})')
-
 class UIntFormat(IntFormat):
+    # format shortname to aid with human-readable output
+    shortname = 'uint'
+
     def __init__(self, width, min_val=None, max_val=None):
         # pick default minimum value (and validate input if one is provided)
         abs_min_val = 0
         min_val = min_val if min_val is not None else abs_min_val
-        assert min_val >= abs_min_val
+        assert min_val >= abs_min_val, \
+            f'The given unsigned integer width {width} cannot have a minimum value below {abs_min_val}'
 
         # pick default minimum value (and validate input if one is provided)
         abs_max_val = (1<<width)-1
         max_val = max_val if max_val is not None else abs_max_val
-        assert max_val <= abs_max_val
-
-        # save settings
-        self.width = width
+        assert max_val <= abs_max_val, \
+            f'The given unsigned integer width {width} cannot have a maximum value above {abs_max_val}'
 
         # call the super constructor
-        super().__init__(min_val=min_val, max_val=max_val)
-
-    @classmethod
-    def from_values(cls, values):
-        width = max(cls.width_of(value) for value in values)
-        return cls(width=width, min_val=min(values), max_val=max(values))
+        super().__init__(width=width, min_val=min_val, max_val=max_val)
 
     @classmethod
     def width_of(cls, value):
@@ -218,39 +242,6 @@ class UIntFormat(IntFormat):
             return 1
         else:
             return ceil(log2(1 + value))
-
-    def __add__(self, other):
-        if isinstance(other, UIntFormat):
-            return super().__add__(other)
-        else:
-            raise NotImplementedError
-
-    def __mul__(self, other):
-        if isinstance(other, UIntFormat):
-            return super().__mul__(other)
-        else:
-            raise NotImplementedError
-
-    def min_with(self, other):
-        if isinstance(other, UIntFormat):
-            return super().min_with(other)
-        else:
-            raise NotImplementedError
-
-    def max_with(self, other):
-        if isinstance(other, UIntFormat):
-            return super().max_with(other)
-        else:
-            raise NotImplementedError
-
-    def union_with(self, other):
-        if isinstance(other, UIntFormat):
-            return super().union_with(other)
-        else:
-            raise NotImplementedError
-
-    def __str__(self):
-        return (f'{self.__class__.__name__}(width={self.width}, min_val={self.min_val}, max_val={self.max_val})')
 
 def main():
     print(RealFormat.from_value(5))

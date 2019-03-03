@@ -13,7 +13,6 @@ from msdsl.generator.svreal import compile_range_expr, compile_width_expr, compi
 from msdsl.expr.analyze import signal_names, signal_name
 
 BITWISE_OP = {
-    'BitwiseInv': '~',
     'BitwiseAnd': '&',
     'BitwiseOr': '|',
     'BitwiseXor': '^'
@@ -70,21 +69,30 @@ class VerilogGenerator(CodeGenerator):
         if isinstance(expr, Signal):
             return expr
         elif isinstance(expr, Constant):
-            return self.handle_constant(expr=expr)
+            return self.handle_constant(value=expr.value, format=expr.format)
         elif isinstance(expr, ArithmeticOperator):
             operands = [self.expr_to_signal(operand) for operand in expr.operands]
             return self.make_arithmetic_operator(expr=expr, operands=operands)
-        elif isinstance(expr, BitwiseIv)
+        elif isinstance(expr, BitwiseInv):
+            operand = self.expr_to_signal(expr.operand)
+            return self.make_bitwise_inv(expr=expr, operand=operand)
         elif isinstance(expr, BitwiseOperator):
+            operands = [self.expr_to_signal(operand) for operand in expr.operands]
             return self.make_bitwise_operator(expr=expr, operands=operands)
         elif isinstance(expr, ComparisonOperator):
-            return self.make_comparison_operator(expr=expr, operands=operands)
+            lhs = self.expr_to_signal(expr.lhs)
+            rhs = self.expr_to_signal(expr.rhs)
+            return self.make_comparison_operator(expr=expr, lhs=lhs, rhs=rhs)
         elif isinstance(expr, Concatenate):
+            operands = [self.expr_to_signal(operand) for operand in expr.operands]
             return self.make_concatenation(expr=expr, operands=operands)
         elif isinstance(expr, Array):
-            return self.make_array(expr=expr, operands=operands)
+            elements = [self.expr_to_signal(element) for element in expr.element]
+            address = self.expr_to_signal(expr.address)
+            return self.make_array(expr=expr, elements=elements, address=address)
         elif isinstance(expr, TypeConversion):
-            return self.make_type_conversion(expr=expr, operands=operands)
+            operand = self.expr_to_signal(expr.operand)
+            return self.make_type_conversion(expr=expr, operand=operand)
         else:
             raise Exception(f'Unknown expression type: {type(expr)}')
 
@@ -174,15 +182,15 @@ class VerilogGenerator(CodeGenerator):
 
     #######################################################
 
-    def handle_constant(self, expr):
+    def handle_constant(self, value, format):
         name = next(self.namer)
 
-        if isinstance(expr.format, RealFormat):
+        if isinstance(format, RealFormat):
             # compile the range, width, and exponent expressions
-            const = str(expr.value)
-            range = compile_range_expr(expr.format.range)
-            width = compile_width_expr(expr.format.width)
-            exponent = compile_exponent_expr(expr.format.exponent)
+            const = str(value)
+            range = compile_range_expr(format.range)
+            width = compile_width_expr(format.width)
+            exponent = compile_exponent_expr(format.exponent)
 
             # call the appropriate macro
             if width is None:
@@ -192,78 +200,76 @@ class VerilogGenerator(CodeGenerator):
             else:
                 self.macro_call('MAKE_FORMAT_REAL', name, range, width, exponent)
                 self.macro_call('ASSIGN_CONST_REAL', const, name)
-        elif isinstance(expr.format, IntFormat):
-            self.decl_digital(fmt=expr.format, name=name)
-            self.assign_digital(name=name, value=expr.value)
+        elif isinstance(format, IntFormat):
+            self.decl_digital(fmt=format, name=name)
+            self.assign_digital(name=name, value=value)
         else:
-            raise ValueError(f'Unknown expression format type: ' + expr.format.__class__.__name__)
+            raise ValueError(f'Unknown expression format type: ' + format.__class__.__name__)
 
-        return Signal(name=name, format=expr.format)
+        return Signal(name=name, format=format)
 
-    def make_arithmetic_operator(self, expr, operands):
+    def make_arithmetic_operator(self, name, format, operands):
         pass
 
-    def make_bitwise_operator(self, expr, operands):
-        op = BITWISE_OP[expr.__class__.__name__]
-
-        if op == '~':
-            assert len(operands) == 1, 'Bitwise inversion can only be applied to one operand.'
-            value = f'~{signal_name(operands[0])}'
-        else:
-            value = op.join(signal_names(operands))
-
+    def make_bitwise_inv(self, format, operand):
         name = next(self.namer)
-        self.decl_digital(fmt=expr.format, name=name)
+        self.decl_digital(fmt=format, name=name)
+
+        value = f'~{signal_name(operand)}'
         self.assign_digital(name=name, value=value)
 
-        return Signal(name=name, format=expr.format)
+        return Signal(name=name, format=format)
 
-    def make_comparison_operator(self, expr, operands):
+    def make_bitwise_operator(self, name, format, operands):
         name = next(self.namer)
-        self.decl_digital(fmt=expr.format, name=name)
+        self.decl_digital(fmt=format, name=name)
 
-        lhs = operands[0]
-        rhs = operands[1]
-        assert len(operands) == 2, 'Comparison operation must have exactly two operands.'
+        value = BITWISE_OP[name].join(signal_names(operands))
+        self.assign_digital(name=name, value=value)
+
+        return Signal(name=name, format=format)
+
+    def make_comparison_operator(self, op_name, format, lhs, rhs):
+        name = next(self.namer)
+        self.decl_digital(fmt=format, name=name)
 
         if isinstance(lhs.format, RealFormat):
-            op = REAL_COMP_OP[expr.__class__.__name__]
-            self.macro_call(op, lhs, rhs, name)
+            self.macro_call(REAL_COMP_OP[op_name], lhs, rhs, name)
         elif isinstance(lhs.format, IntFormat):
-            op = INT_COMP_OP[expr.__class__.__name__]
-            self.assign_digital(name, f'{lhs} {op} {rhs}')
+            self.assign_digital(name, f'{lhs} {INT_COMP_OP[op_name]} {rhs}')
         else:
             raise ValueError(f'Unknown LHS format type: ' + lhs.format.__class__.__name__)
 
-        return Signal(name=name, format=expr.format)
+        return Signal(name=name, format=format)
 
-    def make_concatenation(self, expr, operands):
-        value = '{' + ', '.join(signal_names(operands)) + '}'
-
+    def make_concatenation(self, format, operands):
         name = next(self.namer)
-        self.decl_digital(fmt=expr.format, name=name)
+        self.decl_digital(fmt=format, name=name)
+
+        value = '{' + ', '.join(signal_names(operands)) + '}'
         self.assign_digital(name=name, value=value)
 
-        return Signal(name=name, format=expr.format)
+        return Signal(name=name, format=format)
 
-    def make_array(self, expr, operands):
+    def make_array(self, format, elements, address):
         pass
 
-    def make_type_conversion(self, expr, operands):
+    def make_type_conversion(self, name, format, operand):
         name = next(self.namer)
 
-        operand = operands[0]
-        assert len(operands) == 1, 'Type conversion must have exactly one operand.'
-
-        if isinstance(expr, SIntToReal):
+        if name == 'SIntToReal':
             self.macro_call('INT_TO_REAL', operand, operand.format.width, name)
-        elif isinstance(expr, UIntToSInt):
-            self.decl_digital(fmt=expr.format, name=name)
+        elif name == 'RealToSInt':
+            raise NotImplementedError
+        elif name == 'UIntToSInt':
+            self.decl_digital(fmt=format, name=name)
             self.assign_digital(name=name, value="{1'b0, " + signal_name(operand) + "}")
+        elif name == 'SIntToUInt':
+            raise NotImplementedError
         else:
-            raise ValueError(f'Unknown type conversion: ' + expr.__class__.__name__)
+            raise ValueError(f'Unknown type conversion: ' + name)
 
-        return Signal(name=name, format=expr.format)
+        return Signal(name=name, format=format)
 
     def init_file(self):
         # print header
@@ -297,9 +303,6 @@ class VerilogGenerator(CodeGenerator):
         self.write((',' + self.line_ending).join([self.tab_string + line for line in lines]))
         self.write(self.line_ending)
         self.write(')')
-
-    def decl_digital(self, fmt: Union[SIntFormat, UIntFormat], name):
-        self.writeln(f'{self.int_type_str(fmt)} {name};')
 
     def assign_digital(self, name, value):
         self.writeln(f'assign {name} = {value};')

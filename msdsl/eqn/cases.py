@@ -44,7 +44,7 @@ def eqn_case(cases, sel_bits: List[DigitalSignal]):
     cases = promote_operands(cases, RealFormat)
 
     # sanity check
-    assert all(isinstance(sel_bit, DigitalSignal) and isinstance(sel_bit.format, UIntFormat) and sel_bit.format.width==1
+    assert all(isinstance(sel_bit, DigitalSignal) and isinstance(sel_bit.format_, UIntFormat) and sel_bit.format_.width == 1
                for sel_bit in sel_bits), 'Selection bits for an EqnCase must all be 1-bit unsigned digital signals.'
     assert len(cases) == (1<<len(sel_bits)), 'Case table length must match 2**len(sel_bits).'
 
@@ -63,7 +63,7 @@ class EqnCase(ModelExpr):
         self.sel_bits = sel_bits
 
         # call the super constructor
-        super().__init__(format=RealFormat(range=UndefinedRange()))
+        super().__init__(format_=RealFormat(range_=UndefinedRange()))
 
     def get_address(self, sel_bit_settings):
         # returns the case table address corresponding to the given sel_bit_settings.  note that some sel_bits
@@ -100,10 +100,10 @@ def main():
     print(address_to_settings(7, sel_bits))
 
     expr = 1 + eqn_case([-1, 1], [a])
-    print(expr, expr.format.range)
+    print(expr, expr.format_.range_)
 
     expr = subst_case(expr, {'a': 1})
-    print(expr, expr.format.range)
+    print(expr, expr.format_.range_)
 
 if __name__ == '__main__':
     main()

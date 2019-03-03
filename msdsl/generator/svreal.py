@@ -35,7 +35,7 @@ def compile_range_expr(expr: Union[RangeExpr, Number]):
     elif isinstance(expr, RangeProduct):
         return '(' + '*'.join(operands) + ')'
     elif isinstance(expr, RangeMax):
-        return tree_op(operands=operands, operator=max_op, default=lambda: None)
+        return tree_op(operands=operands, operator=max_op)
     else:
         raise Exception('Range expression not handled: ' + expr.__class__.__name__)
 

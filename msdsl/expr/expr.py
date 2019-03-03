@@ -25,11 +25,11 @@ def wrap_constants(operands):
 # type promotion
 
 def get_highest_format_cls(operands):
-    if any(isinstance(operand.format, RealFormat) for operand in operands):
+    if any(isinstance(operand.format_, RealFormat) for operand in operands):
         return RealFormat
-    elif any(isinstance(operand.format, SIntFormat) for operand in operands):
+    elif any(isinstance(operand.format_, SIntFormat) for operand in operands):
         return SIntFormat
-    elif any(isinstance(operand.format, UIntFormat) for operand in operands):
+    elif any(isinstance(operand.format_, UIntFormat) for operand in operands):
         return UIntFormat
     else:
         raise Exception('Cannot determine highest format class.')
@@ -48,8 +48,8 @@ def promote_operands(operands, promoted_cls):
     return [promote_operand(operand=operand, promoted_cls=promoted_cls) for operand in operands]
 
 class ModelExpr:
-    def __init__(self, format):
-        self.format = format
+    def __init__(self, format_):
+        self.format_ = format_
 
     # arithmetic operations
 
@@ -133,24 +133,24 @@ class ModelExpr:
 # general operator types -- not intended to be instantiated directly
 
 class ModelOperator(ModelExpr):
-    def __init__(self, operands: List, format):
+    def __init__(self, operands: List, format_):
         # call the super constructor
-        super().__init__(format=format)
+        super().__init__(format_=format_)
 
         # save the operand list
         self.operands = wrap_constants(operands)
 
 class UnaryOperator(ModelOperator):
-    def __init__(self, operand, format):
-        super().__init__(operands=[operand], format=format)
+    def __init__(self, operand, format_):
+        super().__init__(operands=[operand], format_=format_)
 
     @property
     def operand(self):
         return self.operands[0]
 
 class BinaryOperator(ModelOperator):
-    def __init__(self, lhs, rhs, format):
-        super().__init__(operands=[lhs, rhs], format=format)
+    def __init__(self, lhs, rhs, format_):
+        super().__init__(operands=[lhs, rhs], format_=format_)
 
     @property
     def lhs(self):
@@ -173,7 +173,7 @@ class ComparisonOperator(BinaryOperator):
         lhs, rhs = promote_operands([lhs, rhs], format_cls)
 
         # call the super constructor
-        super().__init__(lhs=lhs, rhs=rhs, format=UIntFormat(width=1))
+        super().__init__(lhs=lhs, rhs=rhs, format_=UIntFormat(width=1))
 
     def __str__(self):
         return f'{self.lhs} {self.comp_op} {self.rhs}'
@@ -183,10 +183,10 @@ class ArithmeticOperator(ModelOperator):
 
     def __init__(self, operands):
         # determine the output format
-        format = reduce(self.function, [operand.format for operand in operands])
+        format_ = reduce(self.function, [operand.format_ for operand in operands])
 
         # call the super constructor
-        super().__init__(operands=operands, format=format)
+        super().__init__(operands=operands, format_=format_)
 
     @classmethod
     def function(cls, a, b):
@@ -218,7 +218,7 @@ class ArithmeticOperator(ModelOperator):
 
         # add the const_term as a new operand if necessary
         if const_term != cls.initial:
-            new_operands.append(Constant(value=const_term, format=format_cls.from_value(const_term)))
+            new_operands.append(Constant(value=const_term, format_=format_cls.from_value(const_term)))
 
         return new_operands
 
@@ -237,14 +237,14 @@ class BitwiseOperator(ModelOperator):
         operands = wrap_constants(operands)
 
         # Make sure that all operands are unsigned
-        assert all(isinstance(operand.format, UIntFormat) for operand in operands), \
+        assert all(isinstance(operand.format_, UIntFormat) for operand in operands), \
                'Bitwise operations only currently support unsigned operands.'
 
         # Compute the width of the output
-        width = max(operand.format.width for operand in operands)
+        width = max(operand.format_.width for operand in operands)
 
         # Call the super constructor
-        super().__init__(operands=operands, format=UIntFormat(width=width))
+        super().__init__(operands=operands, format_=UIntFormat(width=width))
 
 # Sum
 
@@ -336,7 +336,7 @@ class Min(ArithmeticOperator):
         elif isinstance(a, Number) and isinstance(b, Number):
             return min(a, b)
         else:
-            raise NotImplementedError
+            raise Exception('Min can only be applied to numbers and Format operands at this time.')
 
     def __str__(self):
         return 'min(' + ', '.join(str(operand) for operand in self.operands) + ')'
@@ -368,7 +368,7 @@ class Max(ArithmeticOperator):
         elif isinstance(a, Number) and isinstance(b, Number):
             return max(a, b)
         else:
-            raise NotImplementedError
+            raise Exception('Max can only be applied to numbers and Format operands at this time.')
 
     def __str__(self):
         return 'max(' + ', '.join(str(operand) for operand in self.operands) + ')'
@@ -395,11 +395,11 @@ class BitwiseInv(UnaryOperator):
         operand = wrap_constant(operand)
 
         # make sure operand is unsigned
-        assert isinstance(operand.format, UIntFormat), \
+        assert isinstance(operand.format_, UIntFormat), \
                'Bitwise inversion only currently support unsigned operands.'
 
         # Call the super constructor
-        super().__init__(operand=operand, format=operand.format)
+        super().__init__(operand=operand, format_=operand.format_)
 
     def __str__(self):
         return f'(~{self.operand})'
@@ -420,19 +420,19 @@ class ArithmeticShift(UnaryOperator):
         operand = wrap_constant(operand)
 
         # make sure operand is an integer
-        assert isinstance(operand.format, (UIntFormat, SIntFormat)), \
+        assert isinstance(operand.format_, (UIntFormat, SIntFormat)), \
                f'{self.__class__.__name__} only supports integer operands.'
 
         # compute parameters of the output format
-        width   = self.compute_output_width(in_format=operand.format, shift=shift)
-        min_val = self.function(operand=operand.format.min_val, shift=shift)
-        max_val = self.function(operand=operand.format.max_val, shift=shift)
+        width   = self.compute_output_width(in_format=operand.format_, shift=shift)
+        min_val = self.function(operand=operand.format_.min_val, shift=shift)
+        max_val = self.function(operand=operand.format_.max_val, shift=shift)
 
         # create the output format
-        if isinstance(operand.format, UIntFormat):
-            format = UIntFormat(width=width, min_val=min_val, max_val=max_val)
-        elif isinstance(operand.format, SIntFormat):
-            format = SIntFormat(width=width, min_val=min_val, max_val=max_val)
+        if isinstance(operand.format_, UIntFormat):
+            format_ = UIntFormat(width=width, min_val=min_val, max_val=max_val)
+        elif isinstance(operand.format_, SIntFormat):
+            format_ = SIntFormat(width=width, min_val=min_val, max_val=max_val)
         else:
             raise Exception('Unknown format type.')
 
@@ -440,7 +440,7 @@ class ArithmeticShift(UnaryOperator):
         self.shift = shift
 
         # call the super constructor
-        super().__init__(operand=operand, format=format)
+        super().__init__(operand=operand, format_=format_)
 
     def __str__(self):
         return f'({self.operand}{self.shift_op}{self.shift})'
@@ -473,7 +473,7 @@ class BitwiseAccess(UnaryOperator):
         operand = wrap_constant(operand)
 
         # make sure operand is an integer
-        assert isinstance(operand.format, (UIntFormat, SIntFormat)), \
+        assert isinstance(operand.format_, (UIntFormat, SIntFormat)), \
                f'{self.__class__.__name__} only supports integer operands.'
 
         # determine MSB and LSB of the slice
@@ -488,11 +488,11 @@ class BitwiseAccess(UnaryOperator):
 
         # sanity checks for MSB
         assert isinstance(msb, Integral), 'MSB must be an integer.'
-        assert 0 <= msb < operand.format.width, f'MSB value out of range: {msb} (input width is {operand.format.width})'
+        assert 0 <= msb < operand.format_.width, f'MSB value out of range: {msb} (input width is {operand.format_.width})'
 
         # sanity checks for LSB
         assert isinstance(lsb, Integral), 'LSB must be an integer.'
-        assert 0 <= lsb < operand.format.width, f'LSB value out of range: {lsb} (input width is {operand.format.width})'
+        assert 0 <= lsb < operand.format_.width, f'LSB value out of range: {lsb} (input width is {operand.format_.width})'
 
         # sanity check for relative values of MSB and LSB
         assert lsb <= msb, 'LSB must be less than or equal to MSB.'
@@ -501,10 +501,10 @@ class BitwiseAccess(UnaryOperator):
         width = msb - lsb + 1
 
         # create the output format
-        if isinstance(operand.format, UIntFormat):
-            format = UIntFormat(width=width)
-        elif isinstance(operand.format, SIntFormat):
-            format = SIntFormat(width=width)
+        if isinstance(operand.format_, UIntFormat):
+            format_ = UIntFormat(width=width)
+        elif isinstance(operand.format_, SIntFormat):
+            format_ = SIntFormat(width=width)
         else:
             raise Exception('Unknown format type.')
 
@@ -513,7 +513,7 @@ class BitwiseAccess(UnaryOperator):
         self.lsb = lsb
 
         # call the super constructor
-        super().__init__(operand=operand, format=format)
+        super().__init__(operand=operand, format_=format_)
 
     def __str__(self):
         return f'({self.operand}[{self.msb}:{self.lsb}])'
@@ -558,8 +558,8 @@ def concatenate(operands):
 
 class Concatenate(ModelOperator):
     def __init__(self, operands):
-        width = sum(operand.format.width for operand in operands)
-        super().__init__(operands=operands, format=UIntFormat(width=width))
+        width = sum(operand.format_.width for operand in operands)
+        super().__init__(operands=operands, format_=UIntFormat(width=width))
 
     def __str__(self):
         return '{' + ', '.join(str(operand) for operand in self.operands) + '}'
@@ -582,14 +582,14 @@ def array(elements: List, address: ModelExpr):
         elements = promote_operands(elements, format_cls)
 
         # determine the format to use for the array output
-        output_format = format_cls.cover([element.format for element in elements])
+        output_format = format_cls.cover([element.format_ for element in elements])
 
         # create the Array object
         return Array(elements=elements, address=address, output_format=output_format)
 
 class Array(ModelOperator):
     def __init__(self, elements: List, address, output_format: Format):
-        super().__init__(operands=elements+[address], format=output_format)
+        super().__init__(operands=elements+[address], format_=output_format)
 
     @property
     def all_constants(self):
@@ -611,6 +611,9 @@ class Array(ModelOperator):
         elements = '[' + ', '.join(str(element) for element in self.elements) + ']'
         return f'Array({elements}, {self.address})'
 
+    def __len__(self):
+        return len(self.elements)
+
 # case statement mimicking
 
 def cases(cases: List[Tuple], default):
@@ -622,7 +625,7 @@ def cases(cases: List[Tuple], default):
     bits = wrap_constants(bits)
 
     # sanity check -- all cases should have a single selection bit
-    assert all(isinstance(bit.format, UIntFormat) and bit.format.width==1 for bit in bits), \
+    assert all(isinstance(bit.format_, UIntFormat) and bit.format_.width == 1 for bit in bits), \
         'All of the selection conditions must evaluate to a 1-bit UInt.'
 
     # compute the elements of the array and its address
@@ -663,7 +666,7 @@ class TypeConversion(UnaryOperator):
 
     def __init__(self, operand: ModelExpr, output_format):
         # input checking
-        assert isinstance(operand.format, self.input_format_cls), \
+        assert isinstance(operand.format_, self.input_format_cls), \
                f'Operand provided to {self.__class__.__name__} does not have the required format {self.input_format_cls.__name__}'
 
         # output checking
@@ -671,7 +674,7 @@ class TypeConversion(UnaryOperator):
             f'Output format {output_format.__class__.__name__} does not match required type {self.output_format_cls.__name__}.'
 
         # call the superconstructor
-        super().__init__(operand=operand, format=output_format)
+        super().__init__(operand=operand, format_=output_format)
 
     def __str__(self):
         return f'{self.input_format_cls.shortname}_to_{self.output_format_cls.shortname}({self.operand})'
@@ -691,12 +694,12 @@ class UIntToSInt(TypeConversion):
     def __init__(self, operand: ModelExpr, width=None):
         # create the output format
         if width is None:
-            output_format = SIntFormat.from_values([operand.format.min_val, operand.format.max_val])
+            output_format = SIntFormat.from_values([operand.format_.min_val, operand.format_.max_val])
         else:
             output_format = SIntFormat(width=width)
-            assert output_format.can_represent(operand.format.min_val), \
+            assert output_format.can_represent(operand.format_.min_val), \
                 f'The given signed integer width {width} cannot represent the operand min value {operand.format.min_val}.'
-            assert output_format.can_represent(operand.format.max_val), \
+            assert output_format.can_represent(operand.format_.max_val), \
                 f'The given signed integer width {width} cannot represent the operand max value {operand.format.max_val}.'
 
         # call the super constructor
@@ -717,12 +720,12 @@ class SIntToUInt(TypeConversion):
     def __init__(self, operand: ModelExpr, width=None):
         # create the output format
         if width is None:
-            output_format = UIntFormat.from_values([operand.format.min_val, operand.format.max_val])
+            output_format = UIntFormat.from_values([operand.format_.min_val, operand.format_.max_val])
         else:
             output_format = UIntFormat(width=width)
-            assert output_format.can_represent(operand.format.min_val), \
+            assert output_format.can_represent(operand.format_.min_val), \
                 f'The given unsigned integer width {width} cannot represent the operand min value {operand.format.min_val}.'
-            assert output_format.can_represent(operand.format.max_val), \
+            assert output_format.can_represent(operand.format_.max_val), \
                 f'The given unsigned integer width {width} cannot represent the operand max value {operand.format.max_val}.'
 
         # call the super constructor
@@ -742,7 +745,7 @@ class SIntToReal(TypeConversion):
 
     def __init__(self, operand: ModelExpr):
         # create the output format
-        output_format = RealFormat.from_values([operand.format.min_val, operand.format.max_val])
+        output_format = RealFormat.from_values([operand.format_.min_val, operand.format_.max_val])
 
         # call the super constructor
         super().__init__(operand=operand, output_format=output_format)
@@ -761,12 +764,12 @@ class RealToSInt(TypeConversion):
         # create the output format
         if width is None:
             # make sure we can handle this case
-            assert isinstance(operand.format.range, Number), \
-                f'The SInt width has to be specified in this case because the operand range is symbolic.  For reference, the operand range expression is {operand.format.range}.'
+            assert isinstance(operand.format_.range_, Number), \
+                f'The SInt width has to be specified in this case because the operand range is symbolic.  For reference, the operand range expression is {operand.format_.range_}.'
 
             # create the output format
-            min_int_val = int(floor(-operand.format.range))
-            max_int_val = int(ceil(operand.format.range))
+            min_int_val = int(floor(-operand.format_.range_))
+            max_int_val = int(ceil(operand.format_.range_))
             output_format = SIntFormat.from_values([min_int_val, max_int_val])
         else:
             output_format = SIntFormat(width=width)
@@ -777,58 +780,58 @@ class RealToSInt(TypeConversion):
 # easy-to-use type conversion
 
 def to_uint(operand, width=None):
-    if isinstance(operand.format, RealFormat):
+    if isinstance(operand.format_, RealFormat):
         # Note that the conversion to SInt adds "1" to the width to hold the sign bit, which is removed
         # upon the demotion to UInt
         return sint_to_uint(real_to_sint(operand=operand, width=(width+1)), width=width)
-    elif isinstance(operand.format, SIntFormat):
+    elif isinstance(operand.format_, SIntFormat):
         return uint_to_sint(operand, width=width)
-    elif isinstance(operand.format, UIntFormat):
+    elif isinstance(operand.format_, UIntFormat):
         # This is a kind of tricky case, even though it doesn't likely come up too often.  If the width is specified
         # and doesn't match that of the operand, then we have to return a version of the operand with the requested
         # width.  A deepcopy is used because this function is not supposed to mutate its arguments.
-        if (width is not None) and (width != operand.format.width):
+        if (width is not None) and (width != operand.format_.width):
             operand = deepcopy(operand)
-            operand.format = UIntFormat(width=width, min_val=operand.format.min_val, max_val=operand.format.max_val)
+            operand.format_ = UIntFormat(width=width, min_val=operand.format_.min_val, max_val=operand.format_.max_val)
 
         return operand
     else:
-        raise Exception(f'Unknown format type: {operand.format.__class__.__name__}')
+        raise Exception(f'Unknown format type: {operand.format_.__class__.__name__}')
 
 def to_sint(operand, width=None):
-    if isinstance(operand.format, RealFormat):
+    if isinstance(operand.format_, RealFormat):
         return real_to_sint(operand=operand, width=width)
-    elif isinstance(operand.format, SIntFormat):
+    elif isinstance(operand.format_, SIntFormat):
         # This is a kind of tricky case, even though it doesn't likely come up too often.  If the width is specified
         # and doesn't match that of the operand, then we have to return a version of the operand with the requested
         # width.  A deepcopy is used because this function is not supposed to mutate its arguments.
 
-        if (width is not None) and (width != operand.format.width):
+        if (width is not None) and (width != operand.format_.width):
             operand = deepcopy(operand)
-            operand.format = SIntFormat(width=width, min_val=operand.format.min_val, max_val=operand.format.max_val)
+            operand.format_ = SIntFormat(width=width, min_val=operand.format_.min_val, max_val=operand.format_.max_val)
 
         return operand
-    elif isinstance(operand.format, UIntFormat):
+    elif isinstance(operand.format_, UIntFormat):
         return uint_to_sint(operand, width=width)
     else:
         raise Exception(f'Unknown format type: {operand.format.__class__.__name__}')
 
 def to_real(operand):
-    if isinstance(operand.format, RealFormat):
+    if isinstance(operand.format_, RealFormat):
         return operand
-    elif isinstance(operand.format, SIntFormat):
+    elif isinstance(operand.format_, SIntFormat):
         return sint_to_real(operand)
-    elif isinstance(operand.format, UIntFormat):
+    elif isinstance(operand.format_, UIntFormat):
         return sint_to_real(uint_to_sint(operand))
     else:
-        raise Exception(f'Unknown format type: {operand.format.__class__.__name__}')
+        raise Exception(f'Unknown format type: {operand.format_.__class__.__name__}')
 
 # numeric constants
 
 class Constant(ModelExpr):
-    def __init__(self, value: Number, format: Format):
+    def __init__(self, value: Number, format_: Format):
         self.value = value
-        super().__init__(format=format)
+        super().__init__(format_=format_)
 
     def __str__(self):
         return str(self.value)
@@ -836,10 +839,10 @@ class Constant(ModelExpr):
 class RealConstant(Constant):
     def __init__(self, value: Number):
         # determine constant format
-        format = RealFormat.from_value(value)
+        format_ = RealFormat.from_value(value)
 
         # call the super constructor
-        super().__init__(value=value, format=format)
+        super().__init__(value=value, format_=format_)
 
 class SIntConstant(Constant):
     def __init__(self, value: Integral, width: Integral=None):
@@ -848,12 +851,12 @@ class SIntConstant(Constant):
 
         # determine constant format
         if width is None:
-            format = SIntFormat.from_value(value)
+            format_ = SIntFormat.from_value(value)
         else:
-            format = SIntFormat(width=width, min_val=value, max_val=value)
+            format_ = SIntFormat(width=width, min_val=value, max_val=value)
 
         # call the super constructor
-        super().__init__(value=value, format=format)
+        super().__init__(value=value, format_=format_)
 
 class UIntConstant(Constant):
     def __init__(self, value: Integral, width: Integral=None):
@@ -862,12 +865,12 @@ class UIntConstant(Constant):
 
         # determine constant format
         if width is None:
-            format = UIntFormat.from_value(value)
+            format_ = UIntFormat.from_value(value)
         else:
-            format = UIntFormat(width=width, min_val=value, max_val=value)
+            format_ = UIntFormat(width=width, min_val=value, max_val=value)
 
         # call the super constructor
-        super().__init__(value=value, format=format)
+        super().__init__(value=value, format_=format_)
 
 # testing
 

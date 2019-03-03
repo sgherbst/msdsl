@@ -29,32 +29,32 @@ class RealFormat(Format):
     # format shortname to aid with human-readable output
     shortname = 'real'
 
-    def __init__(self, range: Union[Number, RangeExpr], width=None, exponent=None):
-        self.range = range
+    def __init__(self, range_: Union[Number, RangeExpr], width=None, exponent=None):
+        self.range_ = range_
         self.width = width
         self.exponent = exponent
 
     @classmethod
     def from_values(cls, values):
         # determine range
-        range = max(abs(value) for value in values)
+        range_ = max(abs(value) for value in values)
 
         # return format
-        return RealFormat(range=range)
+        return RealFormat(range_=range_)
 
     def __add__(self, other):
         if isinstance(other, RealFormat):
             # note that "+" is overloaded for RangeExpr so that this will work with both numbers and RangeExpr's
-            range = self.range+other.range
-            return RealFormat(range=range)
+            range_ = self.range_ + other.range_
+            return RealFormat(range_=range_)
         else:
             raise NotImplementedError
 
     def __mul__(self, other):
         if isinstance(other, RealFormat):
             # note that "*" is overloaded for RangeExpr so that this will work with both numbers and RangeExpr's
-            range = self.range*other.range
-            return RealFormat(range=range)
+            range_ = self.range_ * other.range_
+            return RealFormat(range_=range_)
         else:
             raise NotImplementedError
 
@@ -68,28 +68,28 @@ class RealFormat(Format):
         if isinstance(other, RealFormat):
             # not a typo -- consider range_1 = [-a, +a] and range_2 = [-b, +b], with a < b.  then the output spans
             # [-b, +a], and since a < b, the output range needs to be [-b, +b].  or, in other words, +/- max(a, b)
-            range = range_max([self.range, other.range])
-            return RealFormat(range=range)
+            range_ = range_max([self.range_, other.range_])
+            return RealFormat(range_=range_)
         else:
             raise NotImplementedError
 
     def max_with(self, other):
         if isinstance(other, RealFormat):
-            range = range_max([self.range, other.range])
-            return RealFormat(range=range)
+            range_ = range_max([self.range_, other.range_])
+            return RealFormat(range_=range_)
         else:
             raise NotImplementedError
 
     @classmethod
     def cover(cls, formats):
-        assert all(isinstance(format, cls) for format in formats), \
+        assert all(isinstance(format_, cls) for format_ in formats), \
             f'Function can only be applied to a list of {cls.__name__} objects.'
 
-        range = range_max([format.range for format in formats])
-        return cls(range=range)
+        range_ = range_max([format_.range_ for format_ in formats])
+        return cls(range_=range_)
 
     def __str__(self):
-        return (f'{self.__class__.__name__}(range={self.range})')
+        return (f'{self.__class__.__name__}(range={self.range_})')
 
 class IntFormat(Format):
     def __init__(self, width, min_val, max_val):
@@ -171,13 +171,13 @@ class IntFormat(Format):
     @classmethod
     def cover(cls, formats):
         # check that the input types match
-        assert all(isinstance(format, cls) for format in formats), \
+        assert all(isinstance(format_, cls) for format_ in formats), \
             f'Function can only be applied to a list of {cls.__name__} objects.'
 
         # determine parameters of new format
-        width   = max([format.width   for format in formats])
-        min_val = min([format.min_val for format in formats])
-        max_val = max([format.max_val for format in formats])
+        width   = max([format_.width   for format_ in formats])
+        min_val = min([format_.min_val for format_ in formats])
+        max_val = max([format_.max_val for format_ in formats])
 
         # return new format
         return cls(width=width, min_val=min_val, max_val=max_val)

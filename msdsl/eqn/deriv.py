@@ -7,7 +7,7 @@ def deriv_str(name):
 class Deriv(AnalogSignal):
     def __init__(self, signal: Signal):
         self.signal = signal
-        super().__init__(name=deriv_str(signal.name), range=UndefinedRange())
+        super().__init__(name=deriv_str(signal.name), range_=UndefinedRange())
 
 def main():
     x = AnalogSignal('x')

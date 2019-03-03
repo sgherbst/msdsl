@@ -79,7 +79,10 @@ def main():
     e = AnalogSignal('e')
 
     print(distribute_mult(1*a+2*b+3*(4+5*(6+7*c))))
-    print(extract_coeffs(a+2*b+3*c))
+
+    pairs, others = extract_coeffs(a+2*b+3*c)
+    print('pairs: ' + str({k: v.name for k, v in pairs}))
+    print('others: ' + str([str(other) for other in others]))
 
     def simplify(expr):
         return collect_terms(distribute_mult(expr))

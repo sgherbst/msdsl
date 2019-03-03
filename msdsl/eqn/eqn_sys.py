@@ -42,7 +42,7 @@ class EqnSys(EqnList):
 
         # create list of all internal signals, then use it to figure out what signals are completely internal
         external_names = set(signal_names(inputs + outputs + states + derivs))
-        internal_name_set = set(self.get_all_signals()) - external_names
+        internal_name_set = set(signal_names(self.get_all_signals())) - external_names
 
         # indices of known and unknown variables
         unknowns = list2dict(list(internal_name_set) + signal_names(outputs) + signal_names(derivs))

@@ -56,7 +56,7 @@ class MixedSignalModel:
         return self.add_signal(AnalogOutput(name=name, init=init))
 
     def add_analog_state(self, name, range, width=None, exponent=None, init=0):
-        return self.add_signal(AnalogState(name=name, range=range, width=width, exponent=exponent, init=init))
+        return self.add_signal(AnalogState(name=name, range_=range, width=width, exponent=exponent, init=init))
 
     def add_digital_input(self, name, width=1, signed=False):
         return self.add_signal(DigitalInput(name=name, width=width, signed=signed))
@@ -109,7 +109,7 @@ class MixedSignalModel:
         expr = wrap_constant(expr)
 
         # create signal to hold result
-        signal = Signal(name=name, format=expr.format)
+        signal = Signal(name=name, format_=expr.format)
 
         # add signal to model
         self.add_signal(signal)
@@ -263,7 +263,7 @@ class MixedSignalModel:
                 hist.append(first)
             else:
                 # create the signal
-                curr = Signal(name=f'{first.name}_{k}', format=first.format)
+                curr = Signal(name=f'{first.name}_{k}', format_=first.format_)
                 self.add_signal(curr)
 
                 # make the update assignment

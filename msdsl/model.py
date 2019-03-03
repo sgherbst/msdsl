@@ -7,7 +7,7 @@ from msdsl.assignment import ThisCycleAssignment, NextCycleAssignment, BindingAs
 from msdsl.expr.analyze import signal_names
 from msdsl.eqn.cases import address_to_settings
 from msdsl.eqn.eqn_sys import EqnSys
-from msdsl.expr.expr import ModelExpr, Array, Concatenate, sum_op, wrap_constant
+from msdsl.expr.expr import ModelExpr, array, concatenate, sum_op, wrap_constant
 from msdsl.expr.signals import (AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, Signal, AnalogSignal,
                    AnalogState, DigitalState)
 from msdsl.generator.generator import CodeGenerator
@@ -171,7 +171,7 @@ class MixedSignalModel:
         eqn_sys = EqnSys(eqns)
 
         # analyze equation to find out knowns and unknowns
-        inputs, states, outputs, sel_bits = self.get_eqn_io(eqn_sys)
+        inputs, states, outputs, sel_bits = self.get_equation_io(eqn_sys)
 
         # add the extra outputs as needed
         for extra_output in extra_outputs:
@@ -196,14 +196,14 @@ class MixedSignalModel:
             lds = eqn_sys_k.to_lds(inputs=inputs, states=states, outputs=outputs)
 
             # discretize linear dynamical system
-            lds = self.discretize_lds(lds)
+            lds = lds.discretize(dt=self.dt)
 
             # add to collection of LDS systems
             collection.append(lds)
 
         # construct address for selection
         if len(sel_bits) > 0:
-            sel = Concatenate(sel_bits)
+            sel = concatenate(sel_bits)
         else:
             sel = None
 
@@ -219,14 +219,14 @@ class MixedSignalModel:
         # state updates.  state initialization is captured in the signal itself, so it doesn't have to be explicitly
         # captured here
         for row in range(len(states)):
-            expr = sum_op([Array(collection.A[row, col], sel) * states[col] for col in range(len(states))])
-            expr += sum_op([Array(collection.B[row, col], sel) * inputs[col] for col in range(len(inputs))])
+            expr = sum_op([array(collection.A[row, col], sel) * states[col] for col in range(len(states))])
+            expr += sum_op([array(collection.B[row, col], sel) * inputs[col] for col in range(len(inputs))])
             self.set_next_cycle(states[row], expr)
 
         # output updates
         for row in range(len(outputs)):
-            expr = sum_op([Array(collection.C[row, col], sel) * states[col] for col in range(len(states))])
-            expr += sum_op([Array(collection.D[row, col], sel) * inputs[col] for col in range(len(inputs))])
+            expr = sum_op([array(collection.C[row, col], sel) * states[col] for col in range(len(states))])
+            expr += sum_op([array(collection.D[row, col], sel) * inputs[col] for col in range(len(inputs))])
 
             # if the output signal already exists, then assign it directly.  otherwise, bind the signal name to the
             # expression value
@@ -289,7 +289,7 @@ class MixedSignalModel:
                 internals.append(signal)
 
         # start module
-        gen.start_module(name=self.name, ios=ios)
+        gen.start_module(name=self.module_name, ios=ios)
 
         # declare the internal variables
         if len(internals) > 0:
@@ -302,13 +302,17 @@ class MixedSignalModel:
             # label this section of the code for debugging purposes
             gen.make_section(f'Assign signal: {assignment.signal.name}')
 
+            # compile the expression to a signal
+            result = gen.expr_to_signal(assignment.expr)
+
             # implement the update expression
             if isinstance(assignment, ThisCycleAssignment):
-                gen.set_this_cycle(signal=assignment.signal, expr=assignment.expr)
+                gen.make_assign(input_=result, output=assignment.signal)
             elif isinstance(assignment, NextCycleAssignment):
-                gen.set_next_cycle(signal=assignment.signal, expr=assignment.expr, init=assignment.signal.init)
+                gen.make_mem(next_=result, curr=assignment.signal, init=assignment.signal.init)
             elif isinstance(assignment, BindingAssignment):
-                gen.bind_name(name=assignment.signal.name, expr=assignment.expr)
+                gen.make_signal(assignment.signal)
+                gen.make_assign(input_=result, output=assignment.signal)
             else:
                 raise Exception('Invalid assignment type.')
 
@@ -318,10 +322,6 @@ class MixedSignalModel:
 
         # end module
         gen.end_module()
-
-        # dump model to file
-        gen.write_to_file()
-
 
 def main():
     from msdsl.eqn.deriv import Deriv

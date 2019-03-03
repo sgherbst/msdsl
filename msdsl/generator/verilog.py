@@ -265,7 +265,7 @@ class VerilogGenerator(CodeGenerator):
         output = Signal(name=next(self.namer), format_=expr.format_)
 
         # call the special multiplication macro
-        self.macro_call('MUL_CONST_REAL', constant.value, signal.name, output.name)
+        self.macro_call('MUL_CONST_REAL', str(constant.value), signal.name, output.name)
 
         # return the output signal
         return output

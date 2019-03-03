@@ -12,7 +12,7 @@ from msdsl.eqn.cases import subst_case
 
 class EqnSys(EqnList):
     def subst_case(self, sel_bit_settings):
-        return EqnList([subst_case(expr=eqn, sel_bit_settings=sel_bit_settings) for eqn in self])
+        return EqnSys([subst_case(expr=eqn, sel_bit_settings=sel_bit_settings) for eqn in self])
 
     def to_lds(self, inputs: List[Signal]=None, states: List[Signal]=None, outputs: List[Signal]=None):
         # set defaults

@@ -3,14 +3,16 @@ from msdsl.generator.verilog import VerilogGenerator
 from msdsl.eqn.deriv import Deriv
 
 def main():
-    tau = 1e-6
     dt = 0.1e-6
+
+    num = (1e12,)
+    den = (1, 8e5, 1e12,)
 
     model = MixedSignalModel('model', dt=dt)
     model.add_analog_input('v_in')
-    model.add_analog_output('v_out', init=1.23)
+    model.add_analog_output('v_out')
 
-    model.add_eqn_sys([Deriv(model.v_out) == (model.v_in - model.v_out)/tau])
+    model.set_tf(input_=model.v_in, output=model.v_out, tf=(num, den))
 
     gen = VerilogGenerator()
     model.compile_model(gen)

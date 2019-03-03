@@ -243,6 +243,14 @@ class UIntFormat(IntFormat):
         else:
             return ceil(log2(1 + value))
 
+def is_signed(format_: IntFormat):
+    if isinstance(format_, UIntFormat):
+        return False
+    elif isinstance(format_, SIntFormat):
+        return True
+    else:
+        raise Exception(f'Cannot determine whether this type is signed or unsigned: {format_.__class__.__name__}.')
+
 def main():
     print(RealFormat.from_value(5))
     print(UIntFormat.from_value(5))

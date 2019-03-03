@@ -288,7 +288,7 @@ class VerilogGenerator(CodeGenerator):
 
         # create a short real variable to be assigned the selected value from the array
         array_name = next(self.namer)
-        self.macro_call('MAKE_SHORT_REAL', array_name, compile_range_expr(expr.format_))
+        self.macro_call('MAKE_SHORT_REAL', array_name, compile_range_expr(expr.format_.range_))
 
         # perform the multiplication
         self.macro_call('MUL_REAL', array_name, signal.name, output.name)
@@ -506,23 +506,23 @@ class VerilogGenerator(CodeGenerator):
         elif isinstance(io, AnalogOutput):
             return f'`OUTPUT_REAL({io.name})'
         elif isinstance(io, DigitalInput):
-            return f'input wire {cls.int_type_str(io)} {io.name}'
+            return f'input wire {cls.int_type_str(io.format_)} {io.name}'
         elif isinstance(io, DigitalOutput):
-            return f'output wire {cls.int_type_str(io)} {io.name}'
+            return f'output wire {cls.int_type_str(io.format_)} {io.name}'
         else:
             raise Exception('Invalid type.')
 
-    @staticmethod
-    def int_type_str(fmt: Union[SIntFormat, UIntFormat]):
+    @classmethod
+    def int_type_str(cls, format_: Union[SIntFormat, UIntFormat]):
         retval = 'logic'
 
-        if isinstance(fmt, UIntFormat):
+        if isinstance(format_, UIntFormat):
             pass
-        elif isinstance(fmt, SIntFormat):
+        elif isinstance(format_, SIntFormat):
             retval += ' signed'
         else:
             raise Exception('Cannot determine if format is signed or unsigned.')
 
-        retval += f' [{fmt.width-1}:0]'
+        retval += f' [{format_.width-1}:0]'
 
         return retval

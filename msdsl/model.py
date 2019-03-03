@@ -13,6 +13,7 @@ from msdsl.expr.signals import (AnalogInput, AnalogOutput, DigitalInput, Digital
 from msdsl.generator.generator import CodeGenerator
 from msdsl.util import Namer
 from msdsl.eqn.lds import LdsCollection
+from msdsl.expr.format import RealFormat, IntFormat, is_signed
 
 from scipy.signal import cont2discrete
 
@@ -263,7 +264,17 @@ class MixedSignalModel:
                 hist.append(first)
             else:
                 # create the signal
-                curr = Signal(name=f'{first.name}_{k}', format_=first.format_)
+                name = f'{first.name}_{k}'
+                if isinstance(first.format_, RealFormat):
+                    init = first.init if hasattr(first, 'init') else 0
+                    curr = AnalogState(name=name, range_=first.format_.range_, width=first.format_.width,
+                                       exponent=first.format_.exponent, init=init)
+                elif isinstance(first.format_, IntFormat):
+                    init = first.init if hasattr(first, 'init') else 0
+                    curr = DigitalState(name=name, width=first.format_.width, signed=is_signed(first.format_))
+                else:
+                    raise Exception('Cannot determine format to use for storing history.')
+
                 self.add_signal(curr)
 
                 # make the update assignment

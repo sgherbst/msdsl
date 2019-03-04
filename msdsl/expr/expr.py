@@ -785,7 +785,7 @@ def to_uint(operand, width=None):
         # upon the demotion to UInt
         return sint_to_uint(real_to_sint(operand=operand, width=(width+1)), width=width)
     elif isinstance(operand.format_, SIntFormat):
-        return uint_to_sint(operand, width=width)
+        return sint_to_uint(operand, width=width)
     elif isinstance(operand.format_, UIntFormat):
         # This is a kind of tricky case, even though it doesn't likely come up too often.  If the width is specified
         # and doesn't match that of the operand, then we have to return a version of the operand with the requested

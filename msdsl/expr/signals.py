@@ -1,5 +1,5 @@
 from msdsl.expr.expr import ModelExpr
-from msdsl.expr.format import RealFormat, UIntFormat, SIntFormat
+from msdsl.expr.format import RealFormat, UIntFormat, SIntFormat, is_signed
 from msdsl.expr.svreal import RangeOf, WidthOf, ExponentOf, UndefinedRange
 
 class Signal(ModelExpr):
@@ -40,6 +40,14 @@ class DigitalSignal(Signal):
 
         # call the super constructor
         super().__init__(name=name, format_=format_)
+
+    @property
+    def width(self):
+        return self.format_.width
+
+    @property
+    def signed(self):
+        return is_signed(self.format_)
 
 class DigitalState(DigitalSignal):
     def __init__(self, name, width=1, signed=False, init=0):

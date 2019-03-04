@@ -411,30 +411,34 @@ class VerilogGenerator(CodeGenerator):
         elif isinstance(expr, RealToSInt):
             self.macro_call('REAL_TO_INT', input_.name, str(output.format_.width), output.name)
         elif isinstance(expr, UIntToSInt):
-            # figure out how many zeros have to be added
-            num_zeros = output.format_.width - input_.format_.width
-            assert num_zeros >= 1, \
+            # sanity check
+            assert output.format_.width >= input_.format_.width+1, \
                 f'Output SInt width ({output.format_.width}) is not at least one greater than the input UInt width ({input_.format_.width}).'
 
             # make the output signal
             self.make_signal(output)
 
             # construct string representation of new SInt
-            zero_const = str(num_zeros) + "'b" + '0'*num_zeros
-            value = f'{{{zero_const}, {input_.name}}}'
+            num_zeros = output.format_.width - input_.format_.width
+            value = f'{{{self.zero_const(num_zeros)}, {input_.name}}}'
 
             # make the assignment
             self.digital_assignment(signal=output, value=value, comment='UInt -> SInt')
         elif isinstance(expr, SIntToUInt):
             # sanity check
-            assert input_.format_.width <= output.format_.width, \
-                f'Input UInt width ({input_.format_.width}) is greater than output SInt width ({output.format_.width}).'
+            assert output.format_.width >= input_.format_.width-1, \
+                f'Output UInt width ({output.format_.width}) is not at least one less than the input SInt width ({input_.format_.width}).'
 
             # make the output signal
             self.make_signal(output)
 
-            # construct string representation of new UInt
-            value = f'{input_.name}[{input_.format_.width-1}:0]'
+            # then trim off the sign bit
+            value = f'{input_.name}[{input_.format_.width-2}:0]'
+
+            # pad with zeros if necessary
+            num_zeros = output.format_.width - (input_.format_.width - 1)
+            if num_zeros > 0:
+                value = f'{{{self.zero_const(num_zeros)}, {value}}}'
 
             # make the assignment
             self.digital_assignment(signal=output, value=value, comment='SInt -> UInt')
@@ -511,6 +515,10 @@ class VerilogGenerator(CodeGenerator):
             return f'output wire {cls.int_type_str(io.format_)} {io.name}'
         else:
             raise Exception('Invalid type.')
+
+    @classmethod
+    def zero_const(cls, num_zeros):
+        return str(num_zeros) + "'b" + '0'*num_zeros
 
     @classmethod
     def int_type_str(cls, format_: Union[SIntFormat, UIntFormat]):

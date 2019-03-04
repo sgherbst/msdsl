@@ -110,7 +110,7 @@ class MixedSignalModel:
         expr = wrap_constant(expr)
 
         # create signal to hold result
-        signal = Signal(name=name, format_=expr.format)
+        signal = Signal(name=name, format_=expr.format_)
 
         # add signal to model
         self.add_signal(signal)

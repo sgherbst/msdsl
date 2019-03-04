@@ -403,13 +403,13 @@ class VerilogGenerator(CodeGenerator):
         output = Signal(name=next(self.namer), format_=expr.format_)
 
         # compile the input expression to a signal
-        input_ = self.expr_to_signal(expr)
+        input_ = self.expr_to_signal(expr.operand)
 
         # handle the various cases
         if isinstance(expr, SIntToReal):
-            self.macro_call('INT_TO_REAL', input_.name, input_.format_.width, output.name)
+            self.macro_call('INT_TO_REAL', input_.name, str(input_.format_.width), output.name)
         elif isinstance(expr, RealToSInt):
-            self.macro_call('REAL_TO_INT', input_.name, output.format_.width, output.name)
+            self.macro_call('REAL_TO_INT', input_.name, str(output.format_.width), output.name)
         elif isinstance(expr, UIntToSInt):
             # figure out how many zeros have to be added
             num_zeros = output.format_.width - input_.format_.width

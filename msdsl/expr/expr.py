@@ -724,9 +724,9 @@ class SIntToUInt(TypeConversion):
         else:
             output_format = UIntFormat(width=width)
             assert output_format.can_represent(operand.format_.min_val), \
-                f'The given unsigned integer width {width} cannot represent the operand min value {operand.format.min_val}.'
+                f'The given unsigned integer width {width} cannot represent the operand min value {operand.format_.min_val}.'
             assert output_format.can_represent(operand.format_.max_val), \
-                f'The given unsigned integer width {width} cannot represent the operand max value {operand.format.max_val}.'
+                f'The given unsigned integer width {width} cannot represent the operand max value {operand.format_.max_val}.'
 
         # call the super constructor
         super().__init__(operand=operand, output_format=output_format)

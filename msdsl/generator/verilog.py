@@ -78,15 +78,15 @@ class VerilogGenerator(CodeGenerator):
         elif isinstance(expr, ArithmeticOperator):
             return self.make_arithmetic_operator(expr)
         elif isinstance(expr, BitwiseInv):
-            self.make_bitwise_inv(expr)
+            return self.make_bitwise_inv(expr)
         elif isinstance(expr, BitwiseOperator):
-            self.make_bitwise_operator(expr)
+            return self.make_bitwise_operator(expr)
         elif isinstance(expr, ComparisonOperator):
-            self.make_comparison_operator(expr)
+            return self.make_comparison_operator(expr)
         elif isinstance(expr, Concatenate):
-            self.make_concatenation(expr)
+            return self.make_concatenation(expr)
         elif isinstance(expr, Array):
-            self.make_array(expr)
+            return self.make_array(expr)
         elif isinstance(expr, ArithmeticShift):
             return self.make_arithmetic_shift(expr)
         elif isinstance(expr, BitwiseAccess):
@@ -337,7 +337,7 @@ class VerilogGenerator(CodeGenerator):
 
         input_ = self.expr_to_signal(expr.operand)
         value = f'~{input_.name}'
-        self.digital_assignment(signal=output.name, value=value)
+        self.digital_assignment(signal=output, value=value)
 
         return output
 
@@ -353,14 +353,17 @@ class VerilogGenerator(CodeGenerator):
 
     def make_comparison_operator(self, expr: ComparisonOperator):
         output = Signal(name=next(self.namer), format_=expr.format_)
-        self.make_signal(output)
 
         lhs = self.expr_to_signal(expr.lhs)
         rhs = self.expr_to_signal(expr.rhs)
 
-        if isinstance(lhs.format, RealFormat) and isinstance(rhs.format, RealFormat):
+        if isinstance(lhs.format_, RealFormat) and isinstance(rhs.format_, RealFormat):
             self.macro_call(REAL_COMP_OP[type(expr)], lhs.name, rhs.name, output.name)
-        elif isinstance(lhs.format, IntFormat) and isinstance(rhs.format, IntFormat):
+        elif isinstance(lhs.format_, IntFormat) and isinstance(rhs.format_, IntFormat):
+            # make the output signal
+            self.make_signal(output)
+
+            # assign the output signal
             value = f'{lhs} {INT_COMP_OP[type(expr)]} {rhs}'
             self.digital_assignment(signal=output, value=value)
         else:
@@ -372,7 +375,7 @@ class VerilogGenerator(CodeGenerator):
         output = Signal(name=next(self.namer), format_=expr.format_)
         self.make_signal(output)
 
-        inputs_ = self.expr_to_signal(expr.operands)
+        inputs_ = [self.expr_to_signal(operand) for operand in expr.operands]
         value = '{' + ', '.join(signal_names(inputs_)) + '}'
         self.digital_assignment(signal=output, value=value)
 
@@ -384,7 +387,7 @@ class VerilogGenerator(CodeGenerator):
 
         input_ = self.expr_to_signal(expr.operand)
         value = f'{input_.name} {SHIFT_OP[type(expr)]} {expr.shift}'
-        self.digital_assignment(signal=output.name, value=value)
+        self.digital_assignment(signal=output, value=value)
 
         return output
 
@@ -394,7 +397,7 @@ class VerilogGenerator(CodeGenerator):
 
         input_ = self.expr_to_signal(expr.operand)
         value = f'{input_.name}[{expr.msb}:{expr.lsb}]'
-        self.digital_assignment(signal=output.name, value=value)
+        self.digital_assignment(signal=output, value=value)
 
         return output
 

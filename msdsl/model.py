@@ -56,8 +56,8 @@ class MixedSignalModel:
     def add_analog_output(self, name, init=0):
         return self.add_signal(AnalogOutput(name=name, init=init))
 
-    def add_analog_state(self, name, range, width=None, exponent=None, init=0):
-        return self.add_signal(AnalogState(name=name, range_=range, width=width, exponent=exponent, init=init))
+    def add_analog_state(self, name, range_, width=None, exponent=None, init=0):
+        return self.add_signal(AnalogState(name=name, range_=range_, width=width, exponent=exponent, init=init))
 
     def add_digital_input(self, name, width=1, signed=False):
         return self.add_signal(DigitalInput(name=name, width=width, signed=signed))

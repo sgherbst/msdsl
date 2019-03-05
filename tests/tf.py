@@ -1,6 +1,5 @@
 from msdsl.model import MixedSignalModel
 from msdsl.generator.verilog import VerilogGenerator
-from msdsl.eqn.deriv import Deriv
 
 def main():
     dt = 0.1e-6
@@ -14,10 +13,7 @@ def main():
 
     model.set_tf(input_=model.v_in, output=model.v_out, tf=(num, den))
 
-    gen = VerilogGenerator()
-    model.compile_model(gen)
-
-    print(gen.text)
+    model.compile_and_print(VerilogGenerator())
 
 if __name__ == '__main__':
     main()

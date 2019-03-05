@@ -1,7 +1,8 @@
 from typing import List
 
 from msdsl.expr.analyze import walk_expr, signal_names
-from msdsl.expr.signals import AnalogSignal, DigitalSignal
+from msdsl.expr.signals import AnalogSignal, DigitalSignal, Signal
+from msdsl.expr.format import RealFormat
 from msdsl.eqn.deriv import Deriv
 from msdsl.eqn.cases import EqnCase
 from msdsl.expr.expr import ModelExpr
@@ -21,7 +22,7 @@ class EqnList:
     # signal access functions
 
     def get_all_signals(self):
-        return [signal for eqn in self.eqns for signal in walk_expr(eqn, lambda e: isinstance(e, AnalogSignal))]
+        return [signal for eqn in self.eqns for signal in walk_expr(eqn, lambda e: isinstance(e, Signal) and isinstance(e.format_, RealFormat))]
 
     def get_derivs(self):
         return [deriv for eqn in self.eqns for deriv in walk_expr(eqn, lambda e: isinstance(e, Deriv))]

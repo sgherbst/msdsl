@@ -25,10 +25,7 @@ def main():
     ]
     model.add_eqn_sys(eqns)
 
-    gen = VerilogGenerator()
-    model.compile_model(gen)
-
-    print(gen.text)
+    model.compile_and_print(VerilogGenerator())
 
 if __name__ == '__main__':
     main()

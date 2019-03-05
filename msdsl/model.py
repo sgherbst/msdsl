@@ -286,7 +286,7 @@ class MixedSignalModel:
         # return result
         return hist
 
-    def compile_model(self, gen: CodeGenerator):
+    def compile(self, gen: CodeGenerator):
         # determine the I/Os and internal variables
         ios = []
         internals = []
@@ -333,6 +333,14 @@ class MixedSignalModel:
 
         # end module
         gen.end_module()
+
+    def compile_to_file(self, gen: CodeGenerator, filename: str):
+        self.compile(gen=gen)
+        gen.write_to_file(filename=filename)
+
+    def compile_and_print(self, gen: CodeGenerator):
+        self.compile(gen=gen)
+        print(gen.text)
 
 def main():
     from msdsl.eqn.deriv import Deriv

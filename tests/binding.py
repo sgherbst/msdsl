@@ -8,10 +8,7 @@ def main():
 
     model.bind_name('c', model.a+model.b)
 
-    gen = VerilogGenerator()
-    model.compile_model(gen)
-
-    print(gen.text)
+    model.compile_and_print(VerilogGenerator())
 
 if __name__ == '__main__':
     main()

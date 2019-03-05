@@ -3,7 +3,7 @@ from typing import List
 
 from msdsl.expr.format import RealFormat, UIntFormat
 from msdsl.expr.expr import wrap_constants, promote_operands, EqualTo, Sum, Product, prod_op, sum_op, ModelExpr
-from msdsl.expr.signals import DigitalSignal
+from msdsl.expr.signals import DigitalSignal, Signal
 from msdsl.expr.svreal import UndefinedRange
 
 def subst_case(expr, sel_bit_settings):
@@ -44,7 +44,7 @@ def eqn_case(cases, sel_bits: List[DigitalSignal]):
     cases = promote_operands(cases, RealFormat)
 
     # sanity check
-    assert all(isinstance(sel_bit, DigitalSignal) and isinstance(sel_bit.format_, UIntFormat) and sel_bit.format_.width == 1
+    assert all(isinstance(sel_bit, Signal) and isinstance(sel_bit.format_, UIntFormat) and sel_bit.format_.width == 1
                for sel_bit in sel_bits), 'Selection bits for an EqnCase must all be 1-bit unsigned digital signals.'
     assert len(cases) == (1<<len(sel_bits)), 'Case table length must match 2**len(sel_bits).'
 

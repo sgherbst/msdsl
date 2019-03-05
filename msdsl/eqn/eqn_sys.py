@@ -21,13 +21,14 @@ class EqnSys(EqnList):
         outputs = outputs if outputs is not None else []
 
         # create list of derivatives of state variables
-        derivs = self.get_derivs()
+        deriv_dict = {deriv.name: deriv for deriv in self.get_derivs()}
+        derivs = list(deriv_dict.values())
 
         # sanity check: no repeated entries in inputs, states, derivatives, or outputs
         assert len(set(signal_names(inputs))) == len(inputs), 'Repeated entries in inputs.'
         assert len(set(signal_names(outputs))) == len(outputs), 'Repeated entries in outputs.'
         assert len(set(signal_names(states))) == len(states), 'Repeated entries in states.'
-        assert len(set(signal_names(derivs))) == len(derivs), 'Repeated entries in states.'
+        assert len(set(signal_names(derivs))) == len(derivs), 'Repeated entries in derivatives.'
 
         # sanity check: inputs, states, derivatives, and outputs should be disjoint
         assert set(signal_names(inputs)).isdisjoint(signal_names(outputs)), 'Inputs and outputs are not disjoint.'

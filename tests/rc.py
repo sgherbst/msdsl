@@ -12,10 +12,7 @@ def main():
 
     model.add_eqn_sys([Deriv(model.v_out) == (model.v_in - model.v_out)/tau])
 
-    gen = VerilogGenerator()
-    model.compile_model(gen)
-
-    print(gen.text)
+    model.compile_and_print(VerilogGenerator())
 
 if __name__ == '__main__':
     main()

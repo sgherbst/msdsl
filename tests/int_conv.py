@@ -16,10 +16,7 @@ def main():
     clamped = clamp(to_sint(model.d, width=model.c.width+1), 0, 1023)
     model.set_next_cycle(model.c, to_uint(clamped, width=model.c.width))
 
-    gen = VerilogGenerator()
-    model.compile_model(gen)
-
-    print(gen.text)
+    model.compile_and_print(VerilogGenerator())
 
 if __name__ == '__main__':
     main()

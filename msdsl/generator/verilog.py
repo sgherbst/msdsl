@@ -116,9 +116,9 @@ class VerilogGenerator(CodeGenerator):
             raise Exception('Invalid signal type.')
 
     def make_probe(self, s: Signal):
-        if isinstance(s, AnalogSignal):
+        if isinstance(s, Signal) and isinstance(s.format_, RealFormat):
             self.macro_call('PROBE_ANALOG', s.name)
-        elif isinstance(s, DigitalSignal):
+        elif isinstance(s, Signal) and isinstance(s.format_, IntFormat):
             self.macro_call('PROBE_DIGITAL', s.name, str(s.format_.width))
         else:
             raise Exception('Invalid signal type.')

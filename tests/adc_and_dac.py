@@ -20,13 +20,9 @@ def main():
     model.set_this_cycle(model.d_out, to_uint(clamped, width=model.d_out.width))
 
     # ADC code goes from 0-255 as input voltage goes from 0 to 1V
-
     model.set_this_cycle(model.a_out, model.d_in/255)
 
-    gen = VerilogGenerator()
-    model.compile_model(gen)
-
-    print(gen.text)
+    model.compile_and_print(VerilogGenerator())
 
 if __name__ == '__main__':
     main()

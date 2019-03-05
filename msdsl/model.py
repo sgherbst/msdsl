@@ -7,7 +7,7 @@ from msdsl.assignment import ThisCycleAssignment, NextCycleAssignment, BindingAs
 from msdsl.expr.analyze import signal_names
 from msdsl.eqn.cases import address_to_settings
 from msdsl.eqn.eqn_sys import EqnSys
-from msdsl.expr.expr import ModelExpr, array, concatenate, sum_op, wrap_constant
+from msdsl.expr.expr import ModelExpr, array, concatenate, sum_op, wrap_constant, min_op
 from msdsl.expr.signals import (AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, Signal, AnalogSignal,
                    AnalogState, DigitalState)
 from msdsl.generator.generator import CodeGenerator
@@ -139,6 +139,14 @@ class MixedSignalModel:
         self.probes.append(signal)
 
     # signal assignment functions
+
+    def add_counter(self, name, width, init=0, loop=False):
+        self.add_digital_state(name, width=width, init=init)
+
+        if loop:
+            self.set_next_cycle(self.get_signal(name), (self.get_signal(name)+1)[(width-1):0])
+        else:
+            self.set_next_cycle(self.get_signal(name), min_op([self.get_signal(name) + 1, (1 << width) - 1]))
 
     def get_equation_io(self, eqn_sys: EqnSys):
         # determine all signals present in the set of equations

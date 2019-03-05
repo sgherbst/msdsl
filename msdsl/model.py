@@ -1,145 +1,242 @@
-import numpy as np
-import scipy.linalg
-
-from typing import List
-from scipy.signal import cont2discrete
 from collections import OrderedDict
 from itertools import chain
-from enum import Enum, auto
+from numbers import Integral
+from typing import List, Set, Union
 
-from msdsl.generator import CodeGenerator
-from msdsl.expr import (Constant, AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, Signal, AnalogSignal,
-                        ModelExpr, AnalogArray, DigitalArray, Concatenate)
-from msdsl.eqnsys import eqn_sys_to_lds
-from msdsl.optimize import simplify
-from msdsl.cases import subst_case, addr2settings
+from msdsl.assignment import ThisCycleAssignment, NextCycleAssignment, BindingAssignment
+from msdsl.expr.analyze import signal_names
+from msdsl.eqn.cases import address_to_settings
+from msdsl.eqn.eqn_sys import EqnSys
+from msdsl.expr.expr import ModelExpr, array, concatenate, sum_op, wrap_constant
+from msdsl.expr.signals import (AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, Signal, AnalogSignal,
+                   AnalogState, DigitalState)
+from msdsl.generator.generator import CodeGenerator
+from msdsl.util import Namer
+from msdsl.eqn.lds import LdsCollection
+from msdsl.expr.format import RealFormat, IntFormat, is_signed
 
-class AssignmentType(Enum):
-    THIS_CYCLE = auto()
-    NEXT_CYCLE = auto()
+from scipy.signal import cont2discrete
 
-class Assignment:
-    def __init__(self, signal: Signal, expr: ModelExpr, assignment_type: AssignmentType):
-        self.signal = signal
-        self.expr = expr
-        self.assignment_type = assignment_type
 
 class MixedSignalModel:
-    def __init__(self, name, *ios, dt=None):
+    def __init__(self, module_name, *ios, dt=None):
         # save settings
-        self.name = name
+        self.module_name = module_name
         self.dt = dt
 
-        # add ios
+        # initialize
         self.signals = OrderedDict()
+        self.assignments = OrderedDict()
+        self.probes = []
+        self.namer = Namer()
+
+        # add ios
         for io in ios:
             self.add_signal(io)
 
-        # expressions used to assign internal and external signals
-        self.assignments = []
-
-        # probe signals
-        self.probes = []
-
     def __getattr__(self, item):
-        return self.signals[item]
+        return self.get_signal(item)
 
     def add_signal(self, signal: Signal):
-        assert signal.name not in self.signals
+        # add the signal name to the namer.  this also checks that the name is not taken.
+        self.namer.add_name(signal.name)
+
+        # add the signal to the model dictionary, which makes it possible to access signals as attributes of a Model
         self.signals[signal.name] = signal
+
+        # return the signal.  this is a convenience that allows the user to instantiate the signal inside the call
+        # to add_signal
+        return signal
+
+    # convenience functions for adding specific types of signals
+
+    def add_analog_input(self, name):
+        return self.add_signal(AnalogInput(name=name))
+
+    def add_analog_output(self, name, init=0):
+        return self.add_signal(AnalogOutput(name=name, init=init))
+
+    def add_analog_state(self, name, range_, width=None, exponent=None, init=0):
+        return self.add_signal(AnalogState(name=name, range_=range_, width=width, exponent=exponent, init=init))
+
+    def add_digital_input(self, name, width=1, signed=False):
+        return self.add_signal(DigitalInput(name=name, width=width, signed=signed))
+
+    def add_digital_output(self, name, width=1, signed=False, init=0):
+        return self.add_signal(DigitalOutput(name=name, width=width, signed=signed, init=init))
+
+    def add_digital_state(self, name, width=1, signed=False, init=0):
+        return self.add_signal(DigitalState(name=name, width=width, signed=signed, init=init))
+
+    # signal access functions
+
+    def has_signal(self, name: str):
+        return name in self.signals
+
+    def get_signal(self, name: str):
+        assert self.has_signal(name), 'The signal ' + name + ' has not been defined.'
+        return self.signals[name]
+
+    def get_signals(self, names: Union[List[str], Set[str]]):
+        return [self.get_signal(name) for name in names]
+
+    def get_analog_inputs(self):
+        return [signal for signal in self.signals.values() if isinstance(signal, AnalogInput)]
+
+    def get_analog_outputs(self):
+        return [signal for signal in self.signals.values() if isinstance(signal, AnalogOutput)]
+
+    def get_digital_inputs(self):
+        return [signal for signal in self.signals.values() if isinstance(signal, DigitalInput)]
+
+    def get_digital_outputs(self):
+        return [signal for signal in self.signals.values() if isinstance(signal, DigitalOutput)]
+
+    # functions to assign signals
+
+    def add_assignment(self, assignment):
+        assert assignment.signal.name not in self.assignments, \
+            'The signal ' + assignment.signal.name + ' has already been assigned.'
+        self.assignments[assignment.signal.name] = assignment
+
+    def set_this_cycle(self, signal: Signal, expr: ModelExpr):
+        self.add_assignment(ThisCycleAssignment(signal=signal, expr=expr))
+
+    def set_next_cycle(self, signal: Signal, expr: ModelExpr):
+        self.add_assignment(NextCycleAssignment(signal=signal, expr=expr))
+
+    def bind_name(self, name: str, expr: ModelExpr):
+        # wrap the expression if it's a constant
+        expr = wrap_constant(expr)
+
+        # create signal to hold result
+        signal = Signal(name=name, format_=expr.format_)
+
+        # add signal to model
+        self.add_signal(signal)
+
+        # add assignment to model
+        self.add_assignment(BindingAssignment(signal=signal, expr=expr))
+
+        # return signal
+        return signal
+
+    # assignment access functions
+
+    def has_assignment(self, name: str):
+        return name in self.assignments
+
+    def get_assignment(self, name: str):
+        assert self.has_assignment(name), f'The signal {name} has not been assigned.'
+        return self.assignments[name]
+
+    def get_assignments(self, names: List[str]):
+        return [self.get_assignment(name) for name in names]
+
+    # signal probe functions
 
     def add_probe(self, signal: Signal):
         self.probes.append(signal)
 
-    def add_eqn_sys(self, eqns=None, internals=None, inputs=None, states=None, outputs=None, sel_bits=None):
+    # signal assignment functions
+
+    def get_equation_io(self, eqn_sys: EqnSys):
+        # determine all signals present in the set of equations
+        all_signal_names = set(signal_names(eqn_sys.get_all_signals()))
+
+        # determine inputs
+        input_names = (signal_names(self.get_analog_inputs()) | self.assignments.keys()) & all_signal_names
+        inputs = self.get_signals(input_names)
+
+        # determine states
+        state_names = set(signal_names(eqn_sys.get_states()))
+        deriv_names = set(signal_names(eqn_sys.get_derivs()))
+        states = self.get_signals(state_names)
+
+        # determine outputs
+        output_names  = (all_signal_names - input_names - state_names - deriv_names) & self.signals.keys()
+        outputs = self.get_signals(output_names)
+
+        # determine sel_bits
+        sel_bit_names = set(signal_names(eqn_sys.get_sel_bits()))
+        sel_bits = self.get_signals(sel_bit_names)
+
+        # return result
+        return inputs, states, outputs, sel_bits
+
+    def add_eqn_sys(self, eqns: List[ModelExpr], extra_outputs=None):
         # set defaults
-        if sel_bits is None:
-            sel_bits = []
+        extra_outputs = extra_outputs if extra_outputs is not None else []
+
+        # create object to hold system of equations
+        eqn_sys = EqnSys(eqns)
+
+        # analyze equation to find out knowns and unknowns
+        inputs, states, outputs, sel_bits = self.get_equation_io(eqn_sys)
+
+        # add the extra outputs as needed
+        for extra_output in extra_outputs:
+            if not isinstance(extra_output, Signal):
+                print('Skipping extra output ' + str(extra_output) + ' since it is not a Signal.')
+            elif extra_output.name in signal_names(outputs):
+                print('Skipping extra output ' + extra_output.name + \
+                      ' since it is already included by default in the outputs of the system of equations.')
+            else:
+                outputs.append(extra_output)
 
         # initialize lists of matrices
-        A_list, B_list, C_list, D_list = [], [], [], []
+        collection = LdsCollection()
 
         # iterate over all of the bit combinations
-        for k in range(2**len(sel_bits)):
+        for k in range(2 ** len(sel_bits)):
             # substitute values for this particular setting
-            sel_bit_settings = addr2settings(k, sel_bits)
-            eqns_k = [subst_case(eqn, sel_bit_settings) for eqn in eqns]
+            sel_bit_settings = address_to_settings(k, sel_bits)
+            eqn_sys_k = eqn_sys.subst_case(sel_bit_settings)
 
             # convert system of equations to a linear dynamical system
-            lds = eqn_sys_to_lds(eqns=eqns_k, internals=internals, inputs=inputs, states=states, outputs=outputs)
+            lds = eqn_sys_k.to_lds(inputs=inputs, states=states, outputs=outputs)
 
             # discretize linear dynamical system
-            lds = self.discretize_lds(lds)
+            lds = lds.discretize(dt=self.dt)
 
-            # add to matrix list
-            A_list.append(lds[0])
-            B_list.append(lds[1])
-            C_list.append(lds[2])
-            D_list.append(lds[3])
-
-        # stack matrices
-        A = np.stack(A_list, axis=2) if all(mat is not None for mat in A_list) else None
-        B = np.stack(B_list, axis=2) if all(mat is not None for mat in B_list) else None
-        C = np.stack(C_list, axis=2) if all(mat is not None for mat in C_list) else None
-        D = np.stack(D_list, axis=2) if all(mat is not None for mat in D_list) else None
-        lds = [A, B, C, D]
+            # add to collection of LDS systems
+            collection.append(lds)
 
         # construct address for selection
         if len(sel_bits) > 0:
-            sel = Concatenate(sel_bits)
+            sel = concatenate(sel_bits)
         else:
             sel = None
 
         # add the discrete-time equation
-        self.add_discrete_time_lds(lds=lds, inputs=inputs, states=states, outputs=outputs, sel=sel)
+        self.add_discrete_time_lds(collection=collection, inputs=inputs, states=states, outputs=outputs, sel=sel)
 
-    def discretize_lds(self, sys):
-        # extract matrices
-        A, B, C, D = sys
-
-        # compute coefficients
-        A_tilde = scipy.linalg.expm(self.dt*A) if A is not None else None
-        B_tilde = np.linalg.solve(A, (A_tilde-np.eye(*A.shape)).dot(B)) if (A is not None) and (B is not None) else None
-        C_tilde = C.copy() if C is not None else None
-        D_tilde = D.copy() if D is not None else None
-
-        # return discretized system
-        return (A_tilde, B_tilde, C_tilde, D_tilde)
-
-    def add_discrete_time_lds(self, lds, inputs=None, states=None, outputs=None, sel=None):
+    def add_discrete_time_lds(self, collection, inputs=None, states=None, outputs=None, sel=None):
         # set defaults
         inputs = inputs if inputs is not None else []
         states = states if states is not None else []
         outputs = outputs if outputs is not None else []
 
-        # extract matrices
-        A, B, C, D = lds
-
-        # state updates
-        for row, _ in enumerate(states):
-            expr = 0
-            for col, _ in enumerate(states):
-                expr = expr + AnalogArray(A[row, col, :], sel)*states[col]
-            for col, _ in enumerate(inputs):
-                expr = expr + AnalogArray(B[row, col, :], sel)*inputs[col]
+        # state updates.  state initialization is captured in the signal itself, so it doesn't have to be explicitly
+        # captured here
+        for row in range(len(states)):
+            expr = sum_op([array(collection.A[row, col], sel) * states[col] for col in range(len(states))])
+            expr += sum_op([array(collection.B[row, col], sel) * inputs[col] for col in range(len(inputs))])
             self.set_next_cycle(states[row], expr)
 
         # output updates
-        for row, _ in enumerate(outputs):
-            expr = 0
-            for col, _ in enumerate(states):
-                expr = expr + AnalogArray(C[row, col, :], sel)*states[col]
-            for col, _ in enumerate(inputs):
-                expr = expr + AnalogArray(D[row, col, :], sel)*inputs[col]
-            self.set_this_cycle(outputs[row], expr)
+        for row in range(len(outputs)):
+            expr = sum_op([array(collection.C[row, col], sel) * states[col] for col in range(len(states))])
+            expr += sum_op([array(collection.D[row, col], sel) * inputs[col] for col in range(len(inputs))])
 
-    def set_next_cycle(self, signal: Signal, expr: ModelExpr):
-        self.assignments.append(Assignment(signal, expr, AssignmentType.NEXT_CYCLE))
+            # if the output signal already exists, then assign it directly.  otherwise, bind the signal name to the
+            # expression value
+            if self.has_signal(outputs[row].name):
+                self.set_this_cycle(outputs[row], expr)
+            else:
+                self.bind_name(outputs[row].name, expr)
 
-    def set_this_cycle(self, signal: Signal, expr: ModelExpr):
-        self.assignments.append(Assignment(signal, expr, AssignmentType.THIS_CYCLE))
-
-    def set_tf(self, output, input_, tf):
+    def set_tf(self, input_, output, tf):
         # discretize transfer function
         res = cont2discrete(tf, self.dt)
 
@@ -148,56 +245,85 @@ class MixedSignalModel:
         a = [-float(val) for val in res[1].flatten()]
 
         # create input and output histories
-        i_hist = self.make_analog_history(input_, len(b))
-        o_hist = self.make_analog_history(output, len(a))
+        i_hist = self.make_history(input_, len(b))
+        o_hist = self.make_history(output, len(a))
 
         # implement the filter
-        expr = Constant(0)
-        for coeff, var in chain(zip(b, i_hist), zip(a[1:], o_hist)):
-            expr += coeff*var
+        expr = sum_op([coeff * var for coeff, var in chain(zip(b, i_hist), zip(a[1:], o_hist))])
 
-        self.set_next_cycle(output, expr)
+        # make the assignment
+        self.set_next_cycle(signal=output, expr=expr)
 
-    def make_analog_history(self, first: AnalogSignal, length: int):
+    def make_history(self, first: Signal, length: Integral):
+        # initialize
         hist = []
 
+        # add elements to the history one by one
         for k in range(length):
             if k == 0:
                 hist.append(first)
             else:
-                curr = first.copy_format_to(f'{first.name}_{k}')
+                # create the signal
+                name = f'{first.name}_{k}'
+                if isinstance(first.format_, RealFormat):
+                    init = first.init if hasattr(first, 'init') else 0
+                    curr = AnalogState(name=name, range_=first.format_.range_, width=first.format_.width,
+                                       exponent=first.format_.exponent, init=init)
+                elif isinstance(first.format_, IntFormat):
+                    init = first.init if hasattr(first, 'init') else 0
+                    curr = DigitalState(name=name, width=first.format_.width, signed=is_signed(first.format_))
+                else:
+                    raise Exception('Cannot determine format to use for storing history.')
+
                 self.add_signal(curr)
-                self.set_next_cycle(curr, hist[k-1])
+
+                # make the update assignment
+                self.set_next_cycle(signal=curr, expr=hist[k - 1])
+
+                # add this signal to the history
                 hist.append(curr)
 
+        # return result
         return hist
 
     def compile_model(self, gen: CodeGenerator):
-        # start module
-        ios = [signal for signal in self.signals.values() if
-               isinstance(signal, (AnalogInput, AnalogOutput, DigitalInput, DigitalOutput))]
-        gen.start_module(name=self.name, ios=ios)
+        # determine the I/Os and internal variables
+        ios = []
+        internals = []
+        for signal in self.signals.values():
+            if isinstance(signal, (AnalogInput, AnalogOutput, DigitalInput, DigitalOutput)):
+                ios.append(signal)
+                continue
+            elif not self.has_assignment(signal.name):
+                raise Exception('The signal ' + signal.name + ' has not been assigned.')
+            elif not isinstance(self.get_assignment(signal.name), BindingAssignment):
+                internals.append(signal)
 
-        # create internal variables
-        internals = [signal for signal in self.signals.values() if
-                     not isinstance(signal, (AnalogInput, AnalogOutput, DigitalInput, DigitalOutput))]
+        # start module
+        gen.start_module(name=self.module_name, ios=ios)
+
+        # declare the internal variables
         if len(internals) > 0:
             gen.make_section('Declaring internal variables.')
         for signal in internals:
             gen.make_signal(signal)
 
-        # update values of variables for the next cycle
-        for assignment in self.assignments:
+        # update values of variables
+        for assignment in self.assignments.values():
             # label this section of the code for debugging purposes
-            gen.make_section(f'Update signal: {assignment.signal.name}')
+            gen.make_section(f'Assign signal: {assignment.signal.name}')
+
+            # compile the expression to a signal
+            result = gen.expr_to_signal(assignment.expr)
 
             # implement the update expression
-            update_signal = gen.compile_expr(assignment.expr)
-
-            if assignment.assignment_type == AssignmentType.THIS_CYCLE:
-                gen.make_assign(update_signal, assignment.signal)
-            elif assignment.assignment_type == AssignmentType.NEXT_CYCLE:
-                gen.make_mem(update_signal, assignment.signal)
+            if isinstance(assignment, ThisCycleAssignment):
+                gen.make_assign(input_=result, output=assignment.signal)
+            elif isinstance(assignment, NextCycleAssignment):
+                gen.make_mem(next_=result, curr=assignment.signal, init=assignment.signal.init)
+            elif isinstance(assignment, BindingAssignment):
+                gen.make_signal(assignment.signal)
+                gen.make_assign(input_=result, output=assignment.signal)
             else:
                 raise Exception('Invalid assignment type.')
 
@@ -208,5 +334,28 @@ class MixedSignalModel:
         # end module
         gen.end_module()
 
-        # dump model to file
-        gen.dump_to_file()
+def main():
+    from msdsl.eqn.deriv import Deriv
+    from msdsl.eqn.cases import eqn_case
+    from msdsl.expr.signals import DigitalSignal
+
+    model = MixedSignalModel('test', AnalogInput('x'), dt=1)
+    y = AnalogSignal('y')
+    z = model.add_signal(AnalogSignal('z', 10))
+    s = model.add_signal(DigitalSignal('s'))
+
+    eqn_sys = EqnSys([
+        y == model.x + 1,
+        Deriv(z) == (y - z) * eqn_case([2, 3], [s])
+    ])
+
+    inputs, states, outputs, sel_bits = model.get_equation_io(eqn_sys)
+
+    print('inputs:', signal_names(inputs))
+    print('states:', signal_names(states))
+    print('outputs:', signal_names(outputs))
+    print('sel_bits:', signal_names(sel_bits))
+
+
+if __name__ == '__main__':
+    main()

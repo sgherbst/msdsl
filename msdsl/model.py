@@ -2,6 +2,7 @@ from collections import OrderedDict
 from itertools import chain
 from numbers import Integral
 from typing import List, Set, Union
+from copy import deepcopy
 
 from msdsl.assignment import ThisCycleAssignment, NextCycleAssignment, BindingAssignment
 from msdsl.expr.analyze import signal_names
@@ -17,6 +18,10 @@ from msdsl.expr.format import RealFormat, IntFormat, is_signed
 
 from scipy.signal import cont2discrete
 
+class Bus:
+    def __init__(self, signal: Signal, n: Integral):
+        self.signal = signal
+        self.n = n
 
 class MixedSignalModel:
     def __init__(self, module_name, *ios, dt=None):
@@ -37,16 +42,32 @@ class MixedSignalModel:
     def __getattr__(self, item):
         return self.get_signal(item)
 
-    def add_signal(self, signal: Signal):
-        # add the signal name to the namer.  this also checks that the name is not taken.
-        self.namer.add_name(signal.name)
+    def add_signal(self, x: Union[Signal, Bus]):
+        if isinstance(x, Bus):
+            # create the bus one signal at a time
+            bus = []
+            for k in range(x.n):
+                signal = deepcopy(x.signal)
+                signal.name = f'{signal.name}_{k}'
+                bus.append(self.add_signal(signal))
 
-        # add the signal to the model dictionary, which makes it possible to access signals as attributes of a Model
-        self.signals[signal.name] = signal
+            # add a property to the class with the bus name
+            setattr(self, x.signal.name, bus)
 
-        # return the signal.  this is a convenience that allows the user to instantiate the signal inside the call
-        # to add_signal
-        return signal
+            # return the bus
+            return bus
+        elif isinstance(x, Signal):
+            # add the signal name to the namer.  this also checks that the name is not taken.
+            self.namer.add_name(x.name)
+
+            # add the signal to the model dictionary, which makes it possible to access signals as attributes of a Model
+            self.signals[x.name] = x
+
+            # return the signal.  this is a convenience that allows the user to instantiate the signal inside the call
+            # to add_signal
+            return x
+        else:
+            raise Exception(f'Unknown signal type: {x.__class__.__name__}.')
 
     # convenience functions for adding specific types of signals
 
@@ -262,7 +283,20 @@ class MixedSignalModel:
         # make the assignment
         self.set_next_cycle(signal=output, expr=expr)
 
-    def make_history(self, first: Signal, length: Integral):
+    def delay(self, input_: ModelExpr, time):
+        # compute number of cycles for the delay
+        n_cycles = int(round(time/self.dt))
+
+        # create a history of the required length
+        hist = self.make_history(first=input_, length=n_cycles+1)
+
+        # get the last element from the history
+        last = hist[n_cycles]
+
+        # return the result
+        return last
+
+    def make_history(self, first: ModelExpr, length: Integral):
         # initialize
         hist = []
 
@@ -279,7 +313,8 @@ class MixedSignalModel:
                                        exponent=first.format_.exponent, init=init)
                 elif isinstance(first.format_, IntFormat):
                     init = first.init if hasattr(first, 'init') else 0
-                    curr = DigitalState(name=name, width=first.format_.width, signed=is_signed(first.format_))
+                    curr = DigitalState(name=name, width=first.format_.width, signed=is_signed(first.format_),
+                                        init=init)
                 else:
                     raise Exception('Cannot determine format to use for storing history.')
 

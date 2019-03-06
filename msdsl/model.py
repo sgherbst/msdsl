@@ -300,13 +300,16 @@ class MixedSignalModel:
         # initialize
         hist = []
 
+        # determine basename
+        basename = first.name if hasattr(first, 'name') else next(self.namer)
+
         # add elements to the history one by one
         for k in range(length):
             if k == 0:
                 hist.append(first)
             else:
                 # create the signal
-                name = f'{first.name}_{k}'
+                name = f'{basename}_{k}'
                 if isinstance(first.format_, RealFormat):
                     init = first.init if hasattr(first, 'init') else 0
                     curr = AnalogState(name=name, range_=first.format_.range_, width=first.format_.width,

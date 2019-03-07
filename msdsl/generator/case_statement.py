@@ -2,7 +2,7 @@ from typing import List
 from msdsl.generator.generator import CodeGenerator
 
 def case_statment(gen: CodeGenerator, sel, var, values: List, default=None):
-    gen.writeln(f'always @({sel}) begin')
+    gen.writeln('always @(*) begin')
     gen.indent()
 
     gen.writeln(f'case ({sel})')

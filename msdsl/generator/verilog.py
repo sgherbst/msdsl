@@ -364,7 +364,7 @@ class VerilogGenerator(CodeGenerator):
             self.make_signal(output)
 
             # assign the output signal
-            value = f'{lhs} {INT_COMP_OP[type(expr)]} {rhs}'
+            value = f"({lhs} {INT_COMP_OP[type(expr)]} {rhs}) ? 1'b1 : 1'b0"
             self.digital_assignment(signal=output, value=value)
         else:
             raise ValueError(f'Unknown format type combination for LHS and RHS: {lhs.format_.__class__.__name__} and {rhs.format_.__class__.__name__}.')

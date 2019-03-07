@@ -1,8 +1,10 @@
 from collections import OrderedDict
 from itertools import chain
-from numbers import Integral
+from numbers import Integral, Number
 from typing import List, Set, Union
 from copy import deepcopy
+
+from math import ceil, log2
 
 from msdsl.assignment import ThisCycleAssignment, NextCycleAssignment, BindingAssignment
 from msdsl.expr.analyze import signal_names
@@ -15,6 +17,7 @@ from msdsl.generator.generator import CodeGenerator
 from msdsl.util import Namer
 from msdsl.eqn.lds import LdsCollection
 from msdsl.expr.format import RealFormat, IntFormat, is_signed
+from msdsl.expr.extras import if_
 
 from scipy.signal import cont2discrete
 
@@ -282,6 +285,33 @@ class MixedSignalModel:
 
         # make the assignment
         self.set_next_cycle(signal=output, expr=expr)
+
+    def inertial_delay(self, input_: ModelExpr, tr: Number, tf: Number):
+        # input type checking
+        assert isinstance(input_.format_, IntFormat) and input_.format_.width == 1, \
+            'Inertial delay only supports one-bit signals at this time.'
+
+        # determine number of cycles to delay
+        tr_int = int(round(tf/self.dt))
+        tf_int = int(round(tr/self.dt))
+
+        # determine counter width
+        width = int(ceil(log2(1+max(tr_int, tf_int))))
+
+        # determine base name
+        basename = input_.name if hasattr(input_, 'name') else next(self.namer)
+
+        # create output and counter variable
+        in_ = self.bind_name(basename+'_in', input_)
+        count = self.add_digital_state(name=basename+'_count', width=width, signed=False)
+        out = self.add_digital_state(name=basename+'_out', width=1, signed=False)
+        target = if_(in_, tr_int, tf_int)
+        done = self.bind_name(basename+'_done', (out == in_) | (count == target))
+
+        self.set_next_cycle(out,   if_(done, in_, out))
+        self.set_next_cycle(count, if_(done, 0, (count+1)[(width-1):0]))
+
+        return out
 
     def delay(self, input_: ModelExpr, time):
         # compute number of cycles for the delay

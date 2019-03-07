@@ -534,6 +534,7 @@ class VerilogGenerator(CodeGenerator):
         else:
             raise Exception('Cannot determine if format is signed or unsigned.')
 
-        retval += f' [{format_.width-1}:0]'
+        if format_.width > 1:
+            retval += f' [{format_.width-1}:0]'
 
         return retval

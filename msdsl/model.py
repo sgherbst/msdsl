@@ -292,8 +292,8 @@ class MixedSignalModel:
             'Inertial delay only supports one-bit signals at this time.'
 
         # determine number of cycles to delay
-        tr_int = int(round(tf/self.dt))
-        tf_int = int(round(tr/self.dt))
+        tr_int = int(round(tr/self.dt))
+        tf_int = int(round(tf/self.dt))
 
         # determine counter width
         width = int(ceil(log2(1+max(tr_int, tf_int))))

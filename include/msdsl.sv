@@ -15,7 +15,7 @@
 
     // Memory
 
-    `define MEM_INTO_ANALOG(in_name, out_name, cke_name, init_expr) \
+    `define MEM_INTO_ANALOG(in_name, out_name, cke_name, clk_name, rst_name, init_expr) \
         mem_analog #( \
             .init(init_expr), \
             `PASS_REAL(in, in_name), \
@@ -23,30 +23,30 @@
         ) mem_analog_``out_name``_i ( \
             .in(in_name), \
             .out(out_name), \
-            .clk(`CLK_MSDSL), \
-            .rst(`RST_MSDSL), \
+            .clk(clk_name), \
+            .rst(rst_name), \
             .cke(cke_name) \
         )
 
-    `define MEM_ANALOG(in_name, out_name, cke_name, init_expr) \
+    `define MEM_ANALOG(in_name, out_name, cke_name, clk_name, rst_name, init_expr) \
         `COPY_FORMAT_REAL(in_name, out_name); \
-        `MEM_INTO_ANALOG(in_name, out_name, cke_name, init_expr)
+        `MEM_INTO_ANALOG(in_name, out_name, cke_name, clk_name, rst_name, init_expr)
 
-    `define MEM_INTO_DIGITAL(in_name, out_name, cke_name, init_expr, width_expr) \
+    `define MEM_INTO_DIGITAL(in_name, out_name, cke_name, clk_name, rst_name, init_expr, width_expr) \
         mem_digital #( \
             .init(init_expr), \
             .width(width_expr) \
         ) mem_digital_``out_name``_i ( \
             .in(in_name), \
             .out(out_name), \
-            .clk(`CLK_MSDSL), \
-            .rst(`RST_MSDSL), \
+            .clk(clk_name), \
+            .rst(rst_name), \
             .cke(cke_name) \
         )
 
-    `define MEM_DIGITAL(in_name, out_name, cke_name, init_expr, width_expr) \
+    `define MEM_DIGITAL(in_name, out_name, cke_name, clk_name, rst_name, init_expr, width_expr) \
         `DATA_TYPE_DIGITAL(width_expr) out_name; \
-        `MEM_INTO_DIGITAL(in_name, out_name, cke_name, init_expr, width_expr)
+        `MEM_INTO_DIGITAL(in_name, out_name, cke_name, clk_name, rst_name, init_expr, width_expr)
 
     // Probing waveforms
 
@@ -122,7 +122,7 @@
     `define MAKE_TIME_PROBE \
         `MAKE_REAL(emu_time, `TSTOP_MSDSL); \
         `ADD_CONST_REAL(`DT_MSDSL, emu_time, emu_time_next); \
-        `MEM_INTO_ANALOG(emu_time_next, emu_time, 1'b1, 0); \
+        `MEM_INTO_ANALOG(emu_time_next, emu_time, 1'b1, `CLK_MSDSL, `RST_MSDSL, 0); \
         `PROBE_TIME(emu_time) \
 
     // Decimation counter
@@ -133,7 +133,7 @@
         logic emu_dec_cmp; \
         assign emu_dec_cmp = (emu_dec_cnt == `DEC_THR_MSDSL) ? 1'b1 : 0; \
         assign emu_dec_nxt = (emu_dec_cmp == 1'b1) ? 'd0 : (emu_dec_cnt + 'd1); \
-        `MEM_INTO_DIGITAL(emu_dec_nxt, emu_dec_cnt, 1'b1, 'd0, `DEC_BITS_MSDSL); \
+        `MEM_INTO_DIGITAL(emu_dec_nxt, emu_dec_cnt, 1'b1, `CLK_MSDSL, `RST_MSDSL, 'd0, `DEC_BITS_MSDSL); \
         `ifdef SIMULATION_MODE_MSDSL \
             logic emu_dec_cmp_probe; \
             `DUMP_VAR(emu_dec_cmp_probe) \

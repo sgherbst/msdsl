@@ -132,10 +132,14 @@ class VerilogGenerator(CodeGenerator):
         else:
             raise Exception(f'Input and output formats do not match: {input_.format_} vs. {output.format_}')
 
-    def make_mem(self, next_: Signal, curr: Signal, init: Number=0):
+    def make_mem(self, next_: Signal, curr: Signal, init: Number=0, clk: Signal=None, rst: Signal=None):
+        # set defaults
+        clk_name = clk.name if clk is not None else '`CLK_MSDSL'
+        rst_name = rst.name if rst is not None else '`RST_MSDSL'
+
         # create memory for real number
         if isinstance(next_.format_, RealFormat) and isinstance(curr.format_, RealFormat):
-            self.macro_call('MEM_INTO_ANALOG', next_.name, curr.name, "1'b1", str(init))
+            self.macro_call('MEM_INTO_ANALOG', next_.name, curr.name, "1'b1", clk_name, rst_name, str(init))
         # create memory for integer
         elif (isinstance(next_.format_, SIntFormat) and isinstance(curr.format_, SIntFormat)) or \
              (isinstance(next_.format_, UIntFormat) and isinstance(curr.format_, UIntFormat)):
@@ -146,7 +150,7 @@ class VerilogGenerator(CodeGenerator):
             # check that the widths match
             assert next_.format_.width == curr.format_.width, f'The widths of {next_.name} and {curr.name} do not match.'
 
-            self.macro_call('MEM_INTO_DIGITAL', next_.name, curr.name, "1'b1", str(init), str(next_.format_.width))
+            self.macro_call('MEM_INTO_DIGITAL', next_.name, curr.name, "1'b1", clk_name, rst_name, str(init), str(next_.format_.width))
         else:
             raise Exception(f'Next and current formats do not match: {next_.format_} vs. {curr.format_}')
 

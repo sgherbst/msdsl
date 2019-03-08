@@ -13,4 +13,7 @@ class ThisCycleAssignment(Assignment):
     pass
 
 class NextCycleAssignment(Assignment):
-    pass
+    def __init__(self, *args, clk=None, rst=None, **kwargs):
+        self.clk = clk
+        self.rst = rst
+        super().__init__(*args, **kwargs)

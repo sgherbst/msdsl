@@ -51,7 +51,7 @@ class CodeGenerator:
     def make_assign(self, input_: Signal, output: Signal):
         raise NotImplementedError
 
-    def make_mem(self, next_: Signal, curr: Signal, init: Number=0):
+    def make_mem(self, next_: Signal, curr: Signal, init: Number=0, clk: Signal=None, rst: Signal=None):
         raise NotImplementedError
 
     def expr_to_signal(self, expr: ModelExpr):

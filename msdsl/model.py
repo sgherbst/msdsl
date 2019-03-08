@@ -126,8 +126,8 @@ class MixedSignalModel:
     def set_this_cycle(self, signal: Signal, expr: ModelExpr):
         self.add_assignment(ThisCycleAssignment(signal=signal, expr=expr))
 
-    def set_next_cycle(self, signal: Signal, expr: ModelExpr):
-        self.add_assignment(NextCycleAssignment(signal=signal, expr=expr))
+    def set_next_cycle(self, signal: Signal, expr: ModelExpr, clk=None, rst=None):
+        self.add_assignment(NextCycleAssignment(signal=signal, expr=expr, clk=clk, rst=rst))
 
     def bind_name(self, name: str, expr: ModelExpr):
         # wrap the expression if it's a constant
@@ -396,7 +396,7 @@ class MixedSignalModel:
             if isinstance(assignment, ThisCycleAssignment):
                 gen.make_assign(input_=result, output=assignment.signal)
             elif isinstance(assignment, NextCycleAssignment):
-                gen.make_mem(next_=result, curr=assignment.signal, init=assignment.signal.init)
+                gen.make_mem(next_=result, curr=assignment.signal, init=assignment.signal.init, clk=assignment.clk, rst=assignment.rst)
             elif isinstance(assignment, BindingAssignment):
                 gen.make_signal(assignment.signal)
                 gen.make_assign(input_=result, output=assignment.signal)

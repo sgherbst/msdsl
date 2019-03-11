@@ -566,7 +566,7 @@ class Concatenate(ModelOperator):
 
 # array types
 
-def array(elements: List, address: ModelExpr):
+def array(elements: List, address: ModelExpr, real_range_hint: Number=None):
     # wrap constants as necessary
     elements = wrap_constants(elements)
     address = wrap_constant(address)
@@ -582,7 +582,11 @@ def array(elements: List, address: ModelExpr):
         elements = promote_operands(elements, format_cls)
 
         # determine the format to use for the array output
-        output_format = format_cls.cover([element.format_ for element in elements])
+        # TODO: clean up handling of symbolic real ranges
+        if issubclass(format_cls, RealFormat) and real_range_hint is not None:
+            output_format = RealFormat(range_=real_range_hint)
+        else:
+            output_format = format_cls.cover([element.format_ for element in elements])
 
         # create the Array object
         return Array(elements=elements, address=address, output_format=output_format)

@@ -39,10 +39,6 @@ class CustomPlugin(Plugin):
         if self.args.models:
             self.models()
 
-        # Setup Defines; after this step, defines shall not be added anymore in MSDSL
-        self._setup_defines()
-        self._setup_sources()
-
 ##### Functions exposed for user to exercise on Analysis Object
 
     def models(self):

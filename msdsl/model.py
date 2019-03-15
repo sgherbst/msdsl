@@ -12,7 +12,7 @@ from msdsl.eqn.cases import address_to_settings
 from msdsl.eqn.eqn_sys import EqnSys
 from msdsl.expr.expr import ModelExpr, array, concatenate, sum_op, wrap_constant, min_op
 from msdsl.expr.signals import (AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, Signal, AnalogSignal,
-                   AnalogState, DigitalState)
+                   AnalogState, DigitalState, RealParameter, DigitalSignal)
 from msdsl.generator.generator import CodeGenerator
 from msdsl.util import Namer
 from msdsl.eqn.lds import LdsCollection
@@ -36,6 +36,7 @@ class MixedSignalModel:
         self.signals = OrderedDict()
         self.assignments = OrderedDict()
         self.probes = []
+        self.real_params = []
         self.namer = Namer()
 
         # add ios
@@ -83,6 +84,9 @@ class MixedSignalModel:
     def add_analog_state(self, name, range_, width=None, exponent=None, init=0):
         return self.add_signal(AnalogState(name=name, range_=range_, width=width, exponent=exponent, init=init))
 
+    def add_digital_signal(self, name, width=1, signed=False):
+        return self.add_signal(DigitalSignal(name=name, width=width, signed=signed))
+
     def add_digital_input(self, name, width=1, signed=False):
         return self.add_signal(DigitalInput(name=name, width=width, signed=signed))
 
@@ -126,8 +130,8 @@ class MixedSignalModel:
     def set_this_cycle(self, signal: Signal, expr: ModelExpr):
         self.add_assignment(ThisCycleAssignment(signal=signal, expr=expr))
 
-    def set_next_cycle(self, signal: Signal, expr: ModelExpr, clk=None, rst=None):
-        self.add_assignment(NextCycleAssignment(signal=signal, expr=expr, clk=clk, rst=rst))
+    def set_next_cycle(self, signal: Signal, expr: ModelExpr, clk=None, rst=None, ce=None):
+        self.add_assignment(NextCycleAssignment(signal=signal, expr=expr, clk=clk, rst=rst, ce=ce))
 
     def bind_name(self, name: str, expr: ModelExpr):
         # wrap the expression if it's a constant
@@ -157,6 +161,16 @@ class MixedSignalModel:
     def get_assignments(self, names: List[str]):
         return [self.get_assignment(name) for name in names]
 
+    # parameter functions
+
+    def add_real_param(self, name, default):
+        param = RealParameter(param_name=f'{name}', signal_name=f'{name}_param', default=default)
+        self.real_params.append(param)
+
+        setattr(self, name, param)
+
+        return param
+
     # signal probe functions
 
     def add_probe(self, signal: Signal):
@@ -164,13 +178,15 @@ class MixedSignalModel:
 
     # signal assignment functions
 
-    def add_counter(self, name, width, init=0, loop=False):
+    def add_counter(self, name, width, init=0, loop=False, clk=None, rst=None, ce=None):
         self.add_digital_state(name, width=width, init=init)
 
         if loop:
-            self.set_next_cycle(self.get_signal(name), (self.get_signal(name)+1)[(width-1):0])
+            self.set_next_cycle(self.get_signal(name), (self.get_signal(name)+1)[(width-1):0],
+                                clk=clk, rst=rst, ce=ce)
         else:
-            self.set_next_cycle(self.get_signal(name), min_op([self.get_signal(name) + 1, (1 << width) - 1]))
+            self.set_next_cycle(self.get_signal(name), min_op([self.get_signal(name)+1, (1<<width)-1]),
+                                clk=clk, rst=rst, ce=ce)
 
     def get_equation_io(self, eqn_sys: EqnSys):
         # determine all signals present in the set of equations
@@ -376,7 +392,7 @@ class MixedSignalModel:
                 internals.append(signal)
 
         # start module
-        gen.start_module(name=self.module_name, ios=ios)
+        gen.start_module(name=self.module_name, ios=ios, real_params=self.real_params)
 
         # declare the internal variables
         if len(internals) > 0:
@@ -396,7 +412,8 @@ class MixedSignalModel:
             if isinstance(assignment, ThisCycleAssignment):
                 gen.make_assign(input_=result, output=assignment.signal)
             elif isinstance(assignment, NextCycleAssignment):
-                gen.make_mem(next_=result, curr=assignment.signal, init=assignment.signal.init, clk=assignment.clk, rst=assignment.rst)
+                gen.make_mem(next_=result, curr=assignment.signal, init=assignment.signal.init, clk=assignment.clk,
+                             rst=assignment.rst, ce=assignment.ce)
             elif isinstance(assignment, BindingAssignment):
                 gen.make_signal(assignment.signal)
                 gen.make_assign(input_=result, output=assignment.signal)

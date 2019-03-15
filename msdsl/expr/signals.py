@@ -1,6 +1,6 @@
 from msdsl.expr.expr import ModelExpr
 from msdsl.expr.format import RealFormat, UIntFormat, SIntFormat, is_signed
-from msdsl.expr.svreal import RangeOf, WidthOf, ExponentOf, UndefinedRange
+from msdsl.expr.svreal import RangeOf, WidthOf, ExponentOf, UndefinedRange, ParamRange
 
 class Signal(ModelExpr):
     def __init__(self, name, format_):
@@ -29,6 +29,16 @@ class AnalogOutput(AnalogSignal):
 class AnalogInput(AnalogSignal):
     def __init__(self, name):
         super().__init__(name=name, range_=RangeOf(name), width=WidthOf(name), exponent=ExponentOf(name))
+
+class RealParameter(AnalogSignal):
+    def __init__(self, param_name, signal_name, default=0):
+        self.param_name = param_name
+        self.default = default
+        super().__init__(name=signal_name, range_=ParamRange(param_name))
+
+    @property
+    def signal_name(self):
+        return self.name
 
 class DigitalSignal(Signal):
     def __init__(self, name, width=1, signed=False):

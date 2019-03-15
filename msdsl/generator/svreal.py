@@ -3,7 +3,7 @@ from typing import Union
 from numbers import Number
 
 from msdsl.expr.svreal import RangeExpr, RangeOf, RangeMax, RangeSum, RangeProduct, WidthOf, WidthExpr, ExponentExpr, \
-    ExponentOf, RangeOperator
+    ExponentOf, RangeOperator, ParamRange
 from msdsl.generator.tree_op import tree_op
 
 def max_op(a, b):
@@ -25,6 +25,8 @@ def compile_range_expr(expr: Union[RangeExpr, Number]):
         return str(expr)
     elif isinstance(expr, RangeOf):
         return f'`RANGE_PARAM_REAL({expr.name})'
+    elif isinstance(expr, ParamRange):
+        return f'`CONST_RANGE_REAL({expr.name})'
 
     # otherwise it must be a RangeOperator
     assert isinstance(expr, RangeOperator), 'Expected a RangeOperator here.'

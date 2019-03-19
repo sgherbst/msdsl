@@ -6,7 +6,7 @@ from copy import deepcopy
 
 from math import ceil, log2
 
-from msdsl.assignment import ThisCycleAssignment, NextCycleAssignment, BindingAssignment
+from msdsl.assignment import ThisCycleAssignment, NextCycleAssignment, BindingAssignment, Assignment
 from msdsl.expr.analyze import signal_names
 from msdsl.eqn.cases import address_to_settings
 from msdsl.eqn.eqn_sys import EqnSys
@@ -47,6 +47,13 @@ class MixedSignalModel:
         return self.get_signal(item)
 
     def add_signal(self, x: Union[Signal, Bus]):
+        """
+        Adds a signal or bus object to the model, meaning that it can be accessed by name later.  For example, if
+        we run m.add_signal(Signal(name="abc")), we can access the signal afterwards using m.abc
+        :param x: Signal or Bus object to be added
+        :return: The signal object
+        """
+
         if isinstance(x, Bus):
             # create the bus one signal at a time
             bus = []
@@ -79,21 +86,44 @@ class MixedSignalModel:
         return self.add_signal(AnalogInput(name=name))
 
     def add_analog_output(self, name, init=0):
+        """
+        Note that the initial value will only be used if the analog output has state.
+        """
         return self.add_signal(AnalogOutput(name=name, init=init))
 
     def add_analog_state(self, name, range_, width=None, exponent=None, init=0):
+        """
+        Note that analog states used in a system of equations must be adding using this method or the more generic
+        add_signal method before calling add_eqn_sys.
+        :param range_: The +/- range of the analog value.  For example, if range_=1.23, then the state variable will
+        fall between +/-1.23.  Note that range is *required* for an analog state, since we don't have any other
+        way to determine the range of the signal for fixed-point formatting purposes.
+        :param init: The initial value of the analog signal.  This is the reset value of the state variable when
+        `RST_MSDSL is asserted (synchronous reset).
+        """
         return self.add_signal(AnalogState(name=name, range_=range_, width=width, exponent=exponent, init=init))
 
     def add_digital_signal(self, name, width=1, signed=False):
+        """
+        Allows for a digital signal to be declared ahead of time with a given format.  In general, it is preferable
+        to use bind_name for this, rather than calling add_digital_signal followed by set_this_cycle.
+        """
         return self.add_signal(DigitalSignal(name=name, width=width, signed=signed))
 
     def add_digital_input(self, name, width=1, signed=False):
         return self.add_signal(DigitalInput(name=name, width=width, signed=signed))
 
     def add_digital_output(self, name, width=1, signed=False, init=0):
+        """
+        Note that the initial value will only be used if the digital output has state.
+        """
         return self.add_signal(DigitalOutput(name=name, width=width, signed=signed, init=init))
 
     def add_digital_state(self, name, width=1, signed=False, init=0):
+        """
+        :param init: The initial value of the digital signal.  This is the reset value of the state variable when
+        `RST_MSDSL is asserted (synchronous reset).
+        """
         return self.add_signal(DigitalState(name=name, width=width, signed=signed, init=init))
 
     # signal access functions
@@ -122,32 +152,65 @@ class MixedSignalModel:
 
     # functions to assign signals
 
-    def add_assignment(self, assignment):
+    def add_assignment(self, assignment: Assignment):
         assert assignment.signal.name not in self.assignments, \
             'The signal ' + assignment.signal.name + ' has already been assigned.'
+
         self.assignments[assignment.signal.name] = assignment
 
-    def set_this_cycle(self, signal: Signal, expr: ModelExpr):
-        self.add_assignment(ThisCycleAssignment(signal=signal, expr=expr))
+        return assignment.signal
+
+    def immediate_assign(self, signal: Union[Signal, str], expr: ModelExpr):
+        """
+        Alias for set_this_cycle.
+        """
+        self.set_this_cycle(signal=signal, expr=expr)
+
+    def bind_name(self, signal: Union[Signal, str], expr: ModelExpr):
+        """
+        TODO: consider deprecating.
+        Alias for set_this_cycle.
+        """
+        self.set_this_cycle(signal=signal, expr=expr)
+
+    def set_this_cycle(self, signal: Union[Signal, str], expr: ModelExpr):
+        """
+        The behavior of this function is essentially a blocking assignment (in Verilog nomenclature). The provided
+        expression is continuously written to the provided signal.
+        :param signal: Signal object being assigned
+        :param expr: Value of the expression to assign
+        :return:
+        """
+        if isinstance(signal, str):
+            # wrap the expression if it's a constant
+            expr = wrap_constant(expr)
+
+            # add assignment to model
+            assignment = BindingAssignment(signal=self.add_signal(Signal(name=signal, format_=expr.format_)), expr=expr)
+        elif isinstance(signal, Signal):
+            assignment = ThisCycleAssignment(signal=signal, expr=expr)
+        else:
+            raise Exception(f'Invalid signal type: {type(signal)}.')
+        return self.add_assignment(assignment)
+
+    def next_cycle_assign(self, signal: Signal, expr: ModelExpr, clk=None, rst=None, ce=None):
+        """
+        Alias for set_next_cycle.
+        """
+        self.set_next_cycle(signal=signal, expr=expr, clk=clk, rst=rst, ce=ce)
 
     def set_next_cycle(self, signal: Signal, expr: ModelExpr, clk=None, rst=None, ce=None):
-        self.add_assignment(NextCycleAssignment(signal=signal, expr=expr, clk=clk, rst=rst, ce=ce))
-
-    def bind_name(self, name: str, expr: ModelExpr):
-        # wrap the expression if it's a constant
-        expr = wrap_constant(expr)
-
-        # create signal to hold result
-        signal = Signal(name=name, format_=expr.format_)
-
-        # add signal to model
-        self.add_signal(signal)
-
-        # add assignment to model
-        self.add_assignment(BindingAssignment(signal=signal, expr=expr))
-
-        # return signal
-        return signal
+        """
+        The behavior of this function is essentially a non-blocking assignment (in Verilog nomenclature). The provided
+        expression is written to the provided signal at the next positive edge of the clock signal.
+        :param signal: Signal object being assigned
+        :param expr: Value of the expression to assign
+        :param clk: Optional input.  Will use `CLK_MSDSL by default.
+        :param rst: Optional input for synchronous reset.  Will use `RST_MSDSL by default.
+        :param ce: Optional input for clock enable.  Will use "1" (i.e., always enabled) by default.
+        :return:
+        """
+        return self.add_assignment(NextCycleAssignment(signal=signal, expr=expr, clk=clk, rst=rst, ce=ce))
 
     # assignment access functions
 
@@ -163,7 +226,15 @@ class MixedSignalModel:
 
     # parameter functions
 
-    def add_real_param(self, name, default):
+    def add_real_param(self, name: str, default: Number):
+        """
+        Equivalent to a real parameter in a Verilog module definition.  Allows the user to generate a single
+        SystemVerilog model that can be used for various purposes.
+        :param name: Name of the parameter.
+        :param default: Real number default for the parameter.  A ModelExpr is not allowed here.
+        :return: Returns a signal representing the parameter that can be used in subsequent expressions.
+        """
+
         param = RealParameter(param_name=f'{name}', signal_name=f'{name}_param', default=default)
         self.real_params.append(param)
 
@@ -174,11 +245,26 @@ class MixedSignalModel:
     # signal probe functions
 
     def add_probe(self, signal: Signal):
+        """
+        Designate a signal for probing via the ILA.  Works with both analog and digital signals.
+        """
         self.probes.append(signal)
 
     # signal assignment functions
 
     def add_counter(self, name, width, init=0, loop=False, clk=None, rst=None, ce=None):
+        """
+        Instantiates a counter with a user-specified connections.  Intended for stimulus generation via lookup table.
+        :param name: Name of the digital signal used to hold the counter value.
+        :param width: Width of digital signal, which affects the counter range.
+        :param init: Optional initial value for the counter.
+        :param loop: If True, allow the counter to overflow.  Otherwise freeze the counter at the maximum value.
+        :param clk: Optional clock input.  Defaults to `CLK_MSDSL.
+        :param rst: Optional synchronous reset input.  Defaults to `RST_MSDSL.
+        :param ce: Option clock enable input.  Defaults to "1".
+        :return:
+        """
+
         self.add_digital_state(name, width=width, init=init)
 
         if loop:
@@ -213,6 +299,17 @@ class MixedSignalModel:
         return inputs, states, outputs, sel_bits
 
     def add_eqn_sys(self, eqns: List[ModelExpr], extra_outputs=None):
+        """
+        Accepts a list of equations that can contain derivatives of analog state variables.  The approach used is
+        to convert the system of differential equations into a standard-form linear dynamical system (reference:
+        http://ee263.stanford.edu/lectures/linsys.pdf).  If there are several eqn_cases to be considered, we construct
+        a different LDS for each one.  These LDS's are discretized using the given timestep by using the exponential
+        matrix function assuming piecewise-constant input (sometimes known as the zero-order hold approach).
+        :param eqns: List of equations.
+        :param extra_outputs: List of internal variables in the system of equations that should be bound to analog
+        signals.
+        """
+
         # set defaults
         extra_outputs = extra_outputs if extra_outputs is not None else []
 
@@ -284,7 +381,17 @@ class MixedSignalModel:
             else:
                 self.bind_name(outputs[row].name, expr)
 
-    def set_tf(self, input_, output, tf):
+    def set_tf(self, input_: Signal, output: Signal, tf):
+        """
+        Method to assign an output signal as a function of the input signal by applying a given transfer function.
+        The transfer function is discretized using a timestep of "dt" by applying the zero-order hold method.
+        :param input_: Input signal.
+        :param output: Output signal (should be an AnalogState that is not yet assigned)
+        :param tf: Tuple consisting of a list of numerator coefficients and a list of denominator coefficients.  See
+        https://docs.scipy.org/doc/scipy-0.14.0/reference/generated/scipy.signal.cont2discrete.html for more details.
+        :return:
+        """
+
         # discretize transfer function
         res = cont2discrete(tf, self.dt)
 
@@ -303,6 +410,16 @@ class MixedSignalModel:
         self.set_next_cycle(signal=output, expr=expr)
 
     def inertial_delay(self, input_: ModelExpr, tr: Number, tf: Number):
+        """
+        Applies a resource-efficient implementation of a long delay for *one-bit digital signals only*.  Note that the
+        pulse width of the input expression should be wider than the delay, otherwise the signal will be filtered.
+        :param input_: Expression that should be delayed.  Must evaluate to a one-bit signal.
+        :param tr: Rising edge delay, in seconds.
+        :param tf: Falling edge delay, in seconds.
+        :return: Object representing the delayed signal, which should be assigned to another signal using
+        immediate_assign.
+        """
+
         # input type checking
         assert isinstance(input_.format_, IntFormat) and input_.format_.width == 1, \
             'Inertial delay only supports one-bit signals at this time.'
@@ -329,9 +446,22 @@ class MixedSignalModel:
 
         return out
 
-    def delay(self, input_: ModelExpr, time):
+    def delay(self, input_: ModelExpr, time, max_cycles=100):
+        """
+        Delays an analog or digital signal by the specified time.  Note that this does *not* currently use a
+        resource-efficient implementation,
+        :param input_: Expression that should be delayed.
+        :param time: Delay time in seconds.
+        :param max_cycles: Maximum number of delay cycles allowed.
+        :return: Object representing the delayed signal, which should be assigned to another signal using
+        immediate_assign.
+        """
+
         # compute number of cycles for the delay
         n_cycles = int(round(time/self.dt))
+        assert n_cycles <= max_cycles, \
+            f'The length of the register chain for this delay will be {n_cycles} emulator cycles, which is greater than the user-provided maximum of {max_cycles}.  '+\
+            f'Please update the max_cycles function argument to clear this assertion error.'
 
         # create a history of the required length
         hist = self.make_history(first=input_, length=n_cycles+1)
@@ -428,10 +558,17 @@ class MixedSignalModel:
         gen.end_module()
 
     def compile_to_file(self, gen: CodeGenerator, filename: str):
+        """
+        Compiles the model using the provided CodeGenerator, and writes the resulting model to the given filename.
+        """
         self.compile(gen=gen)
         gen.write_to_file(filename=filename)
 
     def compile_and_print(self, gen: CodeGenerator):
+        """
+        Compiles the model using the provided CodeGenerator, and then prints the resulting model to the console.
+        This is mainly used for demonstration and debug purposes.
+        """
         self.compile(gen=gen)
         print(gen.text)
 

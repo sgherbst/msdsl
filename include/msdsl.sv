@@ -13,6 +13,9 @@
     `define DATA_TYPE_DIGITAL(width_expr) \
         logic [((width_expr)-1):0]
 
+    // Add quotes to a DEFINE parameter
+    `define ADD_QUOTES_TO_MACRO(macro) `"macro`"
+
     // Memory
 
     `define MEM_INTO_ANALOG(in_name, out_name, cke_name, clk_name, rst_name, init_expr) \

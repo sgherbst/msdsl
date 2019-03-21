@@ -1,4 +1,4 @@
-import os
+ifmport os
 
 from anasymod.sources import Sources, VerilogHeader, VerilogSource, VHDLSource
 from anasymod.defines import Define

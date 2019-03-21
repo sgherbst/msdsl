@@ -67,11 +67,12 @@ class EqnSys(EqnList):
             assert len(others) == 0, \
                 'The following terms are not yet handled: ['+ ', '.join(str(other) for other in others)+']'
 
+            # sum up all of the coefficients for each signal
             for coeff, signal in coeffs:
                 if signal.name in unknowns:
-                    U[row, unknowns[signal.name]] = +coeff
+                    U[row, unknowns[signal.name]] += +coeff
                 elif signal.name in knowns:
-                    V[row,   knowns[signal.name]] = -coeff
+                    V[row,   knowns[signal.name]] += -coeff
                 else:
                     raise Exception('Variable is not marked as known vs. unknown: ' + signal.name)
 

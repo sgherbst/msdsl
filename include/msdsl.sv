@@ -13,6 +13,9 @@
     `define DATA_TYPE_DIGITAL(width_expr) \
         logic [((width_expr)-1):0]
 
+    // Add quotes to a DEFINE parameter
+    `define ADD_QUOTES_TO_MACRO(macro) `"macro`"
+
     // Memory
 
     `define MEM_INTO_ANALOG(in_name, out_name, cke_name, clk_name, rst_name, init_expr) \
@@ -118,12 +121,18 @@
         `endif
 
     // Time management
+    // Note that a emu_time is wider than the default for fixed-point numbers
+    // The reason is that very high dynamic range is required.
+    // TODO: avoid using a hard-coded value for the emu_time width
 
     `define MAKE_TIME_PROBE \
-        `MAKE_REAL(emu_time, `TSTOP_MSDSL); \
-        `ADD_CONST_REAL(`DT_MSDSL, emu_time, emu_time_next); \
+        `MAKE_GENERIC_REAL(emu_time, `TSTOP_MSDSL, 48); \
+        `COPY_FORMAT_REAL(emu_time, emu_time_next); \
+        `COPY_FORMAT_REAL(emu_time, emu_time_dt); \
+        `ASSIGN_CONST_REAL(`DT_MSDSL, emu_time_dt); \
+        `ADD_INTO_REAL(emu_time, emu_time_dt, emu_time_next); \
         `MEM_INTO_ANALOG(emu_time_next, emu_time, 1'b1, `CLK_MSDSL, `RST_MSDSL, 0); \
-        `PROBE_TIME(emu_time) \
+        `PROBE_TIME(emu_time)
 
     // Decimation counter
 

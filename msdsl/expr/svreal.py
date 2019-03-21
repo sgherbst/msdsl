@@ -46,6 +46,13 @@ class RangeOf(RangeExpr):
     def __str__(self):
         return 'RangeOf(' + self.name + ')'
 
+class ParamRange(RangeExpr):
+    def __init__(self, name):
+        self.name = name
+
+    def __str__(self):
+        return 'ParamRange(' + self.name + ')'
+
 class UndefinedRange(RangeExpr):
     def __str__(self):
         return 'UndefinedRange'

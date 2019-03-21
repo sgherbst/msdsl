@@ -132,14 +132,15 @@ class VerilogGenerator(CodeGenerator):
         else:
             raise Exception(f'Input and output formats do not match: {input_.format_} vs. {output.format_}')
 
-    def make_mem(self, next_: Signal, curr: Signal, init: Number=0, clk: Signal=None, rst: Signal=None):
+    def make_mem(self, next_: Signal, curr: Signal, init: Number=0, clk: Signal=None, rst: Signal=None, ce: Signal = None):
         # set defaults
         clk_name = clk.name if clk is not None else '`CLK_MSDSL'
         rst_name = rst.name if rst is not None else '`RST_MSDSL'
+        ce_name = ce.name if ce is not None else "1'b1"
 
         # create memory for real number
         if isinstance(next_.format_, RealFormat) and isinstance(curr.format_, RealFormat):
-            self.macro_call('MEM_INTO_ANALOG', next_.name, curr.name, "1'b1", clk_name, rst_name, str(init))
+            self.macro_call('MEM_INTO_ANALOG', next_.name, curr.name, ce_name, clk_name, rst_name, str(init))
         # create memory for integer
         elif (isinstance(next_.format_, SIntFormat) and isinstance(curr.format_, SIntFormat)) or \
              (isinstance(next_.format_, UIntFormat) and isinstance(curr.format_, UIntFormat)):
@@ -150,11 +151,11 @@ class VerilogGenerator(CodeGenerator):
             # check that the widths match
             assert next_.format_.width == curr.format_.width, f'The widths of {next_.name} and {curr.name} do not match.'
 
-            self.macro_call('MEM_INTO_DIGITAL', next_.name, curr.name, "1'b1", clk_name, rst_name, str(init), str(next_.format_.width))
+            self.macro_call('MEM_INTO_DIGITAL', next_.name, curr.name, ce_name, clk_name, rst_name, str(init), str(next_.format_.width))
         else:
             raise Exception(f'Next and current formats do not match: {next_.format_} vs. {curr.format_}')
 
-    def start_module(self, name: str, ios: List[Signal]):
+    def start_module(self, name: str, ios: List[Signal], real_params: List):
         # clear default nettype to make debugging easier
         self.default_nettype('none')
         self.writeln()
@@ -163,7 +164,9 @@ class VerilogGenerator(CodeGenerator):
         self.write(f'module {name}')
 
         # parameters
-        parameters = [self.real_param_str(io) for io in ios if isinstance(io.format_, RealFormat)]
+        parameters = []
+        parameters += [f'parameter real {real_param.param_name}={real_param.default}' for real_param in real_params]
+        parameters += [self.real_param_str(io) for io in ios if isinstance(io.format_, RealFormat)]
         if len(parameters) > 0:
             self.write(' #')
             self.comma_separated_lines(parameters)
@@ -177,6 +180,12 @@ class VerilogGenerator(CodeGenerator):
         # end module definition and indent
         self.write(';' + self.line_ending)
         self.indent()
+
+        # assign parameters to constants
+        if len(real_params) > 0:
+            self.comment('Assign real parameters to constant wires')
+        for real_param in real_params:
+            self.macro_call('MAKE_CONST_REAL', real_param.param_name, real_param.signal_name)
 
     def end_module(self):
         self.dedent()

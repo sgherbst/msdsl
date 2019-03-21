@@ -60,7 +60,6 @@ class CustomPlugin(Plugin):
         """
         self._set_dt()
         self.add_define(Define(name='SIMULATION_MODE_MSDSL', fileset='sim'))
-        self.add_define(Define(name='OFF_BITS_MSDSL', value=32))
 
     def _set_dt(self):
         self.add_define(Define(name='DT_MSDSL', value=self.cfg.dt))

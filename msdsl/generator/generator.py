@@ -51,13 +51,13 @@ class CodeGenerator:
     def make_assign(self, input_: Signal, output: Signal):
         raise NotImplementedError
 
-    def make_mem(self, next_: Signal, curr: Signal, init: Number=0, clk: Signal=None, rst: Signal=None):
+    def make_mem(self, next_: Signal, curr: Signal, init: Number=0, clk: Signal=None, rst: Signal=None, ce: Signal=None):
         raise NotImplementedError
 
     def expr_to_signal(self, expr: ModelExpr):
         raise NotImplementedError
 
-    def start_module(self, name: str, ios: List[Signal]):
+    def start_module(self, name: str, ios: List[Signal], real_params: List):
         raise NotImplementedError
 
     def end_module(self):

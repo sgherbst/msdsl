@@ -50,7 +50,7 @@ class CustomPlugin(Plugin):
 
         # run generator script
         gen_script = os.path.join(self._prj_root, 'gen.py')
-        call([which('python'), gen_script, '-o', self.cfg['model_dir'], '--dt', str(self.cfg.dt)])
+        call([which('python'), gen_script, '-o', self.cfg.model_dir, '--dt', str(self.cfg.dt)])
 
 ##### Utility Functions
 
@@ -78,7 +78,7 @@ class CustomPlugin(Plugin):
         self.add_source(source=VerilogHeader(files=get_from_module('svreal', 'include', '*.sv'), config_path=self._srccfg_path))
 
         # Add model sources
-        self.add_source(source=VerilogSource(files=os.path.join(self.cfg['model_dir'], '*.sv'), config_path=self._srccfg_path))
+        self.add_source(source=VerilogSource(files=os.path.join(self.cfg.model_dir, '*.sv'), config_path=self._srccfg_path))
 
     def _parse_args(self):
         """

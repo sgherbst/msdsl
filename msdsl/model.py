@@ -164,14 +164,16 @@ class MixedSignalModel:
         """
         Alias for set_this_cycle.
         """
-        self.set_this_cycle(signal=signal, expr=expr)
+
+        return self.set_this_cycle(signal=signal, expr=expr)
 
     def bind_name(self, signal: Union[Signal, str], expr: ModelExpr):
         """
         TODO: consider deprecating.
         Alias for set_this_cycle.
         """
-        self.set_this_cycle(signal=signal, expr=expr)
+
+        return self.set_this_cycle(signal=signal, expr=expr)
 
     def set_this_cycle(self, signal: Union[Signal, str], expr: ModelExpr):
         """
@@ -181,23 +183,24 @@ class MixedSignalModel:
         :param expr: Value of the expression to assign
         :return:
         """
-        if isinstance(signal, str):
-            # wrap the expression if it's a constant
-            expr = wrap_constant(expr)
 
-            # add assignment to model
-            assignment = BindingAssignment(signal=self.add_signal(Signal(name=signal, format_=expr.format_)), expr=expr)
+        if isinstance(signal, str):
+            expr = wrap_constant(expr)
+            signal = self.add_signal(Signal(name=signal, format_=expr.format_))
+            assignment_cls = BindingAssignment
         elif isinstance(signal, Signal):
-            assignment = ThisCycleAssignment(signal=signal, expr=expr)
+            assignment_cls = ThisCycleAssignment
         else:
             raise Exception(f'Invalid signal type: {type(signal)}.')
-        return self.add_assignment(assignment)
+
+        return self.add_assignment(assignment_cls(signal=signal, expr=expr))
 
     def next_cycle_assign(self, signal: Signal, expr: ModelExpr, clk=None, rst=None, ce=None):
         """
         Alias for set_next_cycle.
         """
-        self.set_next_cycle(signal=signal, expr=expr, clk=clk, rst=rst, ce=ce)
+
+        return self.set_next_cycle(signal=signal, expr=expr, clk=clk, rst=rst, ce=ce)
 
     def set_next_cycle(self, signal: Signal, expr: ModelExpr, clk=None, rst=None, ce=None):
         """
@@ -210,6 +213,7 @@ class MixedSignalModel:
         :param ce: Optional input for clock enable.  Will use "1" (i.e., always enabled) by default.
         :return:
         """
+
         return self.add_assignment(NextCycleAssignment(signal=signal, expr=expr, clk=clk, rst=rst, ce=ce))
 
     # assignment access functions

@@ -1,10 +1,12 @@
-ifmport os
+import os
 
+from anasymod.enums import ConfigSections
 from anasymod.sources import Sources, VerilogHeader, VerilogSource, VHDLSource
 from anasymod.defines import Define
 from anasymod.files import mkdir_p, rm_rf, get_from_module, which
 from argparse import ArgumentParser
 from anasymod.util import call
+from anasymod.util import call, read_config, update_config
 from anasymod.plugins import Plugin
 
 class CustomPlugin(Plugin):
@@ -16,11 +18,12 @@ class CustomPlugin(Plugin):
         self._parse_args()
 
         # Initialize msdsl config
-        self.cfg.dt = 0.1e-6
-        self.cfg.model_dir = os.path.join(self._build_root, 'models')
+        self.cfg['dt'] = 0.1e-6
+        self.cfg['model_dir'] = os.path.join(self._build_root, 'models')
 
         # Update msdsl config with msdsl section in config file
-        self.cfg.update_config(subsection=self._name)
+        config_section = read_config(cfg_file=self._cfg_file, section=ConfigSections.PLUGIN, subsection=self._name)
+        self.cfg = update_config(cfg=self.cfg, config_section=config_section)
 
         # Add defines according to command line arguments
         if self.args.float:
@@ -45,12 +48,12 @@ class CustomPlugin(Plugin):
         Call gen.py to generate analog models.
         """
         # make model directory, removing the old one if necessary
-        rm_rf(self.cfg.model_dir)
-        mkdir_p(self.cfg.model_dir)
+        rm_rf(self.cfg['model_dir'])
+        mkdir_p(self.cfg['model_dir'])
 
         # run generator script
         gen_script = os.path.join(self._prj_root, 'gen.py')
-        call([which('python'), gen_script, '-o', self.cfg.model_dir, '--dt', str(self.cfg.dt)])
+        call([which('python'), gen_script, '-o', self.cfg['model_dir'], '--dt', str(self.cfg['dt'])])
 
 ##### Utility Functions
 
@@ -62,7 +65,7 @@ class CustomPlugin(Plugin):
         self.add_define(Define(name='SIMULATION_MODE_MSDSL', fileset='sim'))
 
     def _set_dt(self):
-        self.add_define(Define(name='DT_MSDSL', value=self.cfg.dt))
+        self.add_define(Define(name='DT_MSDSL', value=self.cfg['dt']))
 
     def _setup_sources(self):
         """
@@ -77,7 +80,7 @@ class CustomPlugin(Plugin):
         self.add_source(source=VerilogHeader(files=get_from_module('svreal', 'include', '*.sv'), config_path=self._srccfg_path))
 
         # Add model sources
-        self.add_source(source=VerilogSource(files=os.path.join(self.cfg.model_dir, '*.sv'), config_path=self._srccfg_path))
+        self.add_source(source=VerilogSource(files=os.path.join(self.cfg['model_dir'], '*.sv'), config_path=self._srccfg_path))
 
     def _parse_args(self):
         """

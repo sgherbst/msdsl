@@ -576,6 +576,48 @@ class MixedSignalModel:
         self.compile(gen=gen)
         print(gen.text)
 
+    # probe functions
+
+    def _probe_selective(self, filter_func=None, io_only=True):
+        # start with all signals
+        probe_list = self.signals.values()
+
+        # limit selection to just IOs if desired
+        if io_only:
+            io_types = (AnalogInput, AnalogOutput, DigitalInput, DigitalOutput)
+            probe_list = [signal for signal in probe_list if isinstance(signal, io_types)]
+
+        # apply further filtering if desired
+        if filter_func is not None:
+            probe_list = [signal for signal in probe_list if filter_func(signal)]
+
+        # attach probes to remaining signals
+        for signal in probe_list:
+            self.add_probe(signal)
+
+    def probe_all(self, io_only=True):
+        """
+        Attach probes to all signals (analog or digital).  By default this only applies to signals that appear in the
+        module I/O list.  Set io_only to False to probe everything.
+        """
+        self._probe_selective(io_only=io_only)
+
+    def probe_analog(self, io_only=True):
+        """
+        Attach probes to analog signals.  By default this only applies to analog signals that appear in the module I/O
+        list.  Set io_only to False to probe all analog signals.
+        """
+        filter_func = lambda signal: isinstance(signal.format_, RealFormat)
+        self._probe_selective(filter_func=filter_func, io_only=io_only)
+
+    def probe_digital(self, io_only=True):
+        """
+        Attach probes to digital signals.  By default this only applies to analog signals that appear in the module I/O
+        list.  Set io_only to False to probe all analog signals.
+        """
+        filter_func = lambda signal: isinstance(signal.format_, IntFormat)
+        self._probe_selective(filter_func=filter_func, io_only=io_only)
+
 def main():
     from msdsl.eqn.deriv import Deriv
     from msdsl.eqn.cases import eqn_case

@@ -130,7 +130,7 @@ class VerilogGenerator(CodeGenerator):
              (isinstance(input_.format_, UIntFormat) and isinstance(output.format_, UIntFormat)):
             self.digital_assignment(signal=output, value=input_.name)
         else:
-            raise Exception(f'Input and output formats do not match: {input_.format_} vs. {output.format_}')
+            raise Exception(f'Input and output formats do not match: {input_.name} with {input_.format_} vs. {output.name} with {output.format_}')
 
     def make_mem(self, next_: Signal, curr: Signal, init: Number=0, clk: Signal=None, rst: Signal=None, ce: Signal = None):
         # set defaults
@@ -149,11 +149,11 @@ class VerilogGenerator(CodeGenerator):
                 f'Initial value {init} does not fit in the range [{curr.format_.min_val}, {curr.format_.max_val}] of signal {curr.name}.'
 
             # check that the widths match
-            assert next_.format_.width == curr.format_.width, f'The widths of {next_.name} and {curr.name} do not match.'
+            assert next_.format_.width == curr.format_.width, f'The widths of {next_.name} ({next_.format_.width}) does not match the width of {curr.name} ({curr.format_.width}).'
 
             self.macro_call('MEM_INTO_DIGITAL', next_.name, curr.name, ce_name, clk_name, rst_name, str(init), str(next_.format_.width))
         else:
-            raise Exception(f'Next and current formats do not match: {next_.format_} vs. {curr.format_}')
+            raise Exception(f'Next and current formats do not match: {next_.name} with {next_.format_} vs. {curr.name} with {curr.format_}')
 
     def start_module(self, name: str, ios: List[Signal], real_params: List):
         # clear default nettype to make debugging easier

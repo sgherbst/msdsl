@@ -55,7 +55,7 @@
 
     `define DUMP_VAR(in_name) \
         initial begin \
-            #0; \
+            #0.001; \
             $dumpvars(0, in_name); \
         end
 

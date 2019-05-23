@@ -18,6 +18,7 @@ from msdsl.util import Namer
 from msdsl.eqn.lds import LdsCollection
 from msdsl.expr.format import RealFormat, IntFormat, is_signed
 from msdsl.expr.extras import if_
+from msdsl.circuit import Circuit
 
 from scipy.signal import cont2discrete
 
@@ -36,6 +37,7 @@ class MixedSignalModel:
         self.signals = OrderedDict()
         self.assignments = OrderedDict()
         self.probes = []
+        self.circuits = []
         self.real_params = []
         self.namer = Namer()
 
@@ -512,7 +514,17 @@ class MixedSignalModel:
         # return result
         return hist
 
+    def make_circuit(self):
+        c = Circuit(self)
+        self.circuits.append(c)
+        return c
+
     def compile(self, gen: CodeGenerator):
+        # compile circuits
+        for circuit in self.circuits:
+            eqns = circuit.compile_to_eqn_list()
+            self.add_eqn_sys(eqns)
+
         # determine the I/Os and internal variables
         ios = []
         internals = []

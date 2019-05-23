@@ -1,7 +1,7 @@
-from msdsl.circuit import Circuit
-
 from msdsl.model import MixedSignalModel
 from msdsl.generator.verilog import VerilogGenerator
+from msdsl.expr.svreal import RangeOf
+from msdsl.expr.signals import AnalogSignal
 
 def main():
     dt = 0.1e-6
@@ -12,19 +12,17 @@ def main():
 
     m.add_analog_input('v_in')
     m.add_analog_output('v_out')
-    m.add_analog_output('i_in')
-    m.add_analog_input('i_out')
 
-    v_cap = m.add_analog_state('v_cap', range_=10)
+    c = m.make_circuit()
+    gnd = c.make_ground()
 
-    c = Circuit()
-    c.capacitor('net_v_out', 'gnd', cap, v_cap)
+    c.capacitor('net_v_out', gnd, cap, voltage_range=RangeOf(m.v_out))
     c.resistor('net_v_in', 'net_v_out', res)
-    c.current_source('net_v_out', 'gnd', m.i_out, m.v_out)
-    c.voltage_source('net_v_in', 'gnd', m.v_in, m.i_in)
+    c.voltage('net_v_in', gnd, m.v_in)
 
-    eqns = c.compile()
-    m.add_eqn_sys(eqns)
+    c.add_eqns(
+        AnalogSignal('net_v_out') == m.v_out
+    )
 
     m.compile_and_print(VerilogGenerator())
 

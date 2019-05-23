@@ -29,18 +29,21 @@ def extract_coeffs(expr: Sum):
     pairs, others = [], []
 
     # extract coefficients for all terms
-    for operand in expr.operands:
-        if isinstance(operand, Signal):
-            pairs.append((1, operand))
-        elif isinstance(operand, Product) and len(operand.operands) == 2:
-            if isinstance(operand.operands[0], Constant) and isinstance(operand.operands[1], Signal):
-                pairs.append((operand.operands[0].value, operand.operands[1]))
-            elif isinstance(operand.operands[1], Constant) and isinstance(operand.operands[0], Signal):
-                pairs.append((operand.operands[1].value, operand.operands[0]))
+    if isinstance(expr, Signal):
+        pairs.append((1, expr))
+    else:
+        for operand in expr.operands:
+            if isinstance(operand, Signal):
+                pairs.append((1, operand))
+            elif isinstance(operand, Product) and len(operand.operands) == 2:
+                if isinstance(operand.operands[0], Constant) and isinstance(operand.operands[1], Signal):
+                    pairs.append((operand.operands[0].value, operand.operands[1]))
+                elif isinstance(operand.operands[1], Constant) and isinstance(operand.operands[0], Signal):
+                    pairs.append((operand.operands[1].value, operand.operands[0]))
+                else:
+                    others.append(operand)
             else:
                 others.append(operand)
-        else:
-            others.append(operand)
 
     # return result
     return pairs, others

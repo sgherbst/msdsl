@@ -249,6 +249,11 @@ class BitwiseOperator(ModelOperator):
 # Sum
 
 def sum_op(operands):
+    operands = list(operands)
+
+    if len(operands) == 0:
+        operands = [0]
+
     # wrap constants as necessary
     operands = wrap_constants(operands)
 

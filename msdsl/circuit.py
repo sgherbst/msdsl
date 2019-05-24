@@ -94,6 +94,8 @@ class Circuit:
         self.add_eqn(AnalogSignal(p) - AnalogSignal(n) == voltage)
         self.two_pin_kcl(p, n, current)
 
+        return voltage
+
     def inductor(self, p, n, value, current_range):
         # add variable names if necessary
         self.add_var_names(p, n)
@@ -104,6 +106,8 @@ class Circuit:
         # add related equations+
         self.add_eqn(Deriv(current) == (AnalogSignal(p) - AnalogSignal(n)) / value)
         self.two_pin_kcl(p, n, current)
+
+        return current
 
     def resistor(self, p, n, value):
         # add variable names if necessary

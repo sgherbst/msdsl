@@ -523,7 +523,7 @@ class MixedSignalModel:
         # compile circuits
         for circuit in self.circuits:
             eqns = circuit.compile_to_eqn_list()
-            self.add_eqn_sys(eqns)
+            self.add_eqn_sys(eqns, circuit.extra_outputs)
 
         # determine the I/Os and internal variables
         ios = []

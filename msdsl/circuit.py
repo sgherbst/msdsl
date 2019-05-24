@@ -18,6 +18,7 @@ class Circuit:
         self.grounds = set()
         self.var_names = set()
         self.tmp_counter = 0
+        self.extra_outputs = []
 
     def add_eqn(self, eqn):
         # add a single equation to the list of equations

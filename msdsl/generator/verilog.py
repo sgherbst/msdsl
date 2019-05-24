@@ -301,7 +301,7 @@ class VerilogGenerator(CodeGenerator):
 
         # create a short real variable to be assigned the selected value from the array
         array_name = next(self.namer)
-        self.macro_call('MAKE_SHORT_REAL', array_name, compile_range_expr(expr.format_.range_))
+        self.macro_call('MAKE_SHORT_REAL', array_name, compile_range_expr(constant_array.format_.range_))
 
         # perform the multiplication
         self.macro_call('MUL_REAL', array_name, signal.name, output.name)

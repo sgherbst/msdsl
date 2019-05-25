@@ -7,6 +7,7 @@ print()
 from msdsl.expr.signals import AnalogSignal
 from msdsl.eqn.deriv import Deriv
 from msdsl.eqn.cases import eqn_case
+from msdsl.expr.extras import if_
 
 class Circuit:
     def __init__(self, model):
@@ -41,7 +42,7 @@ class Circuit:
     def has_var_name(self, name):
         return name in self.var_names
 
-    def tmp_var_name(self, prefix='tmp_'):
+    def tmp_var_name(self, prefix='tmp_circ_'):
         retval = f'{prefix}{self.tmp_counter}'
 
         while self.has_var_name(retval):
@@ -117,6 +118,8 @@ class Circuit:
         self.two_pin_kcl(p, n, (AnalogSignal(p) - AnalogSignal(n)) / value)
 
     def current(self, p, n, value):
+        # TODO: handle cases when value is (1) constant or (2) expression
+
         # add variable names if necessary
         self.add_var_names(p, n)
 
@@ -124,6 +127,8 @@ class Circuit:
         self.two_pin_kcl(p, n, value)
 
     def voltage(self, p, n, value):
+        # TODO: handle cases when value is (1) constant or (2) expression
+
         # add variable names if necessary
         self.add_var_names(p, n)
 
@@ -158,6 +163,42 @@ class Circuit:
         # add related equations
         cond = eqn_case([1/r_off, 1/r_on], [ctl])
         self.two_pin_kcl(p, n, (AnalogSignal(p) - AnalogSignal(n)) * cond)
+
+    def diode(self, p, n, r_on=1, r_off=1e9, vf=0.9):
+        # internal node
+        x = self.tmp_var_name()
+
+        # diode on/off control signal
+        ctl = self.model.add_digital_state(self.tmp_var_name())
+
+        # compute forward voltage
+        vf_name = self.tmp_var_name()
+        vf_signal = self.model.bind_name(vf_name, if_(ctl, vf*(1-r_on/r_off), 0))
+
+        # model topology
+        curr = self.voltage(p=p, n=x, value=vf_signal)
+        self.switch(p=x, n=n, ctl=ctl, r_on=r_on, r_off=r_off)
+
+        # set up circuit monitoring
+        volt = AnalogSignal(p) - AnalogSignal(n)
+        self.extra_outputs += [curr, AnalogSignal(p), AnalogSignal(n)]
+
+        # logic to determine when the diode is on or off
+
+        DIODE_OFF = 0
+        DIODE_ON = 1
+
+        self.model.set_next_cycle(
+            ctl,
+            if_(ctl == DIODE_OFF,
+                if_(volt > 0,
+                    DIODE_ON,
+                    DIODE_OFF),
+                if_(curr < 0,
+                    DIODE_OFF,
+                    DIODE_ON)
+            )
+        )
 
     def compile_to_eqn_list(self):
         retval = self.eqns.copy()

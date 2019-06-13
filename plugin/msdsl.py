@@ -85,6 +85,16 @@ class CustomPlugin(Plugin):
         """
         Read command line arguments. This supports convenient usage from command shell e.g.:
         python analysis.py -i filter --models --sim --view
+
+        --range_assertions: Enables range checks, to detect overflows when working with fixed-point datatypes.
+            To work with this feature efficiently, make sure to have --float set as well.
+
+        --float: Change from fixed-point datatypes to float for running generated models.
+
+        --add_saturation: Enable saturation feature for fixed-point based simulations. This will prevent overflows.
+
+        --models: Generate functional models for selected project.
+
         """
         parser = ArgumentParser()
         parser.add_argument('--range_assertions', action='store_true')

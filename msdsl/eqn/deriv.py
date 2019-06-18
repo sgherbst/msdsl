@@ -5,6 +5,9 @@ def deriv_str(name):
     return 'Deriv(' + name + ')'
 
 class Deriv(AnalogSignal):
+    """
+    Container for a derivative used within MSDSL.
+    """
     def __init__(self, signal: Signal):
         self.signal = signal
         super().__init__(name=deriv_str(signal.name), range_=UndefinedRange())

@@ -50,6 +50,7 @@ class MixedSignalModel:
         """
         Adds a signal or bus object to the model, meaning that it can be accessed by name later.  For example, if
         we run m.add_signal(Signal(name="abc")), we can access the signal afterwards using m.abc
+
         :param x: Signal or Bus object to be added
         :return: The signal object
         """
@@ -95,11 +96,13 @@ class MixedSignalModel:
         """
         Note that analog states used in a system of equations must be adding using this method or the more generic
         add_signal method before calling add_eqn_sys.
-        :param range_: The +/- range of the analog value.  For example, if range_=1.23, then the state variable will
-        fall between +/-1.23.  Note that range is *required* for an analog state, since we don't have any other
-        way to determine the range of the signal for fixed-point formatting purposes.
-        :param init: The initial value of the analog signal.  This is the reset value of the state variable when
-        `RST_MSDSL is asserted (synchronous reset).
+
+        :param range_:  The +/- range of the analog value.  For example, if range_=1.23, then the state variable will
+                        fall between +/-1.23.  Note that range is *required* for an analog state, since we don't have any
+                        other way to determine the range of the signal for fixed-point formatting purposes.
+
+        :param init:    The initial value of the analog signal.  This is the reset value of the state variable when
+                        `RST_MSDSL is asserted (synchronous reset).
         """
         return self.add_signal(AnalogState(name=name, range_=range_, width=width, exponent=exponent, init=init))
 
@@ -121,8 +124,9 @@ class MixedSignalModel:
 
     def add_digital_state(self, name, width=1, signed=False, init=0):
         """
-        :param init: The initial value of the digital signal.  This is the reset value of the state variable when
-        `RST_MSDSL is asserted (synchronous reset).
+
+        :param init:    The initial value of the digital signal.  This is the reset value of the state variable when
+                        `RST_MSDSL is asserted (synchronous reset).
         """
         return self.add_signal(DigitalState(name=name, width=width, signed=signed, init=init))
 
@@ -179,8 +183,9 @@ class MixedSignalModel:
         """
         The behavior of this function is essentially a blocking assignment (in Verilog nomenclature). The provided
         expression is continuously written to the provided signal.
-        :param signal: Signal object being assigned
-        :param expr: Value of the expression to assign
+
+        :param signal:  Signal object being assigned
+        :param expr:    Value of the expression to assign
         :return:
         """
 
@@ -206,11 +211,12 @@ class MixedSignalModel:
         """
         The behavior of this function is essentially a non-blocking assignment (in Verilog nomenclature). The provided
         expression is written to the provided signal at the next positive edge of the clock signal.
-        :param signal: Signal object being assigned
-        :param expr: Value of the expression to assign
-        :param clk: Optional input.  Will use `CLK_MSDSL by default.
-        :param rst: Optional input for synchronous reset.  Will use `RST_MSDSL by default.
-        :param ce: Optional input for clock enable.  Will use "1" (i.e., always enabled) by default.
+
+        :param signal:  Signal object being assigned
+        :param expr:    Value of the expression to assign
+        :param clk:     Optional input.  Will use `CLK_MSDSL by default.
+        :param rst:     Optional input for synchronous reset.  Will use `RST_MSDSL by default.
+        :param ce:      Optional input for clock enable.  Will use "1" (i.e., always enabled) by default.
         :return:
         """
 
@@ -234,9 +240,10 @@ class MixedSignalModel:
         """
         Equivalent to a real parameter in a Verilog module definition.  Allows the user to generate a single
         SystemVerilog model that can be used for various purposes.
-        :param name: Name of the parameter.
-        :param default: Real number default for the parameter.  A ModelExpr is not allowed here.
-        :return: Returns a signal representing the parameter that can be used in subsequent expressions.
+
+        :param name:        Name of the parameter.
+        :param default:     Real number default for the parameter.  A ModelExpr is not allowed here.
+        :return:            Returns a signal representing the parameter that can be used in subsequent expressions.
         """
 
         param = RealParameter(param_name=f'{name}', signal_name=f'{name}_param', default=default)
@@ -259,13 +266,14 @@ class MixedSignalModel:
     def add_counter(self, name, width, init=0, loop=False, clk=None, rst=None, ce=None):
         """
         Instantiates a counter with a user-specified connections.  Intended for stimulus generation via lookup table.
-        :param name: Name of the digital signal used to hold the counter value.
-        :param width: Width of digital signal, which affects the counter range.
-        :param init: Optional initial value for the counter.
-        :param loop: If True, allow the counter to overflow.  Otherwise freeze the counter at the maximum value.
-        :param clk: Optional clock input.  Defaults to `CLK_MSDSL.
-        :param rst: Optional synchronous reset input.  Defaults to `RST_MSDSL.
-        :param ce: Option clock enable input.  Defaults to "1".
+
+        :param name:    Name of the digital signal used to hold the counter value.
+        :param width:   Width of digital signal, which affects the counter range.
+        :param init:    Optional initial value for the counter.
+        :param loop:    If True, allow the counter to overflow.  Otherwise freeze the counter at the maximum value.
+        :param clk:     Optional clock input.  Defaults to `CLK_MSDSL.
+        :param rst:     Optional synchronous reset input.  Defaults to `RST_MSDSL.
+        :param ce:      Option clock enable input.  Defaults to "1".
         :return:
         """
 
@@ -309,9 +317,9 @@ class MixedSignalModel:
         http://ee263.stanford.edu/lectures/linsys.pdf).  If there are several eqn_cases to be considered, we construct
         a different LDS for each one.  These LDS's are discretized using the given timestep by using the exponential
         matrix function assuming piecewise-constant input (sometimes known as the zero-order hold approach).
-        :param eqns: List of equations.
-        :param extra_outputs: List of internal variables in the system of equations that should be bound to analog
-        signals.
+
+        :param eqns:            List of equations.
+        :param extra_outputs:   List of internal variables in the system of equations that should be bound to analog signals.
         """
 
         # set defaults
@@ -389,10 +397,11 @@ class MixedSignalModel:
         """
         Method to assign an output signal as a function of the input signal by applying a given transfer function.
         The transfer function is discretized using a timestep of "dt" by applying the zero-order hold method.
-        :param input_: Input signal.
-        :param output: Output signal (should be an AnalogState that is not yet assigned)
-        :param tf: Tuple consisting of a list of numerator coefficients and a list of denominator coefficients.  See
-        https://docs.scipy.org/doc/scipy-0.14.0/reference/generated/scipy.signal.cont2discrete.html for more details.
+
+        :param input_:      Input signal.
+        :param output:      Output signal (should be an AnalogState that is not yet assigned)
+        :param tf:          Tuple consisting of a list of numerator coefficients and a list of denominator coefficients.  See
+                            https://docs.scipy.org/doc/scipy-0.14.0/reference/generated/scipy.signal.cont2discrete.html for more details.
         :return:
         """
 
@@ -417,11 +426,12 @@ class MixedSignalModel:
         """
         Applies a resource-efficient implementation of a long delay for *one-bit digital signals only*.  Note that the
         pulse width of the input expression should be wider than the delay, otherwise the signal will be filtered.
-        :param input_: Expression that should be delayed.  Must evaluate to a one-bit signal.
-        :param tr: Rising edge delay, in seconds.
-        :param tf: Falling edge delay, in seconds.
-        :return: Object representing the delayed signal, which should be assigned to another signal using
-        immediate_assign.
+
+        :param input_:  Expression that should be delayed.  Must evaluate to a one-bit signal.
+        :param tr:      Rising edge delay, in seconds.
+        :param tf:      Falling edge delay, in seconds.
+        :return:        Object representing the delayed signal, which should be assigned to another signal using
+                        immediate_assign.
         """
 
         # input type checking
@@ -453,12 +463,13 @@ class MixedSignalModel:
     def delay(self, input_: ModelExpr, time, max_cycles=100):
         """
         Delays an analog or digital signal by the specified time.  Note that this does *not* currently use a
-        resource-efficient implementation,
-        :param input_: Expression that should be delayed.
-        :param time: Delay time in seconds.
-        :param max_cycles: Maximum number of delay cycles allowed.
-        :return: Object representing the delayed signal, which should be assigned to another signal using
-        immediate_assign.
+        resource-efficient implementation.
+
+        :param input_:      Expression that should be delayed.
+        :param time:        Delay time in seconds.
+        :param max_cycles:  Maximum number of delay cycles allowed.
+        :return:            Object representing the delayed signal, which should be assigned to another signal using
+                            immediate_assign.
         """
 
         # compute number of cycles for the delay

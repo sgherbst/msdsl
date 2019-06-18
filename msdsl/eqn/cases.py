@@ -39,6 +39,14 @@ def address_to_settings(address, sel_bits):
     return sel_bit_settings
 
 def eqn_case(cases, sel_bits: List[DigitalSignal]):
+    """
+    Add a EqnCase object to a MixedSignalModel object of MSDSL. The EqnCase object was populated by cases and sel_bits
+    that were provided to this function.
+
+    :param cases:       equations for each case that is part of the case statement.
+    :param sel_bits:    list of bits that is used to evaluate the case statement.
+    :return:            EqnCase object
+    """
     # wrap constants and promote them to RealFormat
     cases = wrap_constants(cases)
     cases = promote_operands(cases, RealFormat)

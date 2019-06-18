@@ -14,6 +14,12 @@ class EqnList:
     # adding equations to the system
 
     def add_eqn(self, eqn: ModelExpr):
+        """
+        Adds equations *eqn* to self.eqns attribute of EqnList class object.
+
+        :param eqn: List of equations that shall be added
+        :return:
+        """
         self.add_eqns([eqn])
 
     def add_eqns(self, eqns: List[ModelExpr]):

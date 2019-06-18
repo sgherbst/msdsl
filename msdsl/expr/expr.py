@@ -312,6 +312,13 @@ class Product(ArithmeticOperator):
 # Min
 
 def min_op(operands):
+    """
+    Compare a list of operands provided in *operands* with each other. Smallest operand will be returned.
+
+    :param operands:    List of operands to be compared
+    :return:            Minimal operand
+    """
+
     # wrap constants as necessary
     operands = wrap_constants(operands)
 
@@ -344,6 +351,13 @@ class Min(ArithmeticOperator):
 # Max
 
 def max_op(operands):
+    """
+    Compare a list of operands provided in *operands* with each other. Largest operand will be returned.
+
+    :param operands:    List of operands to be compared
+    :return:            Largest operand
+    """
+
     # wrap constants as necessary
     operands = wrap_constants(operands)
 
@@ -541,6 +555,13 @@ class NotEqualTo(ComparisonOperator):
 # concatenation of digital signals
 
 def concatenate(operands):
+    """
+    Concatenate a list of operands given in *operands*.
+
+    :param operands:    Operands that shall be concatenated
+    :return:            All operands concatenated
+    """
+
     # wrap constants as necessary
     operands = wrap_constants(operands)
 
@@ -567,6 +588,15 @@ class Concatenate(ModelOperator):
 # array types
 
 def array(elements: List, address: ModelExpr, real_range_hint: Number=None):
+    """
+    Create an array
+
+    :param elements:        Elements that shall be added to the array
+    :param address:         Address that will be added as final element to array
+    :param real_range_hint: Hint for the real datatype range.
+    :return:                Array
+    """
+
     # wrap constants as necessary
     elements = wrap_constants(elements)
     address = wrap_constant(address)
@@ -621,6 +651,14 @@ class Array(ModelOperator):
 # case statement mimicking
 
 def cases(cases: List[Tuple], default):
+    """
+    Create a case statement using the list of tuples provided in *cases*. The default behavior is provided in *default*.
+
+    :param cases:   List of tuples for all cases
+    :param default: default case
+    :return:        Case Statement
+    """
+
     # unpack input
     bits, values = zip(*cases)
 
@@ -686,6 +724,13 @@ class TypeConversion(UnaryOperator):
 # UInt to SInt
 
 def uint_to_sint(operand, width=None):
+    """
+    Convert an unsigned integer object *operand* to a signed integer object.
+
+    :param operand: name of signal
+    :param width:   specify signal width, in case a custom width is necessary
+    :return:        signed integer object
+    """
     make_constant = lambda x: SIntConstant(x, width=width)
     make_class = lambda x: UIntToSInt(operand=x, width=width)
 
@@ -712,6 +757,13 @@ class UIntToSInt(TypeConversion):
 # SInt to UInt
 
 def sint_to_uint(operand, width=None):
+    """
+    Convert a signed integer object *operand* to an unsigned integer object.
+
+    :param operand: name of signal
+    :param width:   specify signal width, in case a custom width is necessary
+    :return:        unsigned integer object
+    """
     make_constant = lambda x: UIntConstant(x, width=width)
     make_class = lambda x: SIntToUInt(operand=x, width=width)
 
@@ -738,6 +790,12 @@ class SIntToUInt(TypeConversion):
 # SInt to Real
 
 def sint_to_real(operand):
+    """
+    Convert a signed integer object *operand* to a real object.
+
+    :param operand: name of signal
+    :return:        real object
+    """
     make_constant = lambda x: RealConstant(x)
     make_class = lambda x: SIntToReal(x)
 
@@ -755,6 +813,13 @@ class SIntToReal(TypeConversion):
         super().__init__(operand=operand, output_format=output_format)
 
 def real_to_sint(operand, width=None):
+    """
+    Convert a real object *operand* to a signed integer object.
+
+    :param operand: name of signal
+    :param width:   specify signal width, in case a custom width is necessary
+    :return:        real object
+    """
     make_constant = lambda x: SIntConstant(x, width=width)
     make_class = lambda x: RealToSInt(x, width=width)
 
@@ -784,6 +849,13 @@ class RealToSInt(TypeConversion):
 # easy-to-use type conversion
 
 def to_uint(operand, width=None):
+    """
+    Convert either a signed integer or real object *operand* to an unsigned integer object.
+
+    :param operand: name of signal
+    :param width:   specify signal width, in case a custom width is necessary
+    :return:        unsigned integer object
+    """
     if isinstance(operand.format_, RealFormat):
         # Note that the conversion to SInt adds "1" to the width to hold the sign bit, which is removed
         # upon the demotion to UInt
@@ -803,6 +875,13 @@ def to_uint(operand, width=None):
         raise Exception(f'Unknown format type: {operand.format_.__class__.__name__}')
 
 def to_sint(operand, width=None):
+    """
+    Convert either an unsigned integer or real object *operand* to a signed integer object.
+
+    :param operand: name of signal
+    :param width:   specify signal width, in case a custom width is necessary
+    :return:        signed integer object
+    """
     if isinstance(operand.format_, RealFormat):
         return real_to_sint(operand=operand, width=width)
     elif isinstance(operand.format_, SIntFormat):
@@ -821,6 +900,12 @@ def to_sint(operand, width=None):
         raise Exception(f'Unknown format type: {operand.format.__class__.__name__}')
 
 def to_real(operand):
+    """
+    Convert either an unsigned integer or a signed integer object *operand* to a real object.
+
+    :param operand: name of signal
+    :return:        real object
+    """
     if isinstance(operand.format_, RealFormat):
         return operand
     elif isinstance(operand.format_, SIntFormat):
@@ -841,6 +926,9 @@ class Constant(ModelExpr):
         return str(self.value)
 
 class RealConstant(Constant):
+    """
+    Container for a constant real datatype within MSDSL.
+    """
     def __init__(self, value: Number):
         # determine constant format
         format_ = RealFormat.from_value(value)
@@ -849,6 +937,9 @@ class RealConstant(Constant):
         super().__init__(value=value, format_=format_)
 
 class SIntConstant(Constant):
+    """
+    Container for a constant signed integer datatype within MSDSL.
+    """
     def __init__(self, value: Integral, width: Integral=None):
         # check input
         assert isinstance(value, Integral), f'{self.__class__.__name__} requires an integer value, but was given a {value.__class__.__name__}.'
@@ -863,6 +954,9 @@ class SIntConstant(Constant):
         super().__init__(value=value, format_=format_)
 
 class UIntConstant(Constant):
+    """
+    Container for a constant unsigned integer datatype within MSDSL.
+    """
     def __init__(self, value: Integral, width: Integral=None):
         # check input
         assert isinstance(value, Integral), f'{self.__class__.__name__} requires an integer value, but was given a {value.__class__.__name__}.'

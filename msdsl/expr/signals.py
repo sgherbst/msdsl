@@ -30,7 +30,7 @@ class AnalogState(AnalogSignal):
     The AnalogState object is used within MSDSL to represent an analog state such as the voltage of a capacitor. Any
     analog state that shall be used withing the functional model generated via MSDSL needs to be an instance of this class.
 
-    :param name:        Name of the analog signal to be added
+    :param name:        Name of the analog state to be added
     :param range_:      Range of the analog signal. Note that the range will be considered for positive and negative values.
     :param width:       Specify a width different from the default.
     :param exponent:    Specify an exponent different from the default. Usually this is automatically calculated.
@@ -101,10 +101,10 @@ class DigitalSignal(Signal):
 
 class DigitalState(DigitalSignal):
     """
-    The DigitalState object is used within MSDSL to represent a digital state such as the voltage of a capacitor. Any
+    The DigitalState object is used within MSDSL to represent a digital state. Any
     digital state that shall be used withing the functional model generated via MSDSL needs to be an instance of this class.
 
-    :param name:        Name of the analog signal to be added
+    :param name:        Name of the digital state to be added
     :param width:       Specify a width different from the default.
     :param signed:      Setting this option to True will change from the unsigned, default representation to a signed one.
     :param init:        Initial value of the analog state.

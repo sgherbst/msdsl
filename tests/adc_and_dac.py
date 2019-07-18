@@ -1,6 +1,4 @@
-from msdsl.model import MixedSignalModel
-from msdsl.generator.verilog import VerilogGenerator
-from msdsl.expr.expr import to_real, to_sint, to_uint, min_op, max_op
+from msdsl import MixedSignalModel, VerilogGenerator, to_sint, to_uint, min_op, max_op
 
 def clamp(a, min_val, max_val):
     return min_op([max_op([a, min_val]), max_val])

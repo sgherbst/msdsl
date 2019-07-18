@@ -1,5 +1,4 @@
-from msdsl.model import MixedSignalModel
-from msdsl.generator.verilog import VerilogGenerator
+from msdsl import MixedSignalModel, VerilogGenerator
 
 def main():
     dt = 0.1e-6

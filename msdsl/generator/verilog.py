@@ -135,7 +135,15 @@ class VerilogGenerator(CodeGenerator):
     def make_mem(self, next_: Signal, curr: Signal, init: Number=0, clk: Signal=None, rst: Signal=None, ce: Signal = None):
         # set defaults
         clk_name = clk.name if clk is not None else '`CLK_MSDSL'
-        rst_name = rst.name if rst is not None else '`RST_MSDSL'
+
+        # determine name of reset signal
+        if rst is None:
+            rst_name = '`RST_MSDSL'
+        elif isinstance(rst, str):
+            rst_name = rst
+        else:
+            rst_name = rst.name
+
         ce_name = ce.name if ce is not None else "1'b1"
 
         # create memory for real number

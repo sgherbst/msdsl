@@ -1,11 +1,9 @@
 import os
 
-from anasymod.enums import ConfigSections
-from anasymod.sources import Sources, VerilogHeader, VerilogSource, VHDLSource
+from anasymod.sources import VerilogHeader, VerilogSource
 from anasymod.defines import Define
 from anasymod.files import mkdir_p, rm_rf, get_from_module, which
 from argparse import ArgumentParser
-from anasymod.util import call
 from anasymod.util import call
 from anasymod.plugins import Plugin
 
@@ -52,7 +50,13 @@ class CustomPlugin(Plugin):
 
         # run generator script
         gen_script = os.path.join(self._prj_root, 'gen.py')
-        call([which('python'), gen_script, '-o', self.cfg.model_dir, '--dt', str(self.cfg.dt)])
+
+        if 'PYTHON_MSDSL' in os.environ:
+            python_name = os.environ['PYTHON_MSDSL']
+        else:
+            python_name = which('python')
+            
+        call([python_name, gen_script, '-o', self.cfg.model_dir, '--dt', str(self.cfg.dt)])
 
 ##### Utility Functions
 

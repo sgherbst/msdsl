@@ -1,7 +1,4 @@
-from msdsl.model import MixedSignalModel
-from msdsl.generator.verilog import VerilogGenerator
-from msdsl.eqn.deriv import Deriv
-from msdsl.eqn.cases import eqn_case
+from msdsl import MixedSignalModel, VerilogGenerator, Deriv, eqn_case
 
 def main():
     tau = 1e-6

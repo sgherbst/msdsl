@@ -80,7 +80,24 @@
     `define MARK_EXPONENT_REAL(in_name) \
         fixed_point_exponent = `EXPONENT_PARAM_REAL(in_name)
 
-    `define PROBE_ANALOG(in_name) \
+    `define PROBE_ANALOG_CTRL(in_name, in_name_abspath) \
+        `ifdef SIMULATION_MODE_MSDSL \
+            real `PROBE_NAME(in_name); \
+            `DUMP_VAR(`PROBE_NAME(in_name)) \
+            assign `PROBE_NAME(in_name) = `TO_REAL_CTRL(in_name, in_name_abspath) \
+        `else \
+            (* `MARK_DEBUG, `MARK_ANALOG, `MARK_EXPONENT_REAL(in_name) *) `GET_FORMAT_REAL(in_name) `PROBE_NAME(in_name); \
+            assign `PROBE_NAME(in_name) = in_name \
+        `endif
+
+        `define TO_REAL_CTRL(name, abs_name) \
+        `ifdef FLOAT_REAL \
+            name \
+        `else \
+            (1.0*name) * `POW2_MATH(`EXPONENT_PARAM_REAL(abs_name)) \
+        `endif
+
+    `define PROBE_ANALOG (in_name) \
         `ifdef SIMULATION_MODE_MSDSL \
             real `PROBE_NAME(in_name); \
             `DUMP_VAR(`PROBE_NAME(in_name)) \

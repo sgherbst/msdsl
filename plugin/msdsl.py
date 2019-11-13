@@ -11,6 +11,8 @@ class CustomPlugin(Plugin):
     def __init__(self, cfg_file, prj_root, build_root):
         super().__init__(cfg_file=cfg_file, prj_root=prj_root, build_root=build_root, name='msdsl')
 
+        self.include_statements += ['`include "msdsl.sv"']
+
         # Parse command line arguments specific to MSDSL
         self.args = None
         self._parse_args()

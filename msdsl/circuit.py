@@ -4,10 +4,11 @@ print('# WARNING: The msdsl.circuit module is experimental! #')
 print('######################################################')
 print()
 
-from msdsl.expr.signals import AnalogSignal
 from msdsl.eqn.deriv import Deriv
 from msdsl.eqn.cases import eqn_case
 from msdsl.expr.extras import if_
+from msdsl.expr.expr import RealConstant
+from msdsl.expr.signals import AnalogSignal
 
 class Circuit:
     def __init__(self, model):
@@ -165,23 +166,27 @@ class Circuit:
         self.two_pin_kcl(p, n, (AnalogSignal(p) - AnalogSignal(n)) * cond)
 
     def diode(self, p, n, r_on=1, r_off=1e9, vf=0.9):
-        # internal node
+        # add variable names as necessary
+        self.add_var_names(p, n)
+
+        # internal node used to read current through diode
         x = self.tmp_var_name()
+        curr = self.voltage(p=x, n=n, value=0)
 
         # diode on/off control signal
         ctl = self.model.add_digital_state(self.tmp_var_name())
 
-        # compute forward voltage
-        vf_name = self.tmp_var_name()
-        vf_signal = self.model.bind_name(vf_name, if_(ctl, vf*(1-r_on/r_off), 0))
+        # create signal for the forward voltage
+        vf_name = self.tmp_var_name('tmp_vf_')
+        vf_signal = self.model.bind_name(vf_name, RealConstant(vf))
 
-        # model topology
-        curr = self.voltage(p=p, n=x, value=vf_signal)
-        self.switch(p=x, n=n, ctl=ctl, r_on=r_on, r_off=r_off)
-
-        # set up circuit monitoring
-        volt = AnalogSignal(p) - AnalogSignal(n)
+        # logic to determine when the diode is on or off
         self.extra_outputs += [curr, AnalogSignal(p), AnalogSignal(n)]
+
+        # compute current through diode
+        slope = eqn_case([1/r_off, 1/r_on], [ctl])
+        offset = eqn_case([0, (1/r_off-1/r_on)], [ctl])
+        self.two_pin_kcl(p, x, slope*(AnalogSignal(p) - AnalogSignal(n))+offset*vf_signal)
 
         # logic to determine when the diode is on or off
 
@@ -191,7 +196,7 @@ class Circuit:
         self.model.set_next_cycle(
             ctl,
             if_(ctl == DIODE_OFF,
-                if_(volt > 0,
+                if_((AnalogSignal(p) - AnalogSignal(n)) > vf_signal,
                     DIODE_ON,
                     DIODE_OFF),
                 if_(curr < 0,

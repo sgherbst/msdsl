@@ -1,5 +1,6 @@
 # general imports
 from math import exp
+from pathlib import Path
 
 # AHA imports
 import magma as m
@@ -9,9 +10,11 @@ import fault
 from svreal.files import get_svreal_header
 
 # msdsl imports
-from .common import pytest_sim_params
+from ..common import pytest_sim_params
 from msdsl import MixedSignalModel, VerilogGenerator, Deriv
 from msdsl.files import get_file
+
+BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
 def pytest_generate_tests(metafunc):
     pytest_sim_params(metafunc)
@@ -23,7 +26,8 @@ def gen_model(tau, dt):
 
     model.add_eqn_sys([Deriv(model.v_out) == (model.v_in - model.v_out)/tau])
 
-    model_file = get_file('tests/rc/model.sv')
+    BUILD_DIR.mkdir(parents=True, exist_ok=True)
+    model_file = BUILD_DIR / 'model.sv'
     model.compile_to_file(VerilogGenerator(), filename=model_file)
 
     return model_file
@@ -69,6 +73,7 @@ def test_rc(simulator, tau=1e-6, dt=0.1e-6):
     # run the simulation
     tester.compile_and_run(
         target='system-verilog',
+        directory=BUILD_DIR,
         simulator=simulator,
         ext_srcs=[model_file, get_file('tests/rc/test_rc.sv')],
         inc_dirs=[get_svreal_header().parent],
@@ -76,6 +81,3 @@ def test_rc(simulator, tau=1e-6, dt=0.1e-6):
         ext_model_file=True,
         disp_type='realtime'
     )
-
-if __name__ == '__main__':
-    test_rc('iverilog')

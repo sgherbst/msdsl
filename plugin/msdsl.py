@@ -10,7 +10,7 @@ from anasymod.config import EmuConfig
 
 class CustomPlugin(Plugin):
     def __init__(self, prj_cfg: EmuConfig, cfg_file, prj_root):
-        super().__init__(cfg_file=cfg_file, prj_root=prj_root, build_root=prj_cfg.build_root, name='msdsl')
+        super().__init__(cfg_file=cfg_file, prj_root=prj_root, build_root=os.path.join(prj_cfg.build_root_base, 'models'), name='msdsl')
 
         self.include_statements += ['`include "msdsl.sv"']
 
@@ -22,7 +22,7 @@ class CustomPlugin(Plugin):
         self.dt = prj_cfg.cfg.dt
 
         # Initialize msdsl config
-        self.cfg.model_dir = os.path.join(self._build_root, 'models')
+        self.cfg.model_dir = self._build_root
 
         # Update msdsl config with msdsl section in config file
         self.cfg.update_config(subsection=self._name)

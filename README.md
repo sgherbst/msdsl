@@ -1,4 +1,7 @@
-# Introduction
+# msdsl
+[![Travis Status](https://travis-ci.com/sgherbst/msdsl.svg?branch=master)](https://travis-ci.com/sgherbst/msdsl)
+[![Code Coverage](https://codecov.io/gh/sgherbst/msdsl/branch/master/graph/badge.svg)](https://codecov.io/gh/sgherbst/msdsl)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **msdsl** is a Python3 package for generating synthesizable real number models (RNMs) from analog circuits.  
 

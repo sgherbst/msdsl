@@ -55,6 +55,13 @@ install:
 # install various python dependencies
 - pip install pytest mantle fault pytest-cov
 
+# install svreal
+- git clone https://github.com/sgherbst/svreal.git
+- cd svreal
+- git checkout v1
+- pip install -e .
+- cd ..
+
 # install msdsl
 - pip install -e .
 

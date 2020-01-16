@@ -17,6 +17,7 @@ setup(
     long_description=LONG_DESCRIPTION,
     long_description_content_type='text/markdown',
     keywords = ['analog', 'mixed-signal', 'mixed signal', 'behavioral',
+                'real number model', 'real number models', 'rnm', 'rnms',
                 'model', 'models', 'generator', 'verilog', 'system-verilog',
                 'system verilog', 'synthesizable', 'emulation', 'fpga'],
     packages=[

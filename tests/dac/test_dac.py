@@ -6,12 +6,11 @@ import magma as m
 import fault
 
 # svreal import
-from svreal.files import get_svreal_header
+from svreal import get_svreal_header
 
 # msdsl imports
-from ..common import pytest_sim_params
-from msdsl import MixedSignalModel, VerilogGenerator, to_sint, min_op, max_op
-from msdsl.files import get_file
+from ..common import pytest_sim_params, get_file
+from msdsl import MixedSignalModel, VerilogGenerator, min_op, max_op
 
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
@@ -80,7 +79,7 @@ def test_adc(simulator, n_dac=8, v_ref_n=-1.0, v_ref_p=+1.0, dt=0.1e-6):
         target='system-verilog',
         directory=BUILD_DIR,
         simulator=simulator,
-        ext_srcs=[model_file, get_file('tests/dac/test_dac.sv')],
+        ext_srcs=[model_file, get_file('dac/test_dac.sv')],
         inc_dirs=[get_svreal_header().parent],
         parameters={'n_dac': n_dac},
         ext_model_file=True,

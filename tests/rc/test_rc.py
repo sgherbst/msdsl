@@ -7,12 +7,11 @@ import magma as m
 import fault
 
 # svreal import
-from svreal.files import get_svreal_header
+from svreal import get_svreal_header
 
 # msdsl imports
-from ..common import pytest_sim_params
+from ..common import pytest_sim_params, get_file
 from msdsl import MixedSignalModel, VerilogGenerator, Deriv
-from msdsl.files import get_file
 
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
@@ -75,7 +74,7 @@ def test_rc(simulator, tau=1e-6, dt=0.1e-6):
         target='system-verilog',
         directory=BUILD_DIR,
         simulator=simulator,
-        ext_srcs=[model_file, get_file('tests/rc/test_rc.sv')],
+        ext_srcs=[model_file, get_file('rc/test_rc.sv')],
         inc_dirs=[get_svreal_header().parent],
         defines={'CLK_MSDSL': 'dut.clk', 'RST_MSDSL': 'dut.rst'},
         ext_model_file=True,

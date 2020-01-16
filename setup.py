@@ -1,18 +1,48 @@
-from setuptools import setup, find_packages
+from setuptools import setup
+
+name = 'msdsl'
+version = '0.1.0'
+
+DESCRIPTION = '''\
+Library for generating synthesizable mixed-signal models for FPGA emulation\
+'''
+
+with open('README.md', 'r') as fh:
+    LONG_DESCRIPTION = fh.read()
 
 setup(
-    name='msdsl',
-    version='0.0.1',
-    description='Library for describing mixed-signal circuits for emulation',
-    url='https://github.com/sgherbst/msdsl',
-    author='Steven Herbst',
-    author_email='sherbst@stanford.edu',
-    packages=['msdsl'],
+    name=name,
+    version=version,
+    description=DESCRIPTION,
+    long_description=LONG_DESCRIPTION,
+    long_description_content_type='text/markdown',
+    keywords = ['analog', 'mixed-signal', 'mixed signal', 'behavioral',
+                'model', 'models', 'generator', 'verilog', 'system-verilog',
+                'system verilog', 'synthesizable', 'emulation', 'fpga'],
+    packages=[
+        f'{name}'
+    ],
+    scripts=[
+    ],
     install_requires=[
+        'svreal',
         'scipy',
         'numpy',
         'matplotlib'
     ],
+    license='MIT',
+    url=f'https://github.com/sgherbst/{name}',
+    author='Steven Herbst',
+    author_email='sgherbst@gmail.com',
+    python_requires='>=3.7',
+    download_url = f'https://github.com/sgherbst/{name}/archive/v{version}.tar.gz',
+    classifiers=[
+        'Development Status :: 3 - Alpha',
+        'Intended Audience :: Developers',
+        'Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)',
+        'License :: OSI Approved :: MIT License',
+        f'Programming Language :: Python :: 3.7'
+    ],
     include_package_data=True,
-    zip_safe=False,
+    zip_safe=False
 )

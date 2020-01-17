@@ -1,7 +1,7 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 name = 'msdsl'
-version = '0.1.1'
+version = '0.1.2'
 
 DESCRIPTION = '''\
 Library for generating synthesizable mixed-signal models for FPGA emulation\
@@ -20,9 +20,7 @@ setup(
                 'real number model', 'real number models', 'rnm', 'rnms',
                 'model', 'models', 'generator', 'verilog', 'system-verilog',
                 'system verilog', 'synthesizable', 'emulation', 'fpga'],
-    packages=[
-        f'{name}'
-    ],
+    packages=find_packages(),
     scripts=[
     ],
     install_requires=[

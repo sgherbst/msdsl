@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 name = 'msdsl'
-version = '0.1.2'
+version = '0.1.3'
 
 DESCRIPTION = '''\
 Library for generating synthesizable mixed-signal models for FPGA emulation\
@@ -21,8 +21,6 @@ setup(
                 'model', 'models', 'generator', 'verilog', 'system-verilog',
                 'system verilog', 'synthesizable', 'emulation', 'fpga'],
     packages=find_packages(),
-    scripts=[
-    ],
     install_requires=[
         'svreal',
         'scipy',

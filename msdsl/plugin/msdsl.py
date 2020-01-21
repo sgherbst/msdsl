@@ -1,9 +1,16 @@
 import os
+from pathlib import Path
+from argparse import ArgumentParser
 
+from svreal import get_svreal_header
+
+# path to the top-level msdsl package directory
+PACK_DIR = Path(__file__).resolve().parent.parent
+
+# TODO: figure out how to remove dependency on anasymod (which itself depends on msdsl)
 from anasymod.sources import VerilogHeader, VerilogSource
 from anasymod.defines import Define
-from anasymod.files import mkdir_p, rm_rf, get_from_module, which
-from argparse import ArgumentParser
+from anasymod.files import mkdir_p, rm_rf, which
 from anasymod.util import call
 from anasymod.plugins import Plugin
 from anasymod.config import EmuConfig
@@ -78,11 +85,8 @@ class CustomPlugin(Plugin):
         """
 
         # Add MSDSL and SVREAL sources
-        self.add_source(source=VerilogSource(files=get_from_module('msdsl', 'src', '*.sv'), config_path=self._srccfg_path))
-        self.add_source(source=VerilogHeader(files=get_from_module('msdsl', 'include', '*.sv'), config_path=self._srccfg_path))
-
-        self.add_source(source=VerilogSource(files=get_from_module('svreal', 'src', '*.sv'), config_path=self._srccfg_path))
-        self.add_source(source=VerilogHeader(files=get_from_module('svreal', 'include', '*.sv'), config_path=self._srccfg_path))
+        self.add_source(source=VerilogHeader(files=[PACK_DIR / 'msdsl.sv'], config_path=self._srccfg_path))
+        self.add_source(source=VerilogHeader(files=[get_svreal_header()], config_path=self._srccfg_path))
 
         # Add model sources
         self.add_source(source=VerilogSource(files=os.path.join(self.cfg.model_dir, '*.sv'), config_path=self._srccfg_path))

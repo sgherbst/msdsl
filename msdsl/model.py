@@ -312,7 +312,7 @@ class MixedSignalModel:
         # return result
         return inputs, states, outputs, sel_bits
 
-    def add_eqn_sys(self, eqns: List[ModelExpr], extra_outputs=None):
+    def add_eqn_sys(self, eqns: List[ModelExpr], extra_outputs=None, clk=None, rst=None):
         """
         Accepts a list of equations that can contain derivatives of analog state variables.  The approach used is
         to convert the system of differential equations into a standard-form linear dynamical system (reference:
@@ -322,6 +322,8 @@ class MixedSignalModel:
 
         :param eqns:            List of equations.
         :param extra_outputs:   List of internal variables in the system of equations that should be bound to analog signals.
+        :param clk:             Name of clock signal to use (None will default to `CLK_MSDSL)
+        :param rst:             Name of the reset signal to use (None will default to `RST_MSDSL)
         """
 
         # set defaults
@@ -368,9 +370,12 @@ class MixedSignalModel:
             sel = None
 
         # add the discrete-time equation
-        self.add_discrete_time_lds(collection=collection, inputs=inputs, states=states, outputs=outputs, sel=sel)
+        self.add_discrete_time_lds(collection=collection, inputs=inputs,
+                                   states=states, outputs=outputs, sel=sel,
+                                   clk=clk, rst=rst)
 
-    def add_discrete_time_lds(self, collection, inputs=None, states=None, outputs=None, sel=None):
+    def add_discrete_time_lds(self, collection, inputs=None, states=None, outputs=None, sel=None,
+                              clk=None, rst=None):
         # set defaults
         inputs = inputs if inputs is not None else []
         states = states if states is not None else []
@@ -381,7 +386,7 @@ class MixedSignalModel:
         for row in range(len(states)):
             expr = sum_op([array(collection.A[row, col], sel) * states[col] for col in range(len(states))])
             expr += sum_op([array(collection.B[row, col], sel) * inputs[col] for col in range(len(inputs))])
-            self.set_next_cycle(states[row], expr)
+            self.set_next_cycle(states[row], expr, clk=clk, rst=rst)
 
         # output updates
         for row in range(len(outputs)):

@@ -22,8 +22,11 @@ def gen_model(tau, dt):
     model = MixedSignalModel('model', dt=dt)
     model.add_analog_input('v_in')
     model.add_analog_output('v_out')
+    model.add_digital_input('clk')
+    model.add_digital_input('rst')
 
-    model.add_eqn_sys([Deriv(model.v_out) == (model.v_in - model.v_out)/tau])
+    model.add_eqn_sys([Deriv(model.v_out) == (model.v_in - model.v_out)/tau],
+                      clk=model.clk, rst=model.rst)
 
     BUILD_DIR.mkdir(parents=True, exist_ok=True)
     model_file = BUILD_DIR / 'model.sv'
@@ -76,7 +79,6 @@ def test_rc(simulator, tau=1e-6, dt=0.1e-6):
         simulator=simulator,
         ext_srcs=[model_file, get_file('rc/test_rc.sv')],
         inc_dirs=[get_svreal_header().parent],
-        defines={'CLK_MSDSL': 'dut.clk', 'RST_MSDSL': 'dut.rst'},
         ext_model_file=True,
         disp_type='realtime'
     )

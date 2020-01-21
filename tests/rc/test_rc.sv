@@ -17,6 +17,8 @@ module test_rc(
         `PASS_REAL(v_out, v_out_int)
     ) model_i (
         .v_in(v_in_int),
-        .v_out(v_out_int)
+        .v_out(v_out_int),
+        .clk(clk),
+        .rst(rst)
     );
 endmodule

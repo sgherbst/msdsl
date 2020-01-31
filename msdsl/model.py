@@ -530,8 +530,8 @@ class MixedSignalModel:
         # return result
         return hist
 
-    def make_circuit(self):
-        c = Circuit(self)
+    def make_circuit(self, clk=None, rst=None):
+        c = Circuit(self, clk=clk, rst=rst)
         self.circuits.append(c)
         return c
 
@@ -539,7 +539,7 @@ class MixedSignalModel:
         # compile circuits
         for circuit in self.circuits:
             eqns = circuit.compile_to_eqn_list()
-            self.add_eqn_sys(eqns, circuit.extra_outputs)
+            self.add_eqn_sys(eqns, circuit.extra_outputs, clk=circuit.clk, rst=circuit.rst)
 
         # determine the I/Os and internal variables
         ios = []

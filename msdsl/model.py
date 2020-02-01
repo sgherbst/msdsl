@@ -400,7 +400,7 @@ class MixedSignalModel:
             else:
                 self.bind_name(outputs[row].name, expr)
 
-    def set_tf(self, input_: Signal, output: Signal, tf):
+    def set_tf(self, input_: Signal, output: Signal, tf, clk=None, rst=None):
         """
         Method to assign an output signal as a function of the input signal by applying a given transfer function.
         The transfer function is discretized using a timestep of "dt" by applying the zero-order hold method.
@@ -420,14 +420,14 @@ class MixedSignalModel:
         a = [-float(val) for val in res[1].flatten()]
 
         # create input and output histories
-        i_hist = self.make_history(input_, len(b))
-        o_hist = self.make_history(output, len(a))
+        i_hist = self.make_history(input_, len(b), clk=clk, rst=rst)
+        o_hist = self.make_history(output, len(a), clk=clk, rst=rst)
 
         # implement the filter
         expr = sum_op([coeff * var for coeff, var in chain(zip(b, i_hist), zip(a[1:], o_hist))])
 
         # make the assignment
-        self.set_next_cycle(signal=output, expr=expr)
+        self.set_next_cycle(signal=output, expr=expr, clk=clk, rst=rst)
 
     def inertial_delay(self, input_: ModelExpr, tr: Number, tf: Number):
         """
@@ -494,7 +494,7 @@ class MixedSignalModel:
         # return the result
         return last
 
-    def make_history(self, first: ModelExpr, length: Integral):
+    def make_history(self, first: ModelExpr, length: Integral, clk=None, rst=None):
         # initialize
         hist = []
 
@@ -522,7 +522,7 @@ class MixedSignalModel:
                 self.add_signal(curr)
 
                 # make the update assignment
-                self.set_next_cycle(signal=curr, expr=hist[k - 1])
+                self.set_next_cycle(signal=curr, expr=hist[k - 1], clk=clk, rst=rst)
 
                 # add this signal to the history
                 hist.append(curr)
@@ -530,8 +530,8 @@ class MixedSignalModel:
         # return result
         return hist
 
-    def make_circuit(self):
-        c = Circuit(self)
+    def make_circuit(self, clk=None, rst=None):
+        c = Circuit(self, clk=clk, rst=rst)
         self.circuits.append(c)
         return c
 
@@ -539,7 +539,7 @@ class MixedSignalModel:
         # compile circuits
         for circuit in self.circuits:
             eqns = circuit.compile_to_eqn_list()
-            self.add_eqn_sys(eqns, circuit.extra_outputs)
+            self.add_eqn_sys(eqns, circuit.extra_outputs, clk=circuit.clk, rst=circuit.rst)
 
         # determine the I/Os and internal variables
         ios = []

@@ -10,15 +10,12 @@ from svreal import get_svreal_header
 
 # msdsl imports
 from ..common import pytest_sim_params, get_file
-from msdsl import MixedSignalModel, VerilogGenerator, min_op, max_op
+from msdsl import MixedSignalModel, VerilogGenerator
 
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
 def pytest_generate_tests(metafunc):
     pytest_sim_params(metafunc)
-
-def clamp(a, min_val, max_val):
-    return min_op([max_op([a, min_val]), max_val])
 
 def gen_model(n, vn, vp, dt):
     # declare model I/O

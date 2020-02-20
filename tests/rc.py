@@ -1,6 +1,4 @@
-from msdsl.model import MixedSignalModel
-from msdsl.generator.verilog import VerilogGenerator
-from msdsl.eqn.deriv import Deriv
+from msdsl import MixedSignalModel, VerilogGenerator, Deriv
 
 def main():
     tau = 1e-6

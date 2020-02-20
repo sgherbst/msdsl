@@ -1,25 +1,28 @@
 import os
 
-from anasymod.enums import ConfigSections
-from anasymod.sources import Sources, VerilogHeader, VerilogSource, VHDLSource
+from anasymod.sources import VerilogHeader, VerilogSource
 from anasymod.defines import Define
 from anasymod.files import mkdir_p, rm_rf, get_from_module, which
 from argparse import ArgumentParser
 from anasymod.util import call
-from anasymod.util import call
 from anasymod.plugins import Plugin
+from anasymod.config import EmuConfig
 
 class CustomPlugin(Plugin):
-    def __init__(self, cfg_file, prj_root, build_root):
-        super().__init__(cfg_file=cfg_file, prj_root=prj_root, build_root=build_root, name='msdsl')
+    def __init__(self, prj_cfg: EmuConfig, cfg_file, prj_root):
+        super().__init__(cfg_file=cfg_file, prj_root=prj_root, build_root=os.path.join(prj_cfg.build_root_base, 'models'), name='msdsl')
+
+        self.include_statements += ['`include "msdsl.sv"']
 
         # Parse command line arguments specific to MSDSL
         self.args = None
         self._parse_args()
 
+        # Initialize Parameters
+        self.dt = prj_cfg.cfg.dt
+
         # Initialize msdsl config
-        self.cfg.dt = 0.1e-6
-        self.cfg.model_dir = os.path.join(self._build_root, 'models')
+        self.cfg.model_dir = self._build_root
 
         # Update msdsl config with msdsl section in config file
         self.cfg.update_config(subsection=self._name)
@@ -52,7 +55,13 @@ class CustomPlugin(Plugin):
 
         # run generator script
         gen_script = os.path.join(self._prj_root, 'gen.py')
-        call([which('python'), gen_script, '-o', self.cfg.model_dir, '--dt', str(self.cfg.dt)])
+
+        if 'PYTHON_MSDSL' in os.environ:
+            python_name = os.environ['PYTHON_MSDSL']
+        else:
+            python_name = which('python')
+            
+        call([python_name, gen_script, '-o', self.cfg.model_dir, '--dt', str(self.dt)])
 
 ##### Utility Functions
 
@@ -60,11 +69,8 @@ class CustomPlugin(Plugin):
         """
         Add Define objects that are specific to MSDSL
         """
-        self._set_dt()
+        self.add_define(Define(name='DT_MSDSL', value=self.dt))
         self.add_define(Define(name='SIMULATION_MODE_MSDSL', fileset='sim'))
-
-    def _set_dt(self):
-        self.add_define(Define(name='DT_MSDSL', value=self.cfg.dt))
 
     def _setup_sources(self):
         """

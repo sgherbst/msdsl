@@ -126,7 +126,7 @@
     // TODO: avoid using a hard-coded value for the emu_time width
 
     `define MAKE_TIME_PROBE \
-        `MAKE_GENERIC_REAL(emu_time, `TSTOP_MSDSL, 39); \
+        `MAKE_GENERIC_REAL(emu_time, 1.1*`TSTOP_MSDSL, 39); \
         `COPY_FORMAT_REAL(emu_time, emu_time_next); \
         `COPY_FORMAT_REAL(emu_time, emu_time_dt); \
         `ASSIGN_CONST_REAL(`DT_MSDSL, emu_time_dt); \

@@ -135,7 +135,15 @@ class VerilogGenerator(CodeGenerator):
     def make_mem(self, next_: Signal, curr: Signal, init: Number=0, clk: Signal=None, rst: Signal=None, ce: Signal = None):
         # set defaults
         clk_name = clk.name if clk is not None else '`CLK_MSDSL'
-        rst_name = rst.name if rst is not None else '`RST_MSDSL'
+
+        # determine name of reset signal
+        if rst is None:
+            rst_name = '`RST_MSDSL'
+        elif isinstance(rst, str):
+            rst_name = rst
+        else:
+            rst_name = rst.name
+
         ce_name = ce.name if ce is not None else "1'b1"
 
         # create memory for real number
@@ -301,7 +309,7 @@ class VerilogGenerator(CodeGenerator):
 
         # create a short real variable to be assigned the selected value from the array
         array_name = next(self.namer)
-        self.macro_call('MAKE_SHORT_REAL', array_name, compile_range_expr(expr.format_.range_))
+        self.macro_call('MAKE_SHORT_REAL', array_name, compile_range_expr(constant_array.format_.range_))
 
         # perform the multiplication
         self.macro_call('MUL_REAL', array_name, signal.name, output.name)

@@ -2,4 +2,5 @@
 .DS_Store
 msdsl.egg-info
 __pycache__
-build
+tests/*/build
+dist/

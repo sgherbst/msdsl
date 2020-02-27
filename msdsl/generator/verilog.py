@@ -482,6 +482,7 @@ class VerilogGenerator(CodeGenerator):
 
         # include required libraries
         self.include('svreal.sv')
+        self.include('msdsl.sv')
         self.writeln()
 
     def include(self, file):

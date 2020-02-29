@@ -10,7 +10,7 @@ from svreal import get_svreal_header
 
 # msdsl imports
 from ..common import pytest_sim_params, get_file
-from msdsl import MixedSignalModel, VerilogGenerator
+from msdsl import MixedSignalModel, VerilogGenerator, get_msdsl_header
 
 NAME = Path(__file__).stem.split('_')[1]
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
@@ -69,7 +69,7 @@ def test_comparator(simulator):
         directory=BUILD_DIR,
         simulator=simulator,
         ext_srcs=[model_file, get_file(f'{NAME}/test_{NAME}.sv')],
-        inc_dirs=[get_svreal_header().parent],
+        inc_dirs=[get_svreal_header().parent, get_msdsl_header().parent],
         ext_model_file=True,
         disp_type='realtime'
     )

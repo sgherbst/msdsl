@@ -11,7 +11,7 @@ from svreal import get_svreal_header
 
 # msdsl imports
 from ..common import pytest_sim_params, get_file
-from msdsl import MixedSignalModel, VerilogGenerator, AnalogSignal, Deriv
+from msdsl import MixedSignalModel, VerilogGenerator, AnalogSignal, Deriv, get_msdsl_header
 
 NAME = Path(__file__).stem.split('_')[1]
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
@@ -98,7 +98,7 @@ def test_rlc(simulator, cap=0.16e-6, ind=0.16e-6, res=0.1, dt=0.01e-6):
         directory=BUILD_DIR,
         simulator=simulator,
         ext_srcs=[model_file, get_file(f'{NAME}/test_{NAME}.sv')],
-        inc_dirs=[get_svreal_header().parent],
+        inc_dirs=[get_svreal_header().parent, get_msdsl_header().parent],
         ext_model_file=True,
         disp_type='realtime'
     )

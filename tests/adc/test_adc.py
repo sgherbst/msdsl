@@ -12,7 +12,7 @@ from svreal import get_svreal_header
 
 # msdsl imports
 from ..common import pytest_sim_params, get_file
-from msdsl import MixedSignalModel, VerilogGenerator, to_sint, clamp_op
+from msdsl import MixedSignalModel, VerilogGenerator, to_sint, clamp_op, get_msdsl_header
 
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
@@ -79,7 +79,7 @@ def test_adc(simulator, n_adc=8, v_ref_n=-1.0, v_ref_p=+1.0, dt=0.1e-6):
         directory=BUILD_DIR,
         simulator=simulator,
         ext_srcs=[model_file, get_file('adc/test_adc.sv')],
-        inc_dirs=[get_svreal_header().parent],
+        inc_dirs=[get_svreal_header().parent, get_msdsl_header().parent],
         parameters={'n_adc': n_adc},
         ext_model_file=True,
         disp_type='realtime'

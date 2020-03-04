@@ -10,7 +10,7 @@ from svreal import get_svreal_header
 
 # msdsl imports
 from ..common import pytest_sim_params, get_file
-from msdsl import MixedSignalModel, VerilogGenerator, AnalogSignal
+from msdsl import MixedSignalModel, VerilogGenerator, AnalogSignal, get_msdsl_header
 
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
@@ -87,7 +87,7 @@ def test_binding(simulator, rp1=1.0, rn1=2.0, rp2=3.0, rn2=4.0):
         directory=BUILD_DIR,
         simulator=simulator,
         ext_srcs=[model_file, get_file('circuit_sw/test_circuit_sw.sv')],
-        inc_dirs=[get_svreal_header().parent],
+        inc_dirs=[get_svreal_header().parent, get_msdsl_header().parent],
         ext_model_file=True,
         disp_type='realtime'
     )

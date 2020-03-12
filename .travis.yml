@@ -14,7 +14,7 @@ matrix:
     - CC=gcc-7
     - CXX=g++-7
   - os: osx
-    osx_image: xcode10.3
+    osx_image: xcode11.3
     addons:
       homebrew:
         packages:

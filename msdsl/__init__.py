@@ -7,3 +7,4 @@ from .generator.verilog import VerilogGenerator
 from .eqn.deriv import Deriv
 from .eqn.cases import eqn_case
 from .expr.expr import to_real, to_sint, to_uint, min_op, max_op, sum_op, clamp_op
+from .table import RealTable, IntTable, BinTable

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from .fixed_point import get_fixed_point_exp, fixed_to_float, float_to_fixed
+from msdsl.fixed_point import get_fixed_point_exp, fixed_to_float, float_to_fixed
 
 class RealTable:
     def __init__(self, real_vals, width=18, exp=None, name='real_table', dir='.'):

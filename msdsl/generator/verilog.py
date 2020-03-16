@@ -1,5 +1,6 @@
 from typing import List, Union
 from numbers import Number
+from math import ceil, log2
 import datetime
 
 from msdsl.generator.generator import CodeGenerator
@@ -8,6 +9,7 @@ from msdsl.expr.expr import ModelExpr, wrap_constant, ModelOperator, Constant, A
     BitwiseAccess, RealToSInt, SIntToUInt, BitwiseAnd, BitwiseOr, BitwiseXor, ArithmeticRightShift, \
     ArithmeticLeftShift, LessThan, LessThanOrEquals, GreaterThan, GreaterThanOrEquals, EqualTo, NotEqualTo, \
     Sum, Product, Min, Max
+from msdsl.expr.table import Table, RealTable, UIntTable, SIntTable
 from msdsl.expr.format import UIntFormat, SIntFormat, RealFormat, IntFormat
 from msdsl.expr.signals import Signal, AnalogSignal, DigitalSignal, AnalogInput, AnalogOutput, DigitalOutput, \
     DigitalInput
@@ -162,6 +164,24 @@ class VerilogGenerator(CodeGenerator):
             self.macro_call('MEM_INTO_DIGITAL', next_.name, curr.name, ce_name, clk_name, rst_name, str(init), str(next_.format_.width))
         else:
             raise Exception(f'Next and current formats do not match: {next_.name} with {next_.format_} vs. {curr.name} with {curr.format_}')
+
+    def make_sync_rom(self, signal: Signal, table: Table, addr: Signal,
+                      clk: Signal=None, ce: Signal=None):
+        # set defaults
+        clk_name = clk.name if clk is not None else "`CLK_MSDSL"
+        ce_name = ce.name if ce is not None else "1'b1"
+
+        if isinstance(table, RealTable):
+            # determine with of address bits
+            addr_bits = int(ceil(log2(len(table.real_vals))))
+
+            # determine number of data bits
+            data_bits = table.width
+            self.macro_call('SYNC_ROM_INTO_REAL', addr.name, signal.name, clk_name,
+                            ce_name, str(addr_bits), str(data_bits), f'"{table.path}"',
+                            str(table.exp))
+        else:
+            raise Exception(f'Unknown table type: {type(table)}')
 
     def start_module(self, name: str, ios: List[Signal], real_params: List):
         # clear default nettype to make debugging easier

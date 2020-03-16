@@ -1,6 +1,6 @@
 from pathlib import Path
 import numpy as np
-from msdsl import RealTable
+from msdsl.expr.table import RealTable
 
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
 

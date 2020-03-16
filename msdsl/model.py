@@ -6,7 +6,7 @@ from copy import deepcopy
 
 from math import ceil, log2
 
-from msdsl.assignment import ThisCycleAssignment, NextCycleAssignment, BindingAssignment, Assignment
+from msdsl.assignment import ThisCycleAssignment, NextCycleAssignment, BindingAssignment, SyncRomAssignment, Assignment
 from msdsl.expr.analyze import signal_names
 from msdsl.eqn.cases import address_to_settings
 from msdsl.eqn.eqn_sys import EqnSys
@@ -19,6 +19,7 @@ from msdsl.eqn.lds import LdsCollection
 from msdsl.expr.format import RealFormat, IntFormat, is_signed
 from msdsl.expr.extras import if_
 from msdsl.circuit import Circuit
+from msdsl.expr.table import Table
 
 from scipy.signal import cont2discrete
 
@@ -223,6 +224,29 @@ class MixedSignalModel:
         """
 
         return self.add_assignment(NextCycleAssignment(signal=signal, expr=expr, clk=clk, rst=rst, ce=ce))
+
+    def set_from_sync_rom(self, signal: Union[Signal, str], table: Table, addr: ModelExpr, clk=None, ce=None):
+        """
+        The behavior of this operation is a lookup from a synchronous ROM (which should synthesize
+        to block RAM on an FPGA).  Note that there is a one-cycle delay in this operation.
+
+        :param signal:  Signal object being assigned
+        :param table:   Lookup table object
+        :param addr:    Expression containing address
+        :param clk:     Optional input.  Will use `CLK_MSDSL by default.
+        :param ce:      Optional input for clock enable.  Will use "1" (i.e., always enabled) by default.
+        :return:
+        """
+
+        # bind the signal if necessary
+        should_bind = False
+        if isinstance(signal, str):
+            signal = self.add_signal(Signal(name=signal, format_=table.format_))
+            should_bind = True
+
+        # return the assignment
+        return self.add_assignment(SyncRomAssignment(signal=signal, table=table, addr=addr,
+                                                     clk=clk, ce=ce, should_bind=should_bind))
 
     # assignment access functions
 
@@ -579,6 +603,14 @@ class MixedSignalModel:
             elif isinstance(assignment, BindingAssignment):
                 gen.make_signal(assignment.signal)
                 gen.make_assign(input_=result, output=assignment.signal)
+            elif isinstance(assignment, SyncRomAssignment):
+                # generate the signal the will be assigned if needed
+                if assignment.should_bind:
+                    gen.make_signal(assignment.signal)
+
+                # generate the rom
+                gen.make_sync_rom(signal=assignment.signal, table=assignment.table,
+                                  addr=result, clk=assignment.clk, ce=assignment.ce)
             else:
                 raise Exception('Invalid assignment type.')
 

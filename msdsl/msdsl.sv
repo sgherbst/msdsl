@@ -34,6 +34,24 @@
     `DATA_TYPE_DIGITAL(width_expr) out_name; \
     `MEM_INTO_DIGITAL(in_name, out_name, cke_name, clk_name, rst_name, init_expr, width_expr)
 
+// Synchronous ROM
+
+`define SYNC_ROM_INTO_DIGITAL(addr_name, out_name, clk_name, ce_name, addr_bits_expr, data_bits_expr, file_path_expr) \
+    sync_rom_digital #( \
+        .addr_bits(addr_bits_expr), \
+        .data_bits(data_bits_expr), \
+        .file_path(file_path_expr) \
+    ) sync_rom_digital_``out_name``_i ( \
+        .addr(addr_name), \
+        .out(out_name), \
+        .clk(clk_name), \
+        .ce(ce_name) \
+    )
+
+`define SYNC_ROM_DIGITAL(addr_name, out_name, clk_name, ce_name, addr_bits_expr, data_bits_expr, file_path_expr) \
+    `DATA_TYPE_DIGITAL(data_bits_expr) out_name; \
+    `SYNC_ROM_INTO_DIGITAL(addr_name, out_name, clk_name, ce_name, addr_bits_expr, data_bits_expr, file_path_expr)
+
 // Probing waveforms
 
 `define DUMP_VAR(in_name) \
@@ -266,9 +284,37 @@ module mem_digital #(
     end
 
     // assign output
-
     assign out = state;
+endmodule
 
+// Synchronous ROM
+
+module sync_rom_digital #(
+    parameter integer addr_bits=1,
+    parameter integer data_bits=1,
+    parameter file_path=""
+) (
+    input wire logic [(addr_bits-1):0] addr,
+    output wire logic [(data_bits-1):0] out,
+    input wire logic clk,
+    input wire logic ce
+);
+    // load the ROM
+    logic [(data_bits-1):0] rom [0:((2**addr_bits)-1)];
+    initial begin
+        $readmemb(file_path, rom);
+    end
+
+    // read from the ROM
+    logic [(data_bits-1):0] data;
+    always @(posedge clk) begin
+        if (ce) begin
+            data <= rom[addr];
+        end
+    end
+
+    // assign to the output
+    assign out = data;
 endmodule
 
 // PWM model

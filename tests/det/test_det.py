@@ -44,23 +44,18 @@ def test_det(simulator, tau_f=1e-9, tau_s=100e-9, dt=10e-9):
     model_file = gen_model(tau_f=tau_f, tau_s=tau_s, dt=dt)
 
     # declare circuit
-    dut = m.DeclareCircuit(
-        f'test_{NAME}',
-        'v_in', fault.RealIn,
-        'v_out', fault.RealOut,
-        'clk', m.BitIn,
-        'rst', m.BitIn
-    )
+    class dut(m.Circuit):
+        name=f'test_{NAME}'
+        io=m.IO(
+            v_in=fault.RealIn,
+            v_out=fault.RealOut,
+            clk=m.ClockIn,
+            rst=m.BitIn
+        )
+
 
     # create the tester
-    tester = fault.Tester(dut)
-
-    def cycle(n=1):
-        for _ in range(n):
-            tester.poke(dut.clk, 1)
-            tester.eval()
-            tester.poke(dut.clk, 0)
-            tester.eval()
+    tester = fault.Tester(dut, dut.clk)
 
     def debug():
         tester.print("v_in: %0f, v_out: %0f\n", dut.v_in, dut.v_out)
@@ -70,11 +65,11 @@ def test_det(simulator, tau_f=1e-9, tau_s=100e-9, dt=10e-9):
     tester.poke(dut.clk, 0)
     tester.poke(dut.rst, 1)
     tester.poke(dut.v_in, v_in)
-    cycle()
+    tester.step(2)
 
     # clear reset
     tester.poke(dut.rst, 0)
-    cycle()
+    tester.step(2)
 
     # check initial values
     debug()
@@ -82,41 +77,41 @@ def test_det(simulator, tau_f=1e-9, tau_s=100e-9, dt=10e-9):
 
     # poke input
     tester.poke(dut.v_in, 1.5)
-    cycle()
+    tester.step(2)
     debug()
     tester.expect(dut.v_out, 1.5, abs_tol=0.1)
 
     # clear input and make sure output is still high
     tester.poke(dut.v_in, 0.0)
-    cycle()
+    tester.step(2)
     debug()
     tester.expect(dut.v_out, 1.4, abs_tol=0.1)
 
     # wait longer for output to decay back to zero
-    cycle(30)
+    tester.step(2*30)
     debug()
     tester.expect(dut.v_out, 0.0, abs_tol=0.1)
 
     # poke input again
     tester.poke(dut.v_in, 1.5)
-    cycle()
+    tester.step(2)
     debug()
     tester.expect(dut.v_out, 1.5, abs_tol=0.1)
 
     # this time set input to a mid-range value
     tester.poke(dut.v_in, 0.5)
-    cycle()
+    tester.step(2)
     debug()
     tester.expect(dut.v_out, 1.4, abs_tol=0.1)
 
     # wait longer for output to decay to new input
-    cycle(30)
+    tester.step(2*30)
     debug()
     tester.expect(dut.v_out, 0.5, abs_tol=0.1)
 
     # increase input and make sure output tracks immediately
     tester.poke(dut.v_in, 2.5)
-    cycle()
+    tester.step(2)
     debug()
     tester.expect(dut.v_out, 2.5, abs_tol=0.1)
 

@@ -40,12 +40,13 @@ def test_comparator(simulator):
     model_file = gen_model()
 
     # declare circuit
-    dut = m.DeclareCircuit(
-        f'test_{NAME}',
-        'a', fault.RealIn,
-        'b', fault.RealIn,
-        'c', m.BitOut
-    )
+    class dut(m.Circuit):
+        name = f'test_{NAME}'
+        io = m.IO(
+            a=fault.RealIn,
+            b=fault.RealIn,
+            c=m.BitOut
+        )
 
     t = fault.Tester(dut)
 

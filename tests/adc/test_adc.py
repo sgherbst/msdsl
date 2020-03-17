@@ -46,11 +46,12 @@ def test_adc(simulator, n_adc=8, v_ref_n=-1.0, v_ref_p=+1.0, dt=0.1e-6):
     model_file = gen_model(n=n_adc, vn=v_ref_n, vp=v_ref_p, dt=dt)
 
     # declare circuit
-    dut = m.DeclareCircuit(
-        'test_adc',
-        'a_in', fault.RealIn,
-        'd_out', m.Out(m.SInt[n_adc])
-    )
+    class dut(m.Circuit):
+        name = 'test_adc'
+        io = m.IO(
+            a_in=fault.RealIn,
+            d_out=m.Out(m.SInt[n_adc])
+        )
 
     def model(a_in):
         code = ((a_in - v_ref_n) / (v_ref_p - v_ref_n)) * ((2**n_adc) - 1)

@@ -40,11 +40,12 @@ def test_eqn_no_dyn(simulator, const=1.23):
     model_file = gen_model(const=const)
 
     # declare circuit
-    dut = m.DeclareCircuit(
-        f'test_{NAME}',
-        'a', fault.RealIn,
-        'b', fault.RealOut
-    )
+    class dut(m.Circuit):
+        name=f'test_{NAME}'
+        io=m.IO(
+            a=fault.RealIn,
+            b=fault.RealOut
+        )
 
     t = fault.Tester(dut)
 

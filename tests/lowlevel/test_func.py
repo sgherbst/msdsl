@@ -5,7 +5,7 @@ from msdsl import Function
 
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
-@pytest.mark.parametrize("order,err_limit", [(0, 0.1)])
+@pytest.mark.parametrize("order,err_limit", [(0, 0.06)])
 def test_real_func(order, err_limit):
     # function parameters
     testfun = np.sin

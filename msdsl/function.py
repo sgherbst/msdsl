@@ -59,11 +59,15 @@ class Function:
 
     def get_addr_expr(self, in_):
         # calculate result as a real number
-        expr = (in_ - self.domain[0])*((self.numel-1)/(self.domain[1]-self.domain[0]))
+        addr_real = (in_ - self.domain[0])*((self.numel-1)/(self.domain[1]-self.domain[0]))
         # convert to a signed integer
-        expr = to_sint(expr, width=self.addr_bits+1)
+        addr_sint = to_sint(addr_real, width=self.addr_bits+1)
         # clamp if needed
         if self.clamp:
-            expr = clamp_op(expr, 0, self.numel-1)
+            addr_sint = clamp_op(addr_sint, 0, self.numel-1)
+        # convert address to an unsigned integer
+        addr_uint = to_uint(addr_sint, width=self.addr_bits)
+        # calculate fractional address
+        addr_frac = addr_real - addr_sint
         # convert to an unsigned integer
-        return to_uint(expr, width=self.addr_bits)
+        return addr_uint, addr_frac

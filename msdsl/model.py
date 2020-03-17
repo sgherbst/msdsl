@@ -258,7 +258,8 @@ class MixedSignalModel:
         return self.add_assignment(SyncRomAssignment(signal=signal, table=table, addr=addr,
                                                      clk=clk, ce=ce, should_bind=should_bind))
 
-    def set_from_sync_func(self, signal: Union[Signal, str], func: Function, in_: ModelExpr, clk=None, ce=None):
+    def set_from_sync_func(self, signal: Union[Signal, str], func: Function, in_: ModelExpr,
+                           clk=None, ce=None, rst=None):
         """
         The behavior of this operation is a an evaluation of a Function.
         There is a one-cycle delay in this operation.
@@ -268,11 +269,52 @@ class MixedSignalModel:
         :param in_:      Real-number input of the function
         :param clk:      Optional input.  Will use `CLK_MSDSL by default.
         :param ce:       Optional input for clock enable.  Will use "1" (i.e., always enabled) by default.
+        :param rst:      Option input for reset.  Will use `RST_MSDSL by default
         :return:
         """
 
-        addr = func.get_addr_expr(in_)
-        return self.set_from_sync_rom(signal=signal, table=func.tables[0], addr=addr, clk=clk, ce=ce)
+        addr_uint, addr_frac = func.get_addr_expr(in_)
+
+        # look up coefficient values
+        coeffs = [f'{func.name}_coeff_{k}' for k in range(func.order+1)]
+        for coeff, table in zip(coeffs, func.tables):
+            self.set_from_sync_rom(signal=coeff, table=table, addr=addr_uint, clk=clk, ce=ce)
+
+        # compute higher-order products of terms
+        prods_imm = [f'{func.name}_prod_imm_{k}' for k in range(func.order)]
+        for k in range(func.order):
+            if k == 0:
+                self.set_this_cycle(prods_imm[k], addr_frac)
+            else:
+                self.set_this_cycle(prods_imm[k], addr_frac*self.get_signal(prods_imm[k-1]))
+
+        # delay products by one cycle
+        prods_del = []
+        for k in range(func.order):
+            # get value of immediate product
+            prod_imm = self.get_signal(prods_imm[k])
+            # create a delayed signal with the same format
+            prod_del = self.add_analog_state(
+                f'{func.name}_prod_del_{k}',
+                range_=prod_imm.format_.range_,
+                width=prod_imm.format_.width,
+                exponent=prod_imm.format_.exponent
+            )
+            # assign to that signal with a delay
+            self.set_next_cycle(prod_del, prod_imm, clk=clk, rst=rst, ce=ce)
+            # save the signal
+            prods_del.append(prod_del)
+
+        # compute output terms to be summed
+        terms = []
+        for k in range(func.order+1):
+            if k == 0:
+                terms.append(self.get_signal(coeffs[k]))
+            else:
+                terms.append(self.get_signal(coeffs[k])*prods_del[k])
+
+        # assign output value
+        self.set_this_cycle(signal, sum_op(terms))
 
     # table creation functions
 
@@ -687,11 +729,6 @@ class MixedSignalModel:
                 gen.make_signal(assignment.signal)
                 gen.make_assign(input_=result, output=assignment.signal)
             elif isinstance(assignment, SyncRomAssignment):
-                # generate the signal the will be assigned if needed
-                if assignment.should_bind:
-                    gen.make_signal(assignment.signal)
-
-                # generate the rom
                 gen.make_sync_rom(signal=assignment.signal, table=assignment.table,
                                   addr=result, clk=assignment.clk, ce=assignment.ce)
             else:

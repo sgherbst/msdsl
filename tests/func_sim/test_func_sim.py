@@ -19,6 +19,7 @@ RANGE = 1.0
 
 def pytest_generate_tests(metafunc):
     pytest_sim_params(metafunc)
+    metafunc.parametrize('order,err_lim', [(0, 0.06)])
 
 def myfunc(x):
     # clip input
@@ -26,7 +27,7 @@ def myfunc(x):
     # apply function
     return np.sin(x)
 
-def gen_model():
+def gen_model(order=0):
     # create mixed-signal model
     model = MixedSignalModel('model', build_dir=BUILD_DIR)
     model.add_analog_input('in_')
@@ -34,7 +35,7 @@ def gen_model():
     model.add_digital_input('clk')
 
     # create function
-    real_func = model.make_function(myfunc, domain=[-DOMAIN, +DOMAIN])
+    real_func = model.make_function(myfunc, domain=[-DOMAIN, +DOMAIN], order=order)
 
     # apply function
     model.set_from_sync_func(model.out, real_func, model.in_, clk=model.clk)
@@ -42,9 +43,9 @@ def gen_model():
     # write the model
     return model.compile_to_file(VerilogGenerator())
 
-def test_func_sim(simulator):
+def test_func_sim(simulator, order, err_lim):
     # generate model
-    model_file = gen_model()
+    model_file = gen_model(order=order)
 
     # declare circuit
     class dut(m.Circuit):
@@ -63,11 +64,13 @@ def test_func_sim(simulator):
     tester.poke(dut.in_, 0)
     tester.eval()
 
-    # print the first few outputs
-    for in_ in np.linspace(-1.2*DOMAIN, +1.2*DOMAIN, 100):
+    # save the outputs
+    inpts = np.random.uniform(-1.2*DOMAIN, +1.2*DOMAIN, 100)
+    apprx = []
+    for in_ in inpts:
         tester.poke(dut.in_, in_)
         tester.step(2)
-        tester.expect(dut.out, myfunc(in_), abs_tol=0.02)
+        apprx.append(tester.get_value(dut.out))
 
     # run the simulation
     parameters = {
@@ -84,3 +87,13 @@ def test_func_sim(simulator):
         ext_model_file=True,
         disp_type='realtime'
     )
+
+    # evaluate the outputs
+    apprx = [elem.value for elem in apprx]
+
+    # compute the exact response to inputs
+    exact = myfunc(inpts)
+
+    # check the result
+    err = np.linalg.norm(exact-apprx)
+    assert err <= err_lim

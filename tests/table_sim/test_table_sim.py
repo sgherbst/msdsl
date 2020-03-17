@@ -1,7 +1,6 @@
 # general imports
 from pathlib import Path
 import numpy as np
-from math import ceil, log2
 
 # AHA imports
 import magma as m
@@ -12,27 +11,37 @@ from svreal import get_svreal_header
 
 # msdsl imports
 from ..common import pytest_sim_params, get_file
-from msdsl import MixedSignalModel, VerilogGenerator, get_msdsl_header
-from msdsl.expr.table import RealTable
+from msdsl import (MixedSignalModel, VerilogGenerator, get_msdsl_header,
+                   RealTable, SIntTable, UIntTable)
 
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
 def pytest_generate_tests(metafunc):
     pytest_sim_params(metafunc)
 
-def gen_model(real_vals):
+def gen_model(real_vals, sint_vals, uint_vals):
+    # create tables
+    real_table = RealTable(real_vals, dir=BUILD_DIR)
+    sint_table = SIntTable(sint_vals, dir=BUILD_DIR)
+    uint_table = UIntTable(uint_vals, dir=BUILD_DIR)
+
     # create mixed-signal model
     model = MixedSignalModel('model')
-    model.add_digital_input('addr', width=int(ceil(log2(len(real_vals)))))
+    model.add_digital_input('addr', width=real_table.addr_bits)
     model.add_digital_input('clk')
-    model.add_analog_output('out')
+    model.add_analog_output('real_out')
+    model.add_digital_output('sint_out', width=sint_table.width)
+    model.add_digital_output('uint_out', width=uint_table.width)
 
-    # write tables
-    table = RealTable(real_vals, dir=BUILD_DIR)
-    table.to_file()
+    # assign values
+    model.set_from_sync_rom(model.real_out, real_table, model.addr, clk=model.clk)
+    model.set_from_sync_rom(model.sint_out, sint_table, model.addr, clk=model.clk)
+    model.set_from_sync_rom(model.uint_out, uint_table, model.addr, clk=model.clk)
 
-    # assign value
-    model.set_from_sync_rom(model.out, table, model.addr, clk=model.clk)
+    # write the tables
+    real_table.to_file()
+    sint_table.to_file()
+    uint_table.to_file()
 
     # write the model
     BUILD_DIR.mkdir(parents=True, exist_ok=True)
@@ -42,12 +51,15 @@ def gen_model(real_vals):
     # return the location of the model
     return model_file
 
-def test_table_sim(simulator, addr_bits=10, out_range=10):
+def test_table_sim(simulator, addr_bits=8, real_range=10, sint_bits=8, uint_bits=8):
     # generate random data to go into the table
-    real_vals = np.random.uniform(-out_range, +out_range, 1<<addr_bits)
+    n_samp = 1<<addr_bits
+    real_vals = np.random.uniform(-real_range, +real_range, n_samp)
+    sint_vals = np.random.randint(-(1<<(sint_bits-1)), 1<<(sint_bits-1), n_samp)
+    uint_vals = np.random.randint(0, 1<<uint_bits, n_samp)
 
     # generate model
-    model_file = gen_model(real_vals)
+    model_file = gen_model(real_vals, sint_vals, uint_vals)
 
     # declare circuit
     class dut(m.Circuit):
@@ -55,11 +67,13 @@ def test_table_sim(simulator, addr_bits=10, out_range=10):
         io = m.IO(
             addr=m.In(m.Bits[addr_bits]),
             clk=m.In(m.Clock),
-            out=fault.RealOut
+            real_out=fault.RealOut,
+            sint_out=m.Out(m.SInt[sint_bits]),
+            uint_out=m.Out(m.UInt[uint_bits])
         )
 
     # create the tester
-    tester = fault.Tester(dut, dut.clk)
+    tester = fault.Tester(dut, dut.clk, expect_strict_default=True)
 
     # initialize
     tester.poke(dut.clk, 0)
@@ -67,15 +81,20 @@ def test_table_sim(simulator, addr_bits=10, out_range=10):
     tester.eval()
 
     # print the first few outputs
-    for k, val in enumerate(real_vals):
+    for k, (real_val, sint_val, uint_val) \
+            in enumerate(zip(real_vals, sint_vals, uint_vals)):
         tester.poke(dut.addr, k)
         tester.step(2)
-        tester.expect(dut.out, val, abs_tol=0.001)
+        tester.expect(dut.real_out, real_val, abs_tol=0.001)
+        tester.expect(dut.sint_out, int(sint_val))
+        tester.expect(dut.uint_out, int(uint_val))
 
     # run the simulation
     parameters = {
         'addr_bits': addr_bits,
-        'out_range': out_range
+        'real_range': real_range,
+        'sint_bits': sint_bits,
+        'uint_bits': uint_bits
     }
     tester.compile_and_run(
         target='system-verilog',

@@ -1,34 +1,40 @@
 from pathlib import Path
 from math import ceil, log2
 from .format import RealFormat, UIntFormat, SIntFormat
+from numbers import Integral
 
 def clog2(val):
     return int(ceil(log2(val)))
 
 class Table:
-    @property
-    def format_(self):
-        raise NotImplementedError
+    def __init__(self, vals, width, name, dir, format_):
+        # validate input
+        assert isinstance(width, Integral), 'Width must be an integer'
 
-class UIntTable(Table):
-    def __init__(self, uint_vals, width=None, name='uint_table', dir='.'):
-        # set defaults
-        if width is None:
-            width = max(self.get_unsigned_width(uint_val)
-                        for uint_val in uint_vals)
-        self.uint_vals = uint_vals
+        # save settings
+        self.vals = vals
         self.width = width
         self.name = name
-        self.dir = dir
+        self.dir = Path(dir)
+        self.format_ = format_
+
+    @property
+    def addr_bits(self):
+        return int(ceil(log2(len(self.vals))))
 
     @property
     def path(self):
-        return Path(self.dir) / f'{self.name}.mem'
+        return self.dir / f'{self.name}.mem'
 
-    @property
-    def format_(self):
-        return UIntFormat(width=self.width, min_val=min(self.uint_vals),
-                          max_val=max(self.uint_vals))
+class UIntTable(Table):
+    def __init__(self, vals, width=None, name='uint_table', dir='.'):
+        # set defaults
+        if width is None:
+            width = max(self.get_width(val) for val in vals)
+        # determine the format
+        format_ = UIntFormat(width=width, min_val=min(vals), max_val=max(vals))
+        # call super constructor
+        super().__init__(vals=vals, width=width, name=name, dir=dir, format_=format_)
 
     def to_file(self, path=None):
         # set path if needed
@@ -40,7 +46,7 @@ class UIntTable(Table):
 
         # write to file
         with open(path, 'w') as f:
-            for elem in self.uint_vals:
+            for elem in self.vals:
                 bin_str = '{0:0{1}b}'.format(elem, self.width)
                 f.write(f'{bin_str}\n')
 
@@ -63,13 +69,13 @@ class UIntTable(Table):
             raise Exception(f'Could not determine the width of binary values in a file.')
 
         # convert binary strings to binary values
-        uint_vals = [int(bin_str, 2) for bin_str in bin_strs]
+        vals = [int(bin_str, 2) for bin_str in bin_strs]
 
         # convert binary values back to integers
-        return cls(uint_vals=uint_vals, width=width, name=name, dir=dir)
+        return cls(vals=vals, width=width, name=name, dir=dir)
 
     @classmethod
-    def get_unsigned_width(cls, val):
+    def get_width(cls, val):
         if val == 0:
             return 1
         elif val < 0:
@@ -78,41 +84,29 @@ class UIntTable(Table):
             return clog2(val+1)
 
 class SIntTable(Table):
-    def __init__(self, sint_vals, width=None, name='sint_table', dir='.'):
+    def __init__(self, vals, width=None, name='sint_table', dir='.'):
         # set defaults
         if width is None:
-            width = max(self.get_signed_width(int_val)
-                        for int_val in sint_vals)
-
-        # save settings
-        self.sint_vals = sint_vals
-        self.width = width
-        self.name = name
-        self.dir = dir
-
-    @property
-    def path(self):
-        return Path(self.dir) / f'{self.name}.mem'
-
-    @property
-    def format_(self):
-        return SIntFormat(width=self.width, min_val=min(self.sint_vals),
-                          max_val=max(self.sint_vals))
+            width = max(self.get_width(val) for val in vals)
+        # determine the format
+        format_ = SIntFormat(width=width, min_val=min(vals), max_val=max(vals))
+        # call super constructor
+        super().__init__(vals=vals, width=width, name=name, dir=dir, format_=format_)
 
     @classmethod
     def from_file(cls, name='sint_table', dir='.'):
-        # get binary values from file
+        # get unsigned integer values from file
         uint_table = UIntTable.from_file(name=name, dir=dir)
 
         # convert to signed integers
-        sint_vals = []
-        for uint_val in uint_table.uint_vals:
+        vals = []
+        for uint_val in uint_table.vals:
             if uint_val < (1<<(uint_table.width-1)):
-                sint_vals.append(uint_val)
+                vals.append(uint_val)
             else:
-                sint_vals.append(uint_val-(1<<(uint_table.width)))
+                vals.append(uint_val-(1<<(uint_table.width)))
 
-        return cls(sint_vals=sint_vals, width=uint_table.width, name=name, dir=dir)
+        return cls(vals=vals, width=uint_table.width, name=name, dir=dir)
 
     def to_file(self, path=None):
         # set path if needed
@@ -120,13 +114,12 @@ class SIntTable(Table):
             path = self.path
 
         # convert values to UInts and write those to a file
-        uint_vals = [sint_val & ((1<<self.width)-1)
-                    for sint_val in self.sint_vals]
-        uint_table = UIntTable(uint_vals=uint_vals, width=self.width)
+        uint_vals = [val & ((1<<self.width)-1) for val in self.vals]
+        uint_table = UIntTable(vals=uint_vals, width=self.width)
         uint_table.to_file(path)
 
     @classmethod
-    def get_signed_width(cls, val):
+    def get_width(cls, val):
         if val == 0:
             return 1
         elif val < 0:
@@ -135,31 +128,27 @@ class SIntTable(Table):
             return clog2(val+1)+1
 
 class RealTable(Table):
-    def __init__(self, real_vals, width=18, exp=None, name='real_table', dir='.'):
-        # calculate defaults
+    def __init__(self, vals, width=18, exp=None, name='real_table', dir='.'):
+        # calculate the range of values
+        range_ = max([abs(val) for val in vals])
+
+        # set defaults
         if exp is None:
-            range_ = max([abs(real_val) for real_val in real_vals])
-            exp = self.get_fixed_point_exp(range_, width=width)
+            exp = self.get_exp(range_, width=width)
+        assert isinstance(exp, Integral), 'Exponent must be an integer value.'
 
-        # save settings
-        self.real_vals = real_vals
-        self.width = width
+        # determine the format
+        format_ = RealFormat(range_=range_, width=width, exponent=exp)
+
+        # call the super constructor
+        super().__init__(vals=vals, width=width, name=name, dir=dir, format_=format_)
+
+        # save additional settings
         self.exp = exp
-        self.name = name
-        self.dir = dir
-
-        # call the superconstructor
-        super().__init__()
 
     @property
     def path(self):
-        return Path(self.dir) / f'{self.name}_exp_{self.exp}.mem'
-
-    @property
-    def format_(self):
-        range_ = max(abs(real_val) for real_val in self.real_vals)
-        return RealFormat(range_=range_, width=self.width,
-                          exponent=self.exp)
+        return self.dir / f'{self.name}_exp_{self.exp}.mem'
 
     def to_file(self, path=None):
         # set path if needed
@@ -167,9 +156,8 @@ class RealTable(Table):
             path = self.path
 
         # convert values to SInts and write those to a file
-        sint_vals = [self.float_to_fixed(real_val, exp=self.exp)
-                     for real_val in self.real_vals]
-        sint_table = SIntTable(sint_vals=sint_vals, width=self.width)
+        sint_vals = [self.float_to_fixed(val, exp=self.exp) for val in self.vals]
+        sint_table = SIntTable(vals=sint_vals, width=self.width)
         sint_table.to_file(path)
 
     @classmethod
@@ -199,23 +187,22 @@ class RealTable(Table):
             exp = int(tokens[-1])
 
         # convert integers to floating point
-        real_vals = [cls.fixed_to_float(sint_val, exp=exp)
-                     for sint_val in sint_table.sint_vals]
+        vals = [cls.fixed_to_float(sint_val, exp=exp)
+                for sint_val in sint_table.vals]
 
         # return RealTable
         name = '_'.join(sint_table.name.split('_')[:-2])
-        return cls(real_vals=real_vals, width=sint_table.width,
-                   exp=exp, name=name, dir=dir)
+        return cls(vals=vals, width=sint_table.width, exp=exp, name=name, dir=dir)
 
     @classmethod
-    def get_fixed_point_exp(cls, val, width):
+    def get_exp(cls, range_, width):
         # calculate the exponent value
-        if val == 0:
+        if range_ == 0:
             # val = 0 is a special case because log2(0)=-inf
             # hence any value for the exponent will work
             exp = 0
         else:
-            exp = clog2(abs(val)/((1<<(width-1))-1))
+            exp = clog2(abs(range_)/((1<<(width-1))-1))
 
         # return the exponent
         return exp

@@ -172,14 +172,15 @@ class VerilogGenerator(CodeGenerator):
         ce_name = ce.name if ce is not None else "1'b1"
 
         if isinstance(table, RealTable):
-            # determine with of address bits
-            addr_bits = int(ceil(log2(len(table.real_vals))))
-
-            # determine number of data bits
-            data_bits = table.width
             self.macro_call('SYNC_ROM_INTO_REAL', addr.name, signal.name, clk_name,
-                            ce_name, str(addr_bits), str(data_bits), f'"{table.path}"',
-                            str(table.exp))
+                            ce_name, table.addr_bits, table.width, f'"{table.path}"',
+                            table.exp)
+        elif isinstance(table, SIntTable):
+            self.macro_call('SYNC_ROM_INTO_SINT', addr.name, signal.name, clk_name,
+                            ce_name, table.addr_bits, table.width, f'"{table.path}"')
+        elif isinstance(table, UIntTable):
+            self.macro_call('SYNC_ROM_INTO_UINT', addr.name, signal.name, clk_name,
+                            ce_name, table.addr_bits, table.width, f'"{table.path}"')
         else:
             raise Exception(f'Unknown table type: {type(table)}')
 
@@ -513,7 +514,7 @@ class VerilogGenerator(CodeGenerator):
 
     def macro_call(self, macro_name, *args, comment=None):
         # format the basic macro call
-        line = f"`{macro_name}({', '.join(args)});"
+        line = f"`{macro_name}({', '.join(str(arg) for arg in args)});"
 
         # add a comment if desired
         if comment is not None:

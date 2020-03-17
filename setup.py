@@ -25,7 +25,8 @@ setup(
         'svreal>=0.2.1',
         'scipy',
         'numpy',
-        'matplotlib'
+        'matplotlib',
+        'cvxpy'
     ],
     license='MIT',
     url=f'https://github.com/sgherbst/{name}',

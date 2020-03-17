@@ -314,7 +314,7 @@ class MixedSignalModel:
                 terms.append(self.get_signal(coeffs[k])*prods_del[k])
 
         # assign output value
-        self.set_this_cycle(signal, sum_op(terms))
+        return self.set_this_cycle(signal, sum_op(terms))
 
     # table creation functions
 

@@ -6,7 +6,8 @@ module test_func_sim #(
 ) (
     input real in_,
     output real out,
-    input clk
+    input clk,
+    input rst
 );
     // wire input
     `MAKE_REAL(in_int, in_range);
@@ -23,6 +24,7 @@ module test_func_sim #(
     ) model_i (
         .in_(in_int),
         .out(out_int),
-        .clk(clk)
+        .clk(clk),
+        .rst(rst)
     );
 endmodule

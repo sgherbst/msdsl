@@ -273,7 +273,10 @@ class MixedSignalModel:
         :return:
         """
 
-        addr_uint, addr_frac = func.get_addr_expr(in_)
+        # get expressions for integer and fractions parts
+        addr_uint_expr, addr_frac_expr = func.get_addr_expr(in_)
+        addr_uint = self.set_this_cycle(f'{func.name}_addr_uint', addr_uint_expr)
+        addr_frac = self.set_this_cycle(f'{func.name}_addr_frac', addr_frac_expr)
 
         # look up coefficient values
         coeffs = [f'{func.name}_coeff_{k}' for k in range(func.order+1)]
@@ -311,7 +314,7 @@ class MixedSignalModel:
             if k == 0:
                 terms.append(self.get_signal(coeffs[k]))
             else:
-                terms.append(self.get_signal(coeffs[k])*prods_del[k])
+                terms.append(self.get_signal(coeffs[k])*prods_del[k-1])
 
         # assign output value
         return self.set_this_cycle(signal, sum_op(terms))

@@ -62,7 +62,7 @@ def test_table_sim(simulator, addr_bits=8, real_range=10, sint_bits=8, uint_bits
         )
 
     # create the tester
-    tester = fault.Tester(dut, dut.clk, expect_strict_default=True)
+    tester = fault.Tester(dut, dut.clk)
 
     # initialize
     tester.poke(dut.clk, 0)

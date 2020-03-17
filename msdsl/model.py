@@ -21,6 +21,7 @@ from msdsl.expr.format import RealFormat, IntFormat, is_signed
 from msdsl.expr.extras import if_
 from msdsl.circuit import Circuit
 from msdsl.expr.table import Table, RealTable, SIntTable, UIntTable
+from msdsl.function import Function
 
 from scipy.signal import cont2discrete
 
@@ -43,16 +44,17 @@ class MixedSignalModel:
         self.circuits = []
         self.real_params = []
         self.lookup_tables = []
-        self.lut_namers = {
-            'real': Namer(prefix='real_table_'),
-            'sint': Namer(prefix='sint_table_'),
-            'uint': Namer(prefix='uint_table_')
-        }
+        self.namers = {}
         self.namer = Namer()
 
         # add ios
         for io in ios:
             self.add_signal(io)
+
+    def get_next_name(self, key):
+        if key not in self.namers:
+            self.namers[key] = Namer(prefix=key)
+        return next(self.namers[key])
 
     def __getattr__(self, item):
         return self.get_signal(item)
@@ -256,12 +258,28 @@ class MixedSignalModel:
         return self.add_assignment(SyncRomAssignment(signal=signal, table=table, addr=addr,
                                                      clk=clk, ce=ce, should_bind=should_bind))
 
+    def set_from_sync_func(self, signal: Union[Signal, str], func: Function, in_: ModelExpr, clk=None, ce=None):
+        """
+        The behavior of this operation is a an evaluation of a Function.
+        There is a one-cycle delay in this operation.
+
+        :param signal:   Signal object being assigned
+        :param function: Function object
+        :param in_:      Real-number input of the function
+        :param clk:      Optional input.  Will use `CLK_MSDSL by default.
+        :param ce:       Optional input for clock enable.  Will use "1" (i.e., always enabled) by default.
+        :return:
+        """
+
+        addr = func.get_addr_expr(in_)
+        return self.set_from_sync_rom(signal=signal, table=func.tables[0], addr=addr, clk=clk, ce=ce)
+
     # table creation functions
 
     def make_real_table(self, vals, width=18, exp=None, name=None, dir=None):
         # set defaults
         if name is None:
-            name = next(self.lut_namers['real'])
+            name = self.get_next_name('real_table_')
         if dir is None:
             dir = self.build_dir
 
@@ -273,7 +291,7 @@ class MixedSignalModel:
     def make_sint_table(self, vals, width=None, name=None, dir=None):
         # set defaults
         if name is None:
-            name = next(self.lut_namers['sint'])
+            name = self.get_next_name('sint_table_')
         if dir is None:
             dir = self.build_dir
 
@@ -285,7 +303,7 @@ class MixedSignalModel:
     def make_uint_table(self, vals, width=None, name=None, dir=None):
         # set defaults
         if name is None:
-            name = next(self.lut_namers['uint'])
+            name = self.get_next_name('uint_table_')
         if dir is None:
             dir = self.build_dir
 
@@ -293,6 +311,25 @@ class MixedSignalModel:
         table = UIntTable(vals=vals, width=width, name=name, dir=dir)
         self.lookup_tables.append(table)
         return table
+
+    # function creation
+
+    def make_function(self, func, domain, name=None, dir=None, **kwargs):
+        # set defaults
+        if name is None:
+            name = self.get_next_name('real_func_')
+        if dir is None:
+            dir = self.build_dir
+
+        # create the table, register it, and return it
+        function = Function(func=func, domain=domain, name=name, dir=dir, **kwargs)
+        function.create_tables()
+
+        # append values
+        self.lookup_tables.extend(function.tables)
+
+        # return function
+        return function
 
     # assignment access functions
 

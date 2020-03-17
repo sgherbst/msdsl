@@ -43,11 +43,19 @@ class Function:
         self.tables.append(table)
 
     def eval_on(self, samp):
-        addr = (samp - self.domain[0])*((self.numel-1)/(self.domain[1]-self.domain[0]))
+        # calculate address as a real value
+        addr_real = (samp - self.domain[0])*((self.numel-1)/(self.domain[1]-self.domain[0]))
         if self.clamp:
-            addr = np.clip(addr, 0, self.numel-1)
-        addr = addr.astype(np.int)
-        return self.tables[0].vals[addr]
+            addr_real = np.clip(addr_real, 0, self.numel-1)
+        # calculate integer and fractional addresses
+        addr_int = addr_real.astype(np.int)
+        addr_frac = addr_real - addr_int
+        # sum up output contributions
+        out = np.zeros(len(samp))
+        for k in range(self.order+1):
+            out += self.tables[k].vals[addr_int] * np.power(addr_frac, k)
+        # return output
+        return out
 
     def get_addr_expr(self, in_):
         # calculate result as a real number

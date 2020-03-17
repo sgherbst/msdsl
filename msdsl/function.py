@@ -5,13 +5,13 @@ from .expr.expr import clamp_op, to_uint, to_sint
 
 class Function:
     def __init__(self, func, domain, name='real_func', dir='.',
-                 numel=512, order=1, clamp=True, coeff_widths=None,
+                 numel=512, order=0, clamp=True, coeff_widths=None,
                  coeff_exps=None):
         # set defaults
         if coeff_widths is None:
-            coeff_widths = [18]*order
+            coeff_widths = [18]*(order+1)
         if coeff_exps is None:
-            coeff_exps = [None]*order
+            coeff_exps = [None]*(order+1)
 
         # save settings
         self.func = func

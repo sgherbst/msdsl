@@ -11,45 +11,34 @@ from svreal import get_svreal_header
 
 # msdsl imports
 from ..common import pytest_sim_params, get_file
-from msdsl import (MixedSignalModel, VerilogGenerator, get_msdsl_header,
-                   RealTable, SIntTable, UIntTable)
+from msdsl import MixedSignalModel, VerilogGenerator, get_msdsl_header
 
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
 def pytest_generate_tests(metafunc):
     pytest_sim_params(metafunc)
 
-def gen_model(real_vals, sint_vals, uint_vals):
-    # create tables
-    real_table = RealTable(real_vals, dir=BUILD_DIR)
-    sint_table = SIntTable(sint_vals, dir=BUILD_DIR)
-    uint_table = UIntTable(uint_vals, dir=BUILD_DIR)
-
+def gen_model(real_vals, sint_vals, uint_vals, addr_bits, sint_bits, uint_bits):
     # create mixed-signal model
-    model = MixedSignalModel('model')
-    model.add_digital_input('addr', width=real_table.addr_bits)
+    model = MixedSignalModel('model', build_dir=BUILD_DIR)
+    model.add_digital_input('addr', width=addr_bits)
     model.add_digital_input('clk')
     model.add_analog_output('real_out')
-    model.add_digital_output('sint_out', width=sint_table.width)
-    model.add_digital_output('uint_out', width=uint_table.width)
+    model.add_digital_output('sint_out', width=sint_bits)
+    model.add_digital_output('uint_out', width=uint_bits)
+
+    # create tables
+    real_table = model.make_real_table(real_vals)
+    sint_table = model.make_sint_table(sint_vals)
+    uint_table = model.make_uint_table(uint_vals)
 
     # assign values
     model.set_from_sync_rom(model.real_out, real_table, model.addr, clk=model.clk)
     model.set_from_sync_rom(model.sint_out, sint_table, model.addr, clk=model.clk)
     model.set_from_sync_rom(model.uint_out, uint_table, model.addr, clk=model.clk)
 
-    # write the tables
-    real_table.to_file()
-    sint_table.to_file()
-    uint_table.to_file()
-
     # write the model
-    BUILD_DIR.mkdir(parents=True, exist_ok=True)
-    model_file = BUILD_DIR / 'model.sv'
-    model.compile_to_file(VerilogGenerator(), filename=model_file)
-
-    # return the location of the model
-    return model_file
+    return model.compile_to_file(VerilogGenerator())
 
 def test_table_sim(simulator, addr_bits=8, real_range=10, sint_bits=8, uint_bits=8):
     # generate random data to go into the table
@@ -59,7 +48,7 @@ def test_table_sim(simulator, addr_bits=8, real_range=10, sint_bits=8, uint_bits
     uint_vals = np.random.randint(0, 1<<uint_bits, n_samp)
 
     # generate model
-    model_file = gen_model(real_vals, sint_vals, uint_vals)
+    model_file = gen_model(real_vals, sint_vals, uint_vals, addr_bits, sint_bits, uint_bits)
 
     # declare circuit
     class dut(m.Circuit):

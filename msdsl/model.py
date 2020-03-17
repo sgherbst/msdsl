@@ -3,6 +3,7 @@ from itertools import chain
 from numbers import Integral, Number
 from typing import List, Set, Union
 from copy import deepcopy
+from pathlib import Path
 
 from math import ceil, log2
 
@@ -19,7 +20,7 @@ from msdsl.eqn.lds import LdsCollection
 from msdsl.expr.format import RealFormat, IntFormat, is_signed
 from msdsl.expr.extras import if_
 from msdsl.circuit import Circuit
-from msdsl.expr.table import Table
+from msdsl.expr.table import Table, RealTable, SIntTable, UIntTable
 
 from scipy.signal import cont2discrete
 
@@ -29,10 +30,11 @@ class Bus:
         self.n = n
 
 class MixedSignalModel:
-    def __init__(self, module_name, *ios, dt=None):
+    def __init__(self, module_name, *ios, dt=None, build_dir='build'):
         # save settings
         self.module_name = module_name
         self.dt = dt
+        self.build_dir = Path(build_dir)
 
         # initialize
         self.signals = OrderedDict()
@@ -40,6 +42,12 @@ class MixedSignalModel:
         self.probes = []
         self.circuits = []
         self.real_params = []
+        self.lookup_tables = []
+        self.lut_namers = {
+            'real': Namer(prefix='real_table_'),
+            'sint': Namer(prefix='sint_table_'),
+            'uint': Namer(prefix='uint_table_')
+        }
         self.namer = Namer()
 
         # add ios
@@ -247,6 +255,44 @@ class MixedSignalModel:
         # return the assignment
         return self.add_assignment(SyncRomAssignment(signal=signal, table=table, addr=addr,
                                                      clk=clk, ce=ce, should_bind=should_bind))
+
+    # table creation functions
+
+    def make_real_table(self, vals, width=18, exp=None, name=None, dir=None):
+        # set defaults
+        if name is None:
+            name = next(self.lut_namers['real'])
+        if dir is None:
+            dir = self.build_dir
+
+        # create the table, register it, and return it
+        table = RealTable(vals=vals, width=width, exp=exp, name=name, dir=dir)
+        self.lookup_tables.append(table)
+        return table
+
+    def make_sint_table(self, vals, width=None, name=None, dir=None):
+        # set defaults
+        if name is None:
+            name = next(self.lut_namers['sint'])
+        if dir is None:
+            dir = self.build_dir
+
+        # create the table, register it, and return it
+        table = SIntTable(vals=vals, width=width, name=name, dir=dir)
+        self.lookup_tables.append(table)
+        return table
+
+    def make_uint_table(self, vals, width=None, name=None, dir=None):
+        # set defaults
+        if name is None:
+            name = next(self.lut_namers['uint'])
+        if dir is None:
+            dir = self.build_dir
+
+        # create the table, register it, and return it
+        table = UIntTable(vals=vals, width=width, name=name, dir=dir)
+        self.lookup_tables.append(table)
+        return table
 
     # assignment access functions
 
@@ -621,12 +667,32 @@ class MixedSignalModel:
         # end module
         gen.end_module()
 
-    def compile_to_file(self, gen: CodeGenerator, filename: str):
+    def compile_to_file(self, gen: CodeGenerator, filename=None, name=None):
         """
         Compiles the model using the provided CodeGenerator, and writes the resulting model to the given filename.
         """
+        # determine filename if needed
+        if filename is None:
+            if name is None:
+                name = self.module_name
+            filename = self.build_dir / f'{name}.sv'
+        # make sure filename is a path
+        filename = Path(filename).resolve()
+
+        # compile the code
         self.compile(gen=gen)
+
+        # write file
+        filename.parent.mkdir(exist_ok=True, parents=True)
         gen.write_to_file(filename=filename)
+
+        # write tables to file
+        for table in self.lookup_tables:
+            table.path.resolve().parent.mkdir(exist_ok=True, parents=True)
+            table.to_file()
+
+        # return path to filename
+        return filename
 
     def compile_and_print(self, gen: CodeGenerator):
         """

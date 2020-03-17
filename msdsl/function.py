@@ -3,7 +3,6 @@ import cvxpy as cp
 from math import ceil, log2
 from scipy.sparse import coo_matrix, diags
 from .expr.table import RealTable
-from .expr.expr import clamp_op, to_uint, to_sint
 
 class Function:
     def __init__(self, func, domain, name='real_func', dir='.',
@@ -114,18 +113,3 @@ class Function:
             out += self.tables[k].vals[addr_int] * np.power(addr_frac, k)
         # return output
         return out
-
-    def get_addr_expr(self, in_):
-        # calculate result as a real number
-        addr_real = (in_ - self.domain[0])*((self.numel-1)/(self.domain[1]-self.domain[0]))
-        # convert to a signed integer
-        addr_sint = to_sint(addr_real, width=self.addr_bits+1)
-        # clamp if needed
-        if self.clamp:
-            addr_sint = clamp_op(addr_sint, 0, self.numel-1)
-        # convert address to an unsigned integer
-        addr_uint = to_uint(addr_sint, width=self.addr_bits)
-        # calculate fractional address
-        addr_frac = addr_real - addr_sint
-        # convert to an unsigned integer
-        return addr_uint, addr_frac

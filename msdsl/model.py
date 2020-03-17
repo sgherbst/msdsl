@@ -11,7 +11,8 @@ from msdsl.assignment import ThisCycleAssignment, NextCycleAssignment, BindingAs
 from msdsl.expr.analyze import signal_names
 from msdsl.eqn.cases import address_to_settings
 from msdsl.eqn.eqn_sys import EqnSys
-from msdsl.expr.expr import ModelExpr, array, concatenate, sum_op, wrap_constant, min_op
+from msdsl.expr.expr import (ModelExpr, array, concatenate, sum_op, wrap_constant, min_op, clamp_op,
+                             to_sint, to_uint)
 from msdsl.expr.signals import (AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, Signal, AnalogSignal,
                    AnalogState, DigitalState, RealParameter, DigitalSignal)
 from msdsl.generator.generator import CodeGenerator
@@ -273,9 +274,26 @@ class MixedSignalModel:
         :return:
         """
 
-        # get expressions for integer and fractions parts
-        addr_uint_expr, addr_frac_expr = func.get_addr_expr(in_)
+        # calculate result as a real number
+        addr_real_expr = (in_ - func.domain[0]) * ((func.numel - 1) / (func.domain[1] - func.domain[0]))
+        # if func.clamp:
+        #     addr_real_expr = clamp_op(addr_real_expr, 0, func.numel - 1)
+        addr_real = self.set_this_cycle(f'{func.name}_addr_real', addr_real_expr)
+
+        # convert address to signed integer
+        # TODO: avoid need to re-clamp expression; this is a limitation
+        # of the way ranges for real numbers are represented
+        addr_sint_expr = to_sint(addr_real, width=func.addr_bits+1)
+        if func.clamp:
+            addr_sint_expr = clamp_op(addr_sint_expr, 0, func.numel - 1)
+        addr_sint = self.set_this_cycle(f'{func.name}_addr_sint', addr_sint_expr)
+
+        # convert address to unsigned integer
+        addr_uint_expr = to_uint(addr_sint, width=func.addr_bits)
         addr_uint = self.set_this_cycle(f'{func.name}_addr_uint', addr_uint_expr)
+
+        # calculate fractional address
+        addr_frac_expr = addr_real - addr_sint
         addr_frac = self.set_this_cycle(f'{func.name}_addr_frac', addr_frac_expr)
 
         # look up coefficient values

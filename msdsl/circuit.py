@@ -10,8 +10,10 @@ from msdsl.eqn.cases import eqn_case
 from msdsl.expr.extras import if_
 
 class Circuit:
-    def __init__(self, model):
+    def __init__(self, model, clk=None, rst=None):
         self.model = model
+        self.clk = clk
+        self.rst = rst
 
         self.kcl = {}
         self.eqns = []

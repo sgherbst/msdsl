@@ -148,7 +148,7 @@ class VerilogGenerator(CodeGenerator):
 
         # create memory for real number
         if isinstance(next_.format_, RealFormat) and isinstance(curr.format_, RealFormat):
-            self.macro_call('MEM_INTO_ANALOG', next_.name, curr.name, ce_name, clk_name, rst_name, str(init))
+            self.macro_call('DFF_INTO_REAL', next_.name, curr.name, rst_name, clk_name, ce_name, str(init))
         # create memory for integer
         elif (isinstance(next_.format_, SIntFormat) and isinstance(curr.format_, SIntFormat)) or \
              (isinstance(next_.format_, UIntFormat) and isinstance(curr.format_, UIntFormat)):
@@ -481,8 +481,7 @@ class VerilogGenerator(CodeGenerator):
         self.writeln()
 
         # include required libraries
-        self.include('real.sv')
-        self.include('math.sv')
+        self.include('svreal.sv')
         self.include('msdsl.sv')
         self.writeln()
 

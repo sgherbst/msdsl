@@ -79,7 +79,7 @@ def test_func_sim(simulator, order, err_lim, numel):
     tester.step(2)
 
     # save the outputs
-    inpts = np.random.uniform(-DOMAIN, +DOMAIN, 100)
+    inpts = np.random.uniform(-1.2*DOMAIN, +1.2*DOMAIN, 100)
     apprx = []
     for in_ in inpts:
         tester.poke(dut.in_, in_)
@@ -103,7 +103,7 @@ def test_func_sim(simulator, order, err_lim, numel):
     )
 
     # evaluate the outputs
-    apprx = [elem.value for elem in apprx]
+    apprx = np.array([elem.value for elem in apprx], dtype=float)
 
     # compute the exact response to inputs
     exact = myfunc(inpts)

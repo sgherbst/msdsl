@@ -22,7 +22,7 @@ setup(
                 'system verilog', 'synthesizable', 'emulation', 'fpga'],
     packages=find_packages(),
     install_requires=[
-        'svreal>=0.2.1',
+        'svreal>=0.2.2',
         'scipy',
         'numpy',
         'matplotlib',

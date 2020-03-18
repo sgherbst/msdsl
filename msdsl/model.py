@@ -276,8 +276,8 @@ class MixedSignalModel:
 
         # calculate result as a real number
         addr_real_expr = (in_ - func.domain[0]) * ((func.numel - 1) / (func.domain[1] - func.domain[0]))
-        # if func.clamp:
-        #     addr_real_expr = clamp_op(addr_real_expr, 0, func.numel - 1)
+        if func.clamp:
+            addr_real_expr = clamp_op(addr_real_expr, 0.0, func.numel-1.0)
         addr_real = self.set_this_cycle(f'{func.name}_addr_real', addr_real_expr)
 
         # convert address to signed integer

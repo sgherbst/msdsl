@@ -278,7 +278,7 @@ class MixedSignalModel:
         addr_real_expr = (in_ - func.domain[0]) * ((func.numel - 1) / (func.domain[1] - func.domain[0]))
         if func.clamp:
             addr_real_expr = clamp_op(addr_real_expr, 0.0, func.numel-1.0)
-        addr_real = self.set_this_cycle(self.get_next_name(f'{func.name}_addr_real'), addr_real_expr)
+        addr_real = self.set_this_cycle(self.get_next_name(f'{func.name}_addr_real_'), addr_real_expr)
 
         # convert address to signed integer
         # TODO: avoid need to re-clamp expression; this is a limitation
@@ -286,23 +286,23 @@ class MixedSignalModel:
         addr_sint_expr = to_sint(addr_real, width=func.addr_bits+1)
         if func.clamp:
             addr_sint_expr = clamp_op(addr_sint_expr, 0, func.numel - 1)
-        addr_sint = self.set_this_cycle(self.get_next_name(f'{func.name}_addr_sint'), addr_sint_expr)
+        addr_sint = self.set_this_cycle(self.get_next_name(f'{func.name}_addr_sint_'), addr_sint_expr)
 
         # convert address to unsigned integer
         addr_uint_expr = to_uint(addr_sint, width=func.addr_bits)
-        addr_uint = self.set_this_cycle(self.get_next_name(f'{func.name}_addr_uint'), addr_uint_expr)
+        addr_uint = self.set_this_cycle(self.get_next_name(f'{func.name}_addr_uint_'), addr_uint_expr)
 
         # calculate fractional address
         addr_frac_expr = addr_real - addr_sint
-        addr_frac = self.set_this_cycle(self.get_next_name(f'{func.name}_addr_frac'), addr_frac_expr)
+        addr_frac = self.set_this_cycle(self.get_next_name(f'{func.name}_addr_frac_'), addr_frac_expr)
 
         # look up coefficient values
-        coeffs = [self.get_next_name(f'{func.name}_coeff_{k}') for k in range(func.order+1)]
+        coeffs = [self.get_next_name(f'{func.name}_coeff_{k}_') for k in range(func.order+1)]
         for coeff, table in zip(coeffs, func.tables):
             self.set_from_sync_rom(signal=coeff, table=table, addr=addr_uint, clk=clk, ce=ce)
 
         # compute higher-order products of terms
-        prods_imm = [self.get_next_name(f'{func.name}_prod_imm_{k}') for k in range(func.order)]
+        prods_imm = [self.get_next_name(f'{func.name}_prod_imm_{k}_') for k in range(func.order)]
         for k in range(func.order):
             if k == 0:
                 self.set_this_cycle(prods_imm[k], addr_frac)
@@ -316,7 +316,7 @@ class MixedSignalModel:
             prod_imm = self.get_signal(prods_imm[k])
             # create a delayed signal with the same format
             prod_del = self.add_analog_state(
-                self.get_next_name(f'{func.name}_prod_del_{k}'),
+                self.get_next_name(f'{func.name}_prod_del_{k}_'),
                 range_=prod_imm.format_.range_,
                 width=prod_imm.format_.width,
                 exponent=prod_imm.format_.exponent

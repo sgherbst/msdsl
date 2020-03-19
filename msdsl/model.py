@@ -664,7 +664,7 @@ class MixedSignalModel:
         # return the result
         return last
 
-    def make_history(self, first: ModelExpr, length: Integral, clk=None, rst=None):
+    def make_history(self, first: ModelExpr, length: Integral, clk=None, rst=None, ce=None):
         # initialize
         hist = []
 
@@ -692,7 +692,7 @@ class MixedSignalModel:
                 self.add_signal(curr)
 
                 # make the update assignment
-                self.set_next_cycle(signal=curr, expr=hist[k - 1], clk=clk, rst=rst)
+                self.set_next_cycle(signal=curr, expr=hist[k - 1], clk=clk, rst=rst, ce=ce)
 
                 # add this signal to the history
                 hist.append(curr)

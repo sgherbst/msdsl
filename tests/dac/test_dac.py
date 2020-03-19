@@ -41,11 +41,12 @@ def test_adc(simulator, n_dac=8, v_ref_n=-1.0, v_ref_p=+1.0, dt=0.1e-6):
     model_file = gen_model(n=n_dac, vn=v_ref_n, vp=v_ref_p, dt=dt)
 
     # declare circuit
-    dut = m.DeclareCircuit(
-        'test_dac',
-        'd_in', m.In(m.SInt[n_dac]),
-        'a_out', fault.RealOut
-    )
+    class dut(m.Circuit):
+        name = 'test_dac'
+        io = m.IO(
+            d_in=m.In(m.SInt[n_dac]),
+            a_out=fault.RealOut
+        )
 
     def model(d_in):
         # scale code to real number from 0 to 1
@@ -59,7 +60,7 @@ def test_adc(simulator, n_dac=8, v_ref_n=-1.0, v_ref_p=+1.0, dt=0.1e-6):
         return out
 
     # create mechanism to run trials
-    t = fault.Tester(dut, expect_strict_default=True)
+    t = fault.Tester(dut)
     def run_trial(d_in, should_print=False):
         t.poke(dut.d_in, d_in)
         t.eval()

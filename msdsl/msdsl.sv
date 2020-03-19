@@ -9,9 +9,16 @@
 `include "svreal.sv"
 
 // Convenience functions
+// TODO: move towards using DATA_TYPE_UINT and DATA_TYPE_SINT
 
 `define DATA_TYPE_DIGITAL(width_expr) \
     logic [((width_expr)-1):0]
+
+`define DATA_TYPE_UINT(width_expr) \
+    logic [((width_expr)-1):0]
+
+`define DATA_TYPE_SINT(width_expr) \
+    logic signed [((width_expr)-1):0]
 
 // Add quotes to a DEFINE parameter
 `define ADD_QUOTES_TO_MACRO(macro) `"macro`"
@@ -33,6 +40,46 @@
 `define MEM_DIGITAL(in_name, out_name, cke_name, clk_name, rst_name, init_expr, width_expr) \
     `DATA_TYPE_DIGITAL(width_expr) out_name; \
     `MEM_INTO_DIGITAL(in_name, out_name, cke_name, clk_name, rst_name, init_expr, width_expr)
+
+// Synchronous ROM (unsigned integer)
+
+`define SYNC_ROM_INTO_UINT(addr_name, out_name, clk_name, ce_name, addr_bits_expr, data_bits_expr, file_path_expr) \
+    sync_rom_uint #( \
+        .addr_bits(addr_bits_expr), \
+        .data_bits(data_bits_expr), \
+        .file_path(file_path_expr) \
+    ) sync_rom_uint_``out_name``_i ( \
+        .addr(addr_name), \
+        .out(out_name), \
+        .clk(clk_name), \
+        .ce(ce_name) \
+    )
+
+`define SYNC_ROM_UINT(addr_name, out_name, clk_name, ce_name, addr_bits_expr, data_bits_expr, file_path_expr) \
+    `DATA_TYPE_UINT(data_bits_expr) out_name; \
+    `SYNC_ROM_INTO_UINT(addr_name, out_name, clk_name, ce_name, addr_bits_expr, data_bits_expr, file_path_expr)
+
+// Synchronous ROM (signed integer)
+
+// SYNC_ROM_INTO_SINT
+// Care has to be taken here to ensure that sign bit extension is used if out_name is wider
+// than data_bits_expr.  That's why the output of `SYNC_ROM_UINT is assigned to a temporary
+// variable whose width is exactly data_bits_expr; that output is then cast as signed and
+// assigned to out_name
+
+`define SYNC_ROM_INTO_SINT(addr_name, out_name, clk_name, ce_name, addr_bits_expr, data_bits_expr, file_path_expr) \
+    `SYNC_ROM_UINT(addr_name, zzz_tmp_``out_name``, clk_name, ce_name, addr_bits_expr, data_bits_expr, file_path_expr); \
+    assign out_name = $signed(zzz_tmp_``out_name``)
+
+// SYNC_ROM_SINT
+// Here we can be a bit more direct, because we control the declaration of out_name.  The signal
+// out_name is declared as signed and set to have a width of exactly data_bits_expr.  We can then
+// directly assign to the signal with SYNC_ROM_UINT (not SYNC_ROM_SINT), avoiding the unnecessary
+// declaration of zzz_tmp_``out_name``
+
+`define SYNC_ROM_SINT(addr_name, out_name, clk_name, ce_name, addr_bits_expr, data_bits_expr, file_path_expr) \
+    `DATA_TYPE_SINT(data_bits_expr) out_name; \
+    `SYNC_ROM_INTO_UINT(addr_name, out_name, clk_name, ce_name, addr_bits_expr, data_bits_expr, file_path_expr)
 
 // Probing waveforms
 
@@ -266,9 +313,37 @@ module mem_digital #(
     end
 
     // assign output
-
     assign out = state;
+endmodule
 
+// Synchronous ROM (unsigned integer)
+
+module sync_rom_uint #(
+    parameter integer addr_bits=1,
+    parameter integer data_bits=1,
+    parameter file_path=""
+) (
+    input wire logic [(addr_bits-1):0] addr,
+    output wire logic [(data_bits-1):0] out,
+    input wire logic clk,
+    input wire logic ce
+);
+    // load the ROM
+    logic [(data_bits-1):0] rom [0:((2**addr_bits)-1)];
+    initial begin
+        $readmemb(file_path, rom);
+    end
+
+    // read from the ROM
+    logic [(data_bits-1):0] data;
+    always @(posedge clk) begin
+        if (ce) begin
+            data <= rom[addr];
+        end
+    end
+
+    // assign to the output
+    assign out = data;
 endmodule
 
 // PWM model

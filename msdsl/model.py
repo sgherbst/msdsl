@@ -3,14 +3,16 @@ from itertools import chain
 from numbers import Integral, Number
 from typing import List, Set, Union
 from copy import deepcopy
+from pathlib import Path
 
 from math import ceil, log2
 
-from msdsl.assignment import ThisCycleAssignment, NextCycleAssignment, BindingAssignment, Assignment
+from msdsl.assignment import ThisCycleAssignment, NextCycleAssignment, BindingAssignment, SyncRomAssignment, Assignment
 from msdsl.expr.analyze import signal_names
 from msdsl.eqn.cases import address_to_settings
 from msdsl.eqn.eqn_sys import EqnSys
-from msdsl.expr.expr import ModelExpr, array, concatenate, sum_op, wrap_constant, min_op
+from msdsl.expr.expr import (ModelExpr, array, concatenate, sum_op, wrap_constant, min_op, clamp_op,
+                             to_sint, to_uint)
 from msdsl.expr.signals import (AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, Signal, AnalogSignal,
                    AnalogState, DigitalState, RealParameter, DigitalSignal)
 from msdsl.generator.generator import CodeGenerator
@@ -19,6 +21,8 @@ from msdsl.eqn.lds import LdsCollection
 from msdsl.expr.format import RealFormat, IntFormat, is_signed
 from msdsl.expr.extras import if_
 from msdsl.circuit import Circuit
+from msdsl.expr.table import Table, RealTable, SIntTable, UIntTable
+from msdsl.function import Function
 
 from scipy.signal import cont2discrete
 
@@ -28,10 +32,11 @@ class Bus:
         self.n = n
 
 class MixedSignalModel:
-    def __init__(self, module_name, *ios, dt=None):
+    def __init__(self, module_name, *ios, dt=None, build_dir='build'):
         # save settings
         self.module_name = module_name
         self.dt = dt
+        self.build_dir = Path(build_dir)
 
         # initialize
         self.signals = OrderedDict()
@@ -39,11 +44,18 @@ class MixedSignalModel:
         self.probes = []
         self.circuits = []
         self.real_params = []
+        self.lookup_tables = []
+        self.namers = {}
         self.namer = Namer()
 
         # add ios
         for io in ios:
             self.add_signal(io)
+
+    def get_next_name(self, key):
+        if key not in self.namers:
+            self.namers[key] = Namer(prefix=key)
+        return next(self.namers[key])
 
     def __getattr__(self, item):
         return self.get_signal(item)
@@ -223,6 +235,164 @@ class MixedSignalModel:
         """
 
         return self.add_assignment(NextCycleAssignment(signal=signal, expr=expr, clk=clk, rst=rst, ce=ce))
+
+    def set_from_sync_rom(self, signal: Union[Signal, str], table: Table, addr: ModelExpr, clk=None, ce=None):
+        """
+        The behavior of this operation is a lookup from a synchronous ROM (which should synthesize
+        to block RAM on an FPGA).  Note that there is a one-cycle delay in this operation.
+
+        :param signal:  Signal object being assigned
+        :param table:   Lookup table object
+        :param addr:    Expression containing address
+        :param clk:     Optional input.  Will use `CLK_MSDSL by default.
+        :param ce:      Optional input for clock enable.  Will use "1" (i.e., always enabled) by default.
+        :return:
+        """
+
+        # bind the signal if necessary
+        should_bind = False
+        if isinstance(signal, str):
+            signal = self.add_signal(Signal(name=signal, format_=table.format_))
+            should_bind = True
+
+        # return the assignment
+        return self.add_assignment(SyncRomAssignment(signal=signal, table=table, addr=addr,
+                                                     clk=clk, ce=ce, should_bind=should_bind))
+
+    def set_from_sync_func(self, signal: Union[Signal, str], func: Function, in_: ModelExpr,
+                           clk=None, ce=None, rst=None):
+        """
+        The behavior of this operation is a an evaluation of a Function.
+        There is a one-cycle delay in this operation.
+
+        :param signal:   Signal object being assigned
+        :param function: Function object
+        :param in_:      Real-number input of the function
+        :param clk:      Optional input.  Will use `CLK_MSDSL by default.
+        :param ce:       Optional input for clock enable.  Will use "1" (i.e., always enabled) by default.
+        :param rst:      Option input for reset.  Will use `RST_MSDSL by default
+        :return:
+        """
+
+        # calculate result as a real number
+        addr_real_expr = (in_ - func.domain[0]) * ((func.numel - 1) / (func.domain[1] - func.domain[0]))
+        if func.clamp:
+            addr_real_expr = clamp_op(addr_real_expr, 0.0, func.numel-1.0)
+        addr_real = self.set_this_cycle(self.get_next_name(f'{func.name}_addr_real_'), addr_real_expr)
+
+        # convert address to signed integer
+        # TODO: avoid need to re-clamp expression; this is a limitation
+        # of the way ranges for real numbers are represented
+        addr_sint_expr = to_sint(addr_real, width=func.addr_bits+1)
+        if func.clamp:
+            addr_sint_expr = clamp_op(addr_sint_expr, 0, func.numel - 1)
+        addr_sint = self.set_this_cycle(self.get_next_name(f'{func.name}_addr_sint_'), addr_sint_expr)
+
+        # convert address to unsigned integer
+        addr_uint_expr = to_uint(addr_sint, width=func.addr_bits)
+        addr_uint = self.set_this_cycle(self.get_next_name(f'{func.name}_addr_uint_'), addr_uint_expr)
+
+        # calculate fractional address
+        addr_frac_expr = addr_real - addr_sint
+        addr_frac = self.set_this_cycle(self.get_next_name(f'{func.name}_addr_frac_'), addr_frac_expr)
+
+        # look up coefficient values
+        coeffs = [self.get_next_name(f'{func.name}_coeff_{k}_') for k in range(func.order+1)]
+        for coeff, table in zip(coeffs, func.tables):
+            self.set_from_sync_rom(signal=coeff, table=table, addr=addr_uint, clk=clk, ce=ce)
+
+        # compute higher-order products of terms
+        prods_imm = [self.get_next_name(f'{func.name}_prod_imm_{k}_') for k in range(func.order)]
+        for k in range(func.order):
+            if k == 0:
+                self.set_this_cycle(prods_imm[k], addr_frac)
+            else:
+                self.set_this_cycle(prods_imm[k], addr_frac*self.get_signal(prods_imm[k-1]))
+
+        # delay products by one cycle
+        prods_del = []
+        for k in range(func.order):
+            # get value of immediate product
+            prod_imm = self.get_signal(prods_imm[k])
+            # create a delayed signal with the same format
+            prod_del = self.add_analog_state(
+                self.get_next_name(f'{func.name}_prod_del_{k}_'),
+                range_=prod_imm.format_.range_,
+                width=prod_imm.format_.width,
+                exponent=prod_imm.format_.exponent
+            )
+            # assign to that signal with a delay
+            self.set_next_cycle(prod_del, prod_imm, clk=clk, rst=rst, ce=ce)
+            # save the signal
+            prods_del.append(prod_del)
+
+        # compute output terms to be summed
+        terms = []
+        for k in range(func.order+1):
+            if k == 0:
+                terms.append(self.get_signal(coeffs[k]))
+            else:
+                terms.append(self.get_signal(coeffs[k])*prods_del[k-1])
+
+        # assign output value
+        return self.set_this_cycle(signal, sum_op(terms))
+
+    # table creation functions
+
+    def make_real_table(self, vals, width=18, exp=None, name=None, dir=None):
+        # set defaults
+        if name is None:
+            name = self.get_next_name('real_table_')
+        if dir is None:
+            dir = self.build_dir
+
+        # create the table, register it, and return it
+        table = RealTable(vals=vals, width=width, exp=exp, name=name, dir=dir)
+        self.lookup_tables.append(table)
+        return table
+
+    def make_sint_table(self, vals, width=None, name=None, dir=None):
+        # set defaults
+        if name is None:
+            name = self.get_next_name('sint_table_')
+        if dir is None:
+            dir = self.build_dir
+
+        # create the table, register it, and return it
+        table = SIntTable(vals=vals, width=width, name=name, dir=dir)
+        self.lookup_tables.append(table)
+        return table
+
+    def make_uint_table(self, vals, width=None, name=None, dir=None):
+        # set defaults
+        if name is None:
+            name = self.get_next_name('uint_table_')
+        if dir is None:
+            dir = self.build_dir
+
+        # create the table, register it, and return it
+        table = UIntTable(vals=vals, width=width, name=name, dir=dir)
+        self.lookup_tables.append(table)
+        return table
+
+    # function creation
+
+    def make_function(self, func, domain, name=None, dir=None, **kwargs):
+        # set defaults
+        if name is None:
+            name = self.get_next_name('real_func_')
+        if dir is None:
+            dir = self.build_dir
+
+        # create the table, register it, and return it
+        function = Function(func=func, domain=domain, name=name, dir=dir, **kwargs)
+        function.create_tables()
+
+        # append values
+        self.lookup_tables.extend(function.tables)
+
+        # return function
+        return function
 
     # assignment access functions
 
@@ -494,7 +664,7 @@ class MixedSignalModel:
         # return the result
         return last
 
-    def make_history(self, first: ModelExpr, length: Integral, clk=None, rst=None):
+    def make_history(self, first: ModelExpr, length: Integral, clk=None, rst=None, ce=None):
         # initialize
         hist = []
 
@@ -522,7 +692,7 @@ class MixedSignalModel:
                 self.add_signal(curr)
 
                 # make the update assignment
-                self.set_next_cycle(signal=curr, expr=hist[k - 1], clk=clk, rst=rst)
+                self.set_next_cycle(signal=curr, expr=hist[k - 1], clk=clk, rst=rst, ce=ce)
 
                 # add this signal to the history
                 hist.append(curr)
@@ -579,6 +749,9 @@ class MixedSignalModel:
             elif isinstance(assignment, BindingAssignment):
                 gen.make_signal(assignment.signal)
                 gen.make_assign(input_=result, output=assignment.signal)
+            elif isinstance(assignment, SyncRomAssignment):
+                gen.make_sync_rom(signal=assignment.signal, table=assignment.table,
+                                  addr=result, clk=assignment.clk, ce=assignment.ce)
             else:
                 raise Exception('Invalid assignment type.')
 
@@ -589,12 +762,32 @@ class MixedSignalModel:
         # end module
         gen.end_module()
 
-    def compile_to_file(self, gen: CodeGenerator, filename: str):
+    def compile_to_file(self, gen: CodeGenerator, filename=None, name=None):
         """
         Compiles the model using the provided CodeGenerator, and writes the resulting model to the given filename.
         """
+        # determine filename if needed
+        if filename is None:
+            if name is None:
+                name = self.module_name
+            filename = self.build_dir / f'{name}.sv'
+        # make sure filename is a path
+        filename = Path(filename).resolve()
+
+        # compile the code
         self.compile(gen=gen)
+
+        # write file
+        filename.parent.mkdir(exist_ok=True, parents=True)
         gen.write_to_file(filename=filename)
+
+        # write tables to file
+        for table in self.lookup_tables:
+            table.path.resolve().parent.mkdir(exist_ok=True, parents=True)
+            table.to_file()
+
+        # return path to filename
+        return filename
 
     def compile_and_print(self, gen: CodeGenerator):
         """

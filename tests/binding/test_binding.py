@@ -38,12 +38,13 @@ def test_binding(simulator):
     model_file = gen_model()
 
     # declare circuit
-    dut = m.DeclareCircuit(
-        'test_binding',
-        'a', fault.RealIn,
-        'b', fault.RealIn,
-        'c', fault.RealOut
-    )
+    class dut(m.Circuit):
+        name = 'test_binding'
+        io = m.IO(
+            a=fault.RealIn,
+            b=fault.RealIn,
+            c=fault.RealOut
+        )
 
     t = fault.Tester(dut)
 

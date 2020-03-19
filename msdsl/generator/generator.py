@@ -3,6 +3,7 @@ from numbers import Number
 
 from msdsl.expr.signals import Signal
 from msdsl.expr.expr import ModelExpr
+from msdsl.expr.table import Table
 from msdsl.util import Namer
 
 class CodeGenerator:
@@ -52,6 +53,10 @@ class CodeGenerator:
         raise NotImplementedError
 
     def make_mem(self, next_: Signal, curr: Signal, init: Number=0, clk: Signal=None, rst: Signal=None, ce: Signal=None):
+        raise NotImplementedError
+
+    def make_sync_rom(self, signal: Signal, table: Table, addr: Signal,
+                      clk: Signal=None, ce: Signal=None):
         raise NotImplementedError
 
     def expr_to_signal(self, expr: ModelExpr):

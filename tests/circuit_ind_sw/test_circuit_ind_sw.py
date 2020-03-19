@@ -57,24 +57,18 @@ def test_circuit_ind_sw(simulator):
     model_file = gen_model()
 
     # declare circuit
-    dut = m.DeclareCircuit(
-        f'test_{NAME}',
-        'v_in', fault.RealIn,
-        'v_out', fault.RealOut,
-        'sw1', m.BitIn,
-        'sw2', m.BitIn,
-        'clk', m.BitIn,
-        'rst', m.BitIn
-    )
+    class dut(m.Circuit):
+        name = f'test_{NAME}'
+        io = m.IO(
+            v_in=fault.RealIn,
+            v_out=fault.RealOut,
+            sw1=m.BitIn,
+            sw2=m.BitIn,
+            clk=m.ClockIn,
+            rst=m.BitIn
+        )
 
-    t = fault.Tester(dut)
-
-    # method to walk through simulation cycles
-    def cycle():
-        t.poke(dut.clk, 1)
-        t.eval()
-        t.poke(dut.clk, 0)
-        t.eval()
+    t = fault.Tester(dut, dut.clk)
 
     # initialize
     t.poke(dut.v_in, 0.0)
@@ -82,7 +76,6 @@ def test_circuit_ind_sw(simulator):
     t.poke(dut.sw2, 0)
     t.poke(dut.clk, 0)
     t.poke(dut.rst, 1)
-
 
     def model(v_in, sw1, sw2):
         if sw1 == 0 and sw2 == 0:
@@ -100,7 +93,7 @@ def test_circuit_ind_sw(simulator):
         t.poke(dut.v_in, v_in)
         t.poke(dut.sw1, sw1)
         t.poke(dut.sw2, sw2)
-        cycle()
+        t.step(2)
         if should_print:
             t.print('v_in: %0f, sw1: %0d, sw2: %0d, v_out: %0f\n',
                     dut.v_in, dut.sw1, dut.sw2, dut.v_out)

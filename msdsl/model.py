@@ -185,15 +185,18 @@ class MixedSignalModel:
 
         return self.set_this_cycle(signal=signal, expr=expr)
 
-    def bind_name(self, signal: Union[Signal, str], expr: ModelExpr):
+    def bind_name(self, signal: Union[Signal, str], expr: ModelExpr, range_=None,
+                  width=None, exponent=None):
         """
         TODO: consider deprecating.
         Alias for set_this_cycle.
         """
 
-        return self.set_this_cycle(signal=signal, expr=expr)
+        return self.set_this_cycle(signal=signal, expr=expr, range_=range_,
+                                   width=width, exponent=exponent)
 
-    def set_this_cycle(self, signal: Union[Signal, str], expr: ModelExpr):
+    def set_this_cycle(self, signal: Union[Signal, str], expr: ModelExpr, range_=None,
+                       width=None, exponent=None):
         """
         The behavior of this function is essentially a blocking assignment (in Verilog nomenclature). The provided
         expression is continuously written to the provided signal.
@@ -205,7 +208,15 @@ class MixedSignalModel:
 
         if isinstance(signal, str):
             expr = wrap_constant(expr)
-            signal = self.add_signal(Signal(name=signal, format_=expr.format_))
+            format_ = deepcopy(expr.format_)
+            if isinstance(format_, RealFormat):
+                if range_ is not None:
+                    format_.range_ = range_
+                if exponent is not None:
+                    format_.exponent = exponent
+                if width is not None:
+                    format_.width = width
+            signal = self.add_signal(Signal(name=signal, format_=format_))
             assignment_cls = BindingAssignment
         elif isinstance(signal, Signal):
             assignment_cls = ThisCycleAssignment
@@ -278,7 +289,8 @@ class MixedSignalModel:
         addr_real_expr = (in_ - func.domain[0]) * ((func.numel - 1) / (func.domain[1] - func.domain[0]))
         if func.clamp:
             addr_real_expr = clamp_op(addr_real_expr, 0.0, func.numel-1.0)
-        addr_real = self.set_this_cycle(self.get_next_name(f'{func.name}_addr_real_'), addr_real_expr)
+        addr_real = self.set_this_cycle(self.get_next_name(f'{func.name}_addr_real_'), addr_real_expr,
+                                        range_=func.numel-1.0)
 
         # convert address to signed integer
         # TODO: avoid need to re-clamp expression; this is a limitation
@@ -294,7 +306,8 @@ class MixedSignalModel:
 
         # calculate fractional address
         addr_frac_expr = addr_real - addr_sint
-        addr_frac = self.set_this_cycle(self.get_next_name(f'{func.name}_addr_frac_'), addr_frac_expr)
+        addr_frac = self.set_this_cycle(self.get_next_name(f'{func.name}_addr_frac_'), addr_frac_expr,
+                                        range_=1.01)
 
         # look up coefficient values
         coeffs = [self.get_next_name(f'{func.name}_coeff_{k}_') for k in range(func.order+1)]

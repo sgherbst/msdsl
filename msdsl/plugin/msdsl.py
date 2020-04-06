@@ -8,7 +8,7 @@ from svreal import get_svreal_header
 PACK_DIR = Path(__file__).resolve().parent.parent
 
 # TODO: figure out how to remove dependency on anasymod (which itself depends on msdsl)
-from anasymod.sources import VerilogHeader, VerilogSource
+from anasymod.sources import VerilogHeader, VerilogSource, FunctionalModel
 from anasymod.defines import Define
 from anasymod.files import mkdir_p, rm_rf, which
 from anasymod.util import call
@@ -17,58 +17,47 @@ from anasymod.config import EmuConfig
 
 class CustomPlugin(Plugin):
     def __init__(self, prj_cfg: EmuConfig, cfg_file, prj_root):
-        super().__init__(cfg_file=cfg_file, prj_root=prj_root, build_root=os.path.join(prj_cfg.build_root_base, 'models'), name='msdsl')
+        super().__init__(cfg_file=cfg_file, prj_root=prj_root, build_root=prj_cfg.build_root_functional_models, name='msdsl')
 
         self.include_statements += ['`include "msdsl.sv"']
 
-        # Parse command line arguments specific to MSDSL
-        self.args = None
-        self._parse_args()
+        # Initialize list of functional models to be generated
+        self.generator_sources = []
 
         # Initialize Parameters
         self.dt = prj_cfg.cfg.dt
 
-        # Initialize msdsl config
-        self.cfg.model_dir = self._build_root
-
         # Update msdsl config with msdsl section in config file
         self.cfg.update_config(subsection=self._name)
 
-        # Add defines according to command line arguments
-        if self.args.float:
-            self.add_define(Define(name='FLOAT_REAL', fileset='sim'))
-        if self.args.range_assertions:
-            self.add_define(Define(name='RANGE_ASSERTIONS', fileset='sim'))
-        if self.args.add_saturation:
-            self.add_define(Define(name='ADD_SATURATION'))
-
-        ###############################################################
-        # Execute actions according to command line arguments
-        ###############################################################
-
-        # make models
-        if self.args.models:
-            self.models()
-
-##### Functions exposed for user to exercise on Analysis Object
+##### Custom functions for actions triggered from command line or by setting an option
 
     def models(self):
         """
         Call gen.py to generate analog models.
         """
-        # make model directory, removing the old one if necessary
-        rm_rf(self.cfg.model_dir)
-        mkdir_p(self.cfg.model_dir)
+        # make model directory, removing the old model directory if necessary
+        rm_rf(self._build_root)
 
         # run generator script
-        gen_script = os.path.join(self._prj_root, 'gen.py')
-
         if 'PYTHON_MSDSL' in os.environ:
             python_name = os.environ['PYTHON_MSDSL']
         else:
             python_name = which('python')
-            
-        call([python_name, gen_script, '-o', self.cfg.model_dir, '--dt', str(self.dt)])
+        for generator_source in self.generator_sources:
+            # make model directory if necessary
+            mkdir_p(os.path.join(self._build_root, generator_source.fileset, generator_source.name))
+            for file in generator_source.files:
+                call([python_name, file, '-o', os.path.join(self._build_root, generator_source.fileset, generator_source.name), '--dt', str(self.dt)])
+
+    def float(self):
+        self._add_define(Define(name='FLOAT_REAL', fileset='sim'))
+
+    def range_assertions(self):
+        self._add_define(Define(name='RANGE_ASSERTIONS', fileset='sim'))
+
+    def add_saturation(self):
+        self._add_define(Define(name='ADD_SATURATION'))
 
 ##### Utility Functions
 
@@ -76,8 +65,8 @@ class CustomPlugin(Plugin):
         """
         Add Define objects that are specific to MSDSL
         """
-        self.add_define(Define(name='DT_MSDSL', value=self.dt))
-        self.add_define(Define(name='SIMULATION_MODE_MSDSL', fileset='sim'))
+        self._add_define(Define(name='DT_MSDSL', value=self.dt))
+        self._add_define(Define(name='SIMULATION_MODE_MSDSL', fileset='sim'))
 
     def _setup_sources(self):
         """
@@ -85,11 +74,12 @@ class CustomPlugin(Plugin):
         """
 
         # Add MSDSL and SVREAL sources
-        self.add_source(source=VerilogHeader(files=[PACK_DIR / 'msdsl.sv'], config_path=self._srccfg_path))
-        self.add_source(source=VerilogHeader(files=[get_svreal_header()], config_path=self._srccfg_path))
-
-        # Add model sources
-        self.add_source(source=VerilogSource(files=os.path.join(self.cfg.model_dir, '*.sv'), config_path=self._srccfg_path))
+        self._add_source(source=VerilogHeader(files=[PACK_DIR / 'msdsl.sv'],
+                                              config_path=self._srccfg_path,
+                                              name='msdsl'))
+        self._add_source(source=VerilogHeader(files=[get_svreal_header()],
+                                              config_path=self._srccfg_path,
+                                              name='svreal'))
 
     def _parse_args(self):
         """
@@ -103,13 +93,10 @@ class CustomPlugin(Plugin):
 
         --add_saturation: Enable saturation feature for fixed-point based simulations. This will prevent overflows.
 
-        --models: Generate functional models for selected project.
-
         """
         parser = ArgumentParser()
         parser.add_argument('--range_assertions', action='store_true')
         parser.add_argument('--float', action='store_true')
         parser.add_argument('--add_saturation', action='store_true')
-        parser.add_argument('--models', action='store_true')
 
         self.args, _ = parser.parse_known_args()

@@ -38,22 +38,17 @@ def test_rc(simulator, tau=1e-6, dt=0.1e-6):
     model_file = gen_model(tau=tau, dt=dt)
 
     # declare circuit
-    dut = m.DeclareCircuit(
-        'test_rc',
-        'v_in', fault.RealIn,
-        'v_out', fault.RealOut,
-        'clk', m.BitIn,
-        'rst', m.BitIn
-    )
+    class dut(m.Circuit):
+        name='test_rc'
+        io=m.IO(
+            v_in=fault.RealIn,
+            v_out=fault.RealOut,
+            clk=m.ClockIn,
+            rst=m.BitIn
+        )
 
     # create the tester
-    tester = fault.Tester(dut, expect_strict_default=True)
-
-    def cycle():
-        tester.poke(dut.clk, 1)
-        tester.eval()
-        tester.poke(dut.clk, 0)
-        tester.eval()
+    tester = fault.Tester(dut, dut.clk)
 
     # initialize
     v_in = 1.0
@@ -63,14 +58,14 @@ def test_rc(simulator, tau=1e-6, dt=0.1e-6):
     tester.eval()
 
     # reset
-    cycle()
+    tester.step(2)
 
     # print the first few outputs
     tester.poke(dut.rst, 0)
     for k in range(20):
         tester.expect(dut.v_out, v_in*(1-exp(-k*dt/tau)), abs_tol=0.025)
         tester.print("v_out: %0f\n", dut.v_out)
-        cycle()
+        tester.step(2)
 
     # run the simulation
     tester.compile_and_run(

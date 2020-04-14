@@ -38,22 +38,17 @@ def test_tf(simulator, tau=1e-6, dt=0.1e-6):
     model_file = gen_model(tau=tau, dt=dt)
 
     # declare circuit
-    dut = m.DeclareCircuit(
-        f'test_{NAME}',
-        'v_in', fault.RealIn,
-        'v_out', fault.RealOut,
-        'clk', m.BitIn,
-        'rst', m.BitIn
-    )
+    class dut(m.Circuit):
+        name=f'test_{NAME}'
+        io=m.IO(
+            v_in=fault.RealIn,
+            v_out=fault.RealOut,
+            clk=m.ClockIn,
+            rst=m.BitIn
+        )
 
     # create the tester
-    tester = fault.Tester(dut, expect_strict_default=True)
-
-    def cycle():
-        tester.poke(dut.clk, 1)
-        tester.eval()
-        tester.poke(dut.clk, 0)
-        tester.eval()
+    tester = fault.Tester(dut, dut.clk)
 
     # initialize
     v_in = 1.0
@@ -63,7 +58,7 @@ def test_tf(simulator, tau=1e-6, dt=0.1e-6):
     tester.eval()
 
     # reset
-    cycle()
+    tester.step(2)
 
     # model for circuit behavior
     def model(t):
@@ -71,11 +66,11 @@ def test_tf(simulator, tau=1e-6, dt=0.1e-6):
 
     # print the first few outputs
     tester.poke(dut.rst, 0)
-    cycle() # TODO: figure out why an extra cycle is needed here
+    tester.step(2) # TODO: figure out why an extra cycle is needed here
     for k in range(20):
         tester.expect(dut.v_out, model(k*dt), abs_tol=0.025)
         tester.print("v_out: %0f\n", dut.v_out)
-        cycle()
+        tester.step(2)
 
     # run the simulation
     tester.compile_and_run(

@@ -592,13 +592,16 @@ class Concatenate(ModelOperator):
 
 # array types
 
-def array(elements: List, address: ModelExpr, real_range_hint: Number=None):
+def array(elements: List, address: ModelExpr, real_range_hint: Number=None,
+          width=None, exponent=None):
     """
     Create an array
 
     :param elements:        Elements that shall be added to the array
     :param address:         Address that will be added as final element to array
     :param real_range_hint: Hint for the real datatype range.
+    :param width:           Hint for the real datatype width.
+    :param exponent:        Hint for the real datatype exponent.
     :return:                Array
     """
 
@@ -618,8 +621,19 @@ def array(elements: List, address: ModelExpr, real_range_hint: Number=None):
 
         # determine the format to use for the array output
         # TODO: clean up handling of symbolic real ranges
-        if issubclass(format_cls, RealFormat) and real_range_hint is not None:
-            output_format = RealFormat(range_=real_range_hint)
+        if issubclass(format_cls, RealFormat) and (
+                (real_range_hint is not None) or
+                (width is not None) or
+                (exponent is not None)
+        ):
+            kwargs = {}
+            if real_range_hint is not None:
+                kwargs['range_'] = real_range_hint
+            if width is not None:
+                kwargs['width'] = width
+            if exponent is not None:
+                kwargs['exponent'] = exponent
+            output_format = RealFormat(**kwargs)
         else:
             output_format = format_cls.cover([element.format_ for element in elements])
 

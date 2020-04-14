@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 name = 'msdsl'
-version = '0.1.7'
+version = '0.2.4'
 
 DESCRIPTION = '''\
 Library for generating synthesizable mixed-signal models for FPGA emulation\
@@ -22,10 +22,11 @@ setup(
                 'system verilog', 'synthesizable', 'emulation', 'fpga'],
     packages=find_packages(),
     install_requires=[
-        'svreal>=0.2.0',
+        'svreal>=0.2.2',
         'scipy',
         'numpy',
-        'matplotlib'
+        'matplotlib',
+        'cvxpy'
     ],
     license='MIT',
     url=f'https://github.com/sgherbst/{name}',

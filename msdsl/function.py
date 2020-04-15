@@ -1,5 +1,4 @@
 import numpy as np
-import cvxpy as cp
 from math import ceil, log2
 from scipy.sparse import coo_matrix, diags
 from .expr.table import RealTable
@@ -8,6 +7,12 @@ class Function:
     def __init__(self, func, domain, name='real_func', dir='.',
                  numel=512, order=0, clamp=True, coeff_widths=None,
                  coeff_exps=None, verif_per_seg=10):
+        # load cvxpy module
+        try:
+            import cvxpy as cp
+        except:
+            raise Exception(f'ERROR: module cvxpy could not be loaded, cannot use Function class')
+
         # set defaults
         if coeff_widths is None:
             coeff_widths = [18]*(order+1)

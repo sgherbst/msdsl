@@ -31,9 +31,7 @@ setup(
                 'model', 'models', 'generator', 'verilog', 'system-verilog',
                 'system verilog', 'synthesizable', 'emulation', 'fpga'],
     packages=find_packages(),
-    install_requires=[
-
-    ],
+    install_requires=install_requires,
     license='MIT',
     url=f'https://github.com/sgherbst/{name}',
     author='Steven Herbst',

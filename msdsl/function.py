@@ -1,5 +1,4 @@
 import numpy as np
-import cvxpy as cp
 from math import ceil, log2
 from scipy.sparse import coo_matrix, diags
 from .expr.table import RealTable
@@ -35,6 +34,12 @@ class Function:
         return int(ceil(log2(self.numel)))
 
     def create_tables(self):
+        # load cvxpy module
+        try:
+            import cvxpy as cp
+        except:
+            raise Exception(f'ERROR: module cvxpy could not be loaded, cannot use Function class')
+
         # create list of sample points
         lsb = (self.domain[1] - self.domain[0])/(self.numel-1)
         x_vec = self.domain[0] + np.arange(self.numel-1)*lsb

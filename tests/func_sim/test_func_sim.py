@@ -1,6 +1,8 @@
 # general imports
 from pathlib import Path
 import numpy as np
+import importlib
+import pytest
 
 # AHA imports
 import magma as m
@@ -48,6 +50,7 @@ def gen_model(order=0, numel=512):
     # write the model
     return model.compile_to_file(VerilogGenerator())
 
+@pytest.mark.skipif(not importlib.util.find_spec("cvxpy"), reason="cvxpy is not available in python distribution")
 def test_func_sim(simulator, order, err_lim, numel):
     # generate model
     model_file = gen_model(order=order, numel=numel)

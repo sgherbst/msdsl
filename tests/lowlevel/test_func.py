@@ -5,18 +5,21 @@ from msdsl import Function
 
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
-@pytest.mark.parametrize("order,err_limit,numel",
-                         [(0, 0.06, 512),
-                          (1, 0.0012, 128),
-                          (2, 0.001, 32)])
-def test_real_func(order, err_limit, numel):
+@pytest.mark.parametrize("order,err_limit,numel,strategy",
+                         [(0, 0.0105, 512, 'spline'),
+                          (1, 0.000318, 128, 'spline'),
+                          (2, 0.000232, 32, 'cvxpy')])
+def test_real_func(order, err_limit, numel, strategy):
+    # set the random seed for repeatable results
+    np.random.seed(0)
+
     # function parameters
     testfun = np.sin
     domain = [-np.pi, +np.pi]
 
     # create the function
-    func = Function(func=testfun, domain=domain, order=order, numel=numel)
-    func.create_tables()
+    func = Function(func=testfun, domain=domain, order=order,
+                    numel=numel, strategy=strategy)
 
     # evaluate function approximation
     samp = np.random.uniform(domain[0], domain[1], 100)
@@ -26,6 +29,6 @@ def test_real_func(order, err_limit, numel):
     exact = testfun(samp)
 
     # check error
-    err = np.linalg.norm(exact-approx)
+    err = np.sqrt(np.mean((exact-approx)**2))
     print(f'RMS error with order={order}: {err}')
     assert err <= err_limit

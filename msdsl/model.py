@@ -399,7 +399,6 @@ class MixedSignalModel:
 
         # create the table, register it, and return it
         function = Function(func=func, domain=domain, name=name, dir=dir, **kwargs)
-        function.create_tables()
 
         # append values
         self.lookup_tables.extend(function.tables)

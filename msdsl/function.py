@@ -6,12 +6,17 @@ from .expr.table import RealTable
 class Function:
     def __init__(self, func, domain, name='real_func', dir='.',
                  numel=512, order=0, clamp=True, coeff_widths=None,
-                 coeff_exps=None, verif_per_seg=10, strategy='cvxpy'):
+                 coeff_exps=None, verif_per_seg=10, strategy=None):
         # set defaults
         if coeff_widths is None:
             coeff_widths = [18]*(order+1)
         if coeff_exps is None:
             coeff_exps = [None]*(order+1)
+        if strategy is None:
+            if order in {0, 1}:
+                strategy = 'spline'
+            else:
+                strategy = 'cvxpy'
 
         # save settings
         self.func = func
@@ -47,7 +52,7 @@ class Function:
         try:
             import cvxpy as cp
         except:
-            raise Exception(f'ERROR: module cvxpy could not be loaded, cannot use Function class')
+            raise Exception(f"ERROR: module cvxpy could not be loaded, cannot use strategy='cvxpy'")
 
         # create list of sample points
         lsb = (self.domain[1] - self.domain[0])/(self.numel-1)

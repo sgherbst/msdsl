@@ -6,12 +6,17 @@ from .expr.table import RealTable
 class Function:
     def __init__(self, func, domain, name='real_func', dir='.',
                  numel=512, order=0, clamp=True, coeff_widths=None,
-                 coeff_exps=None, verif_per_seg=10):
+                 coeff_exps=None, verif_per_seg=10, strategy=None):
         # set defaults
         if coeff_widths is None:
             coeff_widths = [18]*(order+1)
         if coeff_exps is None:
             coeff_exps = [None]*(order+1)
+        if strategy is None:
+            if order in {0, 1}:
+                strategy = 'spline'
+            else:
+                strategy = 'cvxpy'
 
         # save settings
         self.func = func
@@ -24,6 +29,7 @@ class Function:
         self.coeff_widths = coeff_widths
         self.coeff_exps = coeff_exps
         self.verif_per_seg = verif_per_seg
+        self.strategy = strategy
 
         # initialize variables
         self.tables = None
@@ -34,11 +40,19 @@ class Function:
         return int(ceil(log2(self.numel)))
 
     def create_tables(self):
+        if self.strategy == 'cvxpy':
+            self.create_tables_cvxpy()
+        elif self.strategy == 'spline':
+            self.create_tables_spline()
+        else:
+            raise Exception(f'Unknown strategy: {self.strategy}')
+
+    def create_tables_cvxpy(self):
         # load cvxpy module
         try:
             import cvxpy as cp
         except:
-            raise Exception(f'ERROR: module cvxpy could not be loaded, cannot use Function class')
+            raise Exception(f"ERROR: module cvxpy could not be loaded, cannot use strategy='cvxpy'")
 
         # create list of sample points
         lsb = (self.domain[1] - self.domain[0])/(self.numel-1)
@@ -102,6 +116,33 @@ class Function:
             table = RealTable(vals=vals, width=self.coeff_widths[k],
                               exp=self.coeff_exps[k], name=name,
                               dir=self.dir)
+            self.tables.append(table)
+
+    def create_tables_spline(self):
+        # sample the function
+        x_vec = np.linspace(self.domain[0], self.domain[1], self.numel)
+        y_vec = self.func(x_vec)
+
+        # create the tables
+        self.tables = []
+        for k in range(self.order+1):
+            # name the table
+            name = f'{self.name}_lut_{k}'
+
+            # compute table values
+            # TODO: make this more generic
+            if k == 0:
+                vals = y_vec[:]
+            elif k == 1:
+                vals = np.concatenate((np.diff(y_vec), [0]))
+            else:
+                raise Exception('Only order=0 and order=1 are supported for now.')
+
+            # convert to a synthesizable table
+            table = RealTable(vals=vals, width=self.coeff_widths[k], exp=self.coeff_exps[k],
+                              name=name, dir=self.dir)
+
+            # add table to the list of tables
             self.tables.append(table)
 
     def eval_on(self, samp):

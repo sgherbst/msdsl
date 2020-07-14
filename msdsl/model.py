@@ -23,6 +23,7 @@ from msdsl.expr.extras import if_
 from msdsl.circuit import Circuit
 from msdsl.expr.table import Table, RealTable, SIntTable, UIntTable
 from msdsl.function import Function
+from msdsl.lfsr import LFSR
 
 from scipy.signal import cont2discrete
 
@@ -120,29 +121,31 @@ class MixedSignalModel:
         """
         return self.add_signal(AnalogState(name=name, range_=range_, width=width, exponent=exponent, init=init))
 
-    def add_digital_signal(self, name, width=1, signed=False):
+    def add_digital_signal(self, name, width=1, signed=False, min_val=None, max_val=None):
         """
         Allows for a digital signal to be declared ahead of time with a given format.  In general, it is preferable
         to use bind_name for this, rather than calling add_digital_signal followed by set_this_cycle.
         """
-        return self.add_signal(DigitalSignal(name=name, width=width, signed=signed))
+        return self.add_signal(DigitalSignal(name=name, width=width, signed=signed, min_val=min_val, max_val=max_val))
 
-    def add_digital_input(self, name, width=1, signed=False):
-        return self.add_signal(DigitalInput(name=name, width=width, signed=signed))
+    def add_digital_input(self, name, width=1, signed=False, min_val=None, max_val=None):
+        return self.add_signal(DigitalInput(name=name, width=width, signed=signed, min_val=min_val, max_val=max_val))
 
-    def add_digital_output(self, name, width=1, signed=False, init=0):
+    def add_digital_output(self, name, width=1, signed=False, init=0, min_val=None, max_val=None):
         """
         Note that the initial value will only be used if the digital output has state.
         """
-        return self.add_signal(DigitalOutput(name=name, width=width, signed=signed, init=init))
+        return self.add_signal(DigitalOutput(name=name, width=width, signed=signed, init=init,
+                                             min_val=min_val, max_val=max_val))
 
-    def add_digital_state(self, name, width=1, signed=False, init=0):
+    def add_digital_state(self, name, width=1, signed=False, init=0, min_val=None, max_val=None):
         """
 
         :param init:    The initial value of the digital signal.  This is the reset value of the state variable when
                         `RST_MSDSL is asserted (synchronous reset).
         """
-        return self.add_signal(DigitalState(name=name, width=width, signed=signed, init=init))
+        return self.add_signal(DigitalState(name=name, width=width, signed=signed, init=init,
+                                            min_val=min_val, max_val=max_val))
 
     # signal access functions
 
@@ -246,6 +249,41 @@ class MixedSignalModel:
         """
 
         return self.add_assignment(NextCycleAssignment(signal=signal, expr=expr, clk=clk, rst=rst, ce=ce))
+
+    def lfsr_signal(self, width: int, clk=None, rst=None, ce=None, name=None, init=0):
+        """
+        Returns a digital signal that is updated according to an LFSR equation.  The values returned will range
+        between 0 and (1<<width)-2.  All of these values will appear once in a pseudo-random order before repeating,
+        so the period is (1<<width)-1.  For example, when width=3, the following sequence loops: [0, 1, 3, 6, 5, 2, 4],
+        with the starting point is determined by the value of "init".
+
+        :param width:   Width of the LFSR state signal that will be returned.  The LFSR equation is determined
+                        based on the width, such that the LFSR period is as long as possible.  In particular,
+                        the period will be of length (1<<width)-1.
+        :param clk:     Optional input.  Will use `CLK_MSDSL by default.
+        :param rst:     Optional input for synchronous reset.  Will use `RST_MSDSL by default.
+        :param ce:      Optional input for clock enable.  Will use "1" (i.e., always enabled) by default.
+        :param name:    Naming prefix to use for the LFSR signal
+        :param init:    Initial value
+        :return:
+        """
+
+        # validate input
+        assert init != (1<<width)-1, "Invalid LFSR initialization -- will remain stuck at all 1's"
+
+        # set defaults
+        if name is None:
+            name = self.get_next_name(f'lfsr_state_')
+
+        # create the LFSR state as a digital signal
+        lfsr_state = self.add_digital_state(name, width=width, init=init)
+
+        # update the LFSR signal according to the equation for the given LFSR width
+        lfsr = LFSR(width)
+        self.set_next_cycle(lfsr_state, lfsr.next_state(lfsr_state), clk=clk, rst=rst, ce=ce)
+
+        # return the signal representing the LFSR state
+        return lfsr_state
 
     def set_from_sync_rom(self, signal: Union[Signal, str], table: Table, addr: ModelExpr, clk=None, ce=None):
         """

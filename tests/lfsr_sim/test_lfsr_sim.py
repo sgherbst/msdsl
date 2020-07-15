@@ -10,7 +10,7 @@ from random import seed, randint
 from svreal import get_svreal_header
 
 # msdsl imports
-from ..common import pytest_sim_params, get_file
+from ..common import pytest_sim_params
 from msdsl import MixedSignalModel, VerilogGenerator, get_msdsl_header
 from msdsl.lfsr import LFSR
 

@@ -6,6 +6,7 @@ from copy import deepcopy
 from pathlib import Path
 
 from math import ceil, log2
+import random
 
 from msdsl.assignment import ThisCycleAssignment, NextCycleAssignment, BindingAssignment, SyncRomAssignment, Assignment
 from msdsl.expr.analyze import signal_names
@@ -250,7 +251,7 @@ class MixedSignalModel:
 
         return self.add_assignment(NextCycleAssignment(signal=signal, expr=expr, clk=clk, rst=rst, ce=ce))
 
-    def lfsr_signal(self, width: int, clk=None, rst=None, ce=None, name=None, init=0):
+    def lfsr_signal(self, width: int, clk=None, rst=None, ce=None, name=None, init=None):
         """
         Returns a digital signal that is updated according to an LFSR equation.  The values returned will range
         between 0 and (1<<width)-2.  All of these values will appear once in a pseudo-random order before repeating,
@@ -268,12 +269,14 @@ class MixedSignalModel:
         :return:
         """
 
-        # validate input
-        assert init != (1<<width)-1, "Invalid LFSR initialization -- will remain stuck at all 1's"
-
         # set defaults
         if name is None:
             name = self.get_next_name(f'lfsr_state_')
+        if init is None:
+            init = random.randint(0, (1<<width)-2)
+
+        # validate input
+        assert init != (1<<width)-1, "Invalid LFSR initialization -- will remain stuck at all 1's"
 
         # create the LFSR state as a digital signal
         lfsr_state = self.add_digital_state(name, width=width, init=init)
@@ -284,6 +287,24 @@ class MixedSignalModel:
 
         # return the signal representing the LFSR state
         return lfsr_state
+
+    def uniform_signal(self, min_val=0.0, max_val=1.0, clk=None, rst=None, ce=None, lfsr_name=None,
+                       lfsr_width=32, lfsr_init=None, uniform_name=None):
+        # set defaults
+        if uniform_name is None:
+            uniform_name = self.get_next_name(f'uniform_var_')
+        if lfsr_name is None:
+            lfsr_name = uniform_name + '_lfsr_state'
+
+        # create the LFSR signal
+        lfsr_signal = self.lfsr_signal(width=lfsr_width, clk=clk, rst=rst, ce=ce, name=lfsr_name,
+                                       init=lfsr_init)
+
+        # bind the uniform variable
+        scale_factor = (max_val-min_val)/((1<<lfsr_width)-1)
+        uniform_expr = (lfsr_signal * scale_factor) + min_val
+
+        return self.bind_name(uniform_name, uniform_expr)
 
     def set_from_sync_rom(self, signal: Union[Signal, str], table: Table, addr: ModelExpr, clk=None, ce=None):
         """

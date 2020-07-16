@@ -1,7 +1,6 @@
 # general imports
 from pathlib import Path
 import numpy as np
-from scipy.stats import truncnorm
 
 # AHA imports
 import magma as m
@@ -19,34 +18,33 @@ BUILD_DIR = Path(__file__).resolve().parent / 'build'
 def pytest_generate_tests(metafunc):
     pytest_sim_params(metafunc)
 
-def gen_model(mean=0.0, std=1.0, num_sigma=6.0, order=1, numel=512):
+def gen_model():
     # create mixed-signal model
     model = MixedSignalModel('model', build_dir=BUILD_DIR)
     model.add_digital_input('clk')
     model.add_digital_input('rst')
+    model.add_analog_input('mean_in')
+    model.add_analog_input('std_in')
     model.add_analog_output('real_out')
 
-    # compute the inverse CDF of the distribution (truncated to 0, 1 domain)
-    inv_cdf = lambda x: truncnorm.ppf(x, -num_sigma, +num_sigma, loc=mean, scale=std)
-
-    # create the function object
-    inv_cdf_func = model.make_function(inv_cdf, domain=[0.0, 1.0], order=order, numel=numel)
-
-    model.set_this_cycle(model.real_out, model.arbitrary_noise(inv_cdf_func, clk=model.clk, rst=model.rst))
+    model.set_gaussian_noise(model.real_out, std=model.std_in, mean=model.mean_in,
+                             clk=model.clk, rst=model.rst)
 
     # write the model
     return model.compile_to_file(VerilogGenerator())
 
-def test_arb_noise(simulator, n_trials=10000):
+def test_gaussian_noise(simulator, n_trials=10000):
     # generate model
-    model_file = gen_model(mean=1.23, std=0.456)
+    model_file = gen_model()
 
     # declare circuit
     class dut(m.Circuit):
-        name = 'test_arb_noise'
+        name = 'test_gaussian_noise'
         io = m.IO(
             clk=m.ClockIn,
             rst=m.BitIn,
+            mean_in=fault.RealIn,
+            std_in=fault.RealIn,
             real_out=fault.RealOut
         )
 
@@ -54,7 +52,9 @@ def test_arb_noise(simulator, n_trials=10000):
     t = fault.Tester(dut, dut.clk)
 
     # initialize
-    t.poke(dut.clk, 0)
+    t.zero_inputs()
+    t.poke(dut.mean_in, 1.23)
+    t.poke(dut.std_in, 0.456)
     t.poke(dut.rst, 1)
     t.step(2)
     t.poke(dut.rst, 0)
@@ -70,7 +70,7 @@ def test_arb_noise(simulator, n_trials=10000):
         target='system-verilog',
         directory=BUILD_DIR,
         simulator=simulator,
-        ext_srcs=[model_file, get_file('arb_noise/test_arb_noise.sv')],
+        ext_srcs=[model_file, get_file('gaussian_noise/test_gaussian_noise.sv')],
         inc_dirs=[get_svreal_header().parent, get_msdsl_header().parent],
         ext_model_file=True,
         disp_type='realtime'

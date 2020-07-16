@@ -6,6 +6,7 @@ from copy import deepcopy
 from pathlib import Path
 
 from math import ceil, log2
+from scipy.stats import truncnorm
 import random
 
 from msdsl.assignment import ThisCycleAssignment, NextCycleAssignment, BindingAssignment, SyncRomAssignment, Assignment
@@ -49,6 +50,7 @@ class MixedSignalModel:
         self.lookup_tables = []
         self.namers = {}
         self.namer = Namer()
+        self._inv_cdf_func = None
 
         # add ios
         for io in ios:
@@ -321,6 +323,27 @@ class MixedSignalModel:
 
         return self.set_from_sync_func(signal=noise_name, func=inv_cdf_func, in_=unf_sig,
                                        clk=clk, ce=ce, rst=rst)
+
+    def set_gaussian_noise(self, signal: Union[Signal, str], mean=None, std=None, clk=None, rst=None,
+                           ce=None, lfsr_width=32, lfsr_init=None, lfsr_name=None, uniform_name=None,
+                           noise_name=None, func_order=1, func_numel=512, num_sigma=6):
+        # create the inverse CDF function if needed
+        if self._inv_cdf_func is None:
+            inv_cdf = lambda x: truncnorm.ppf(x, -num_sigma, +num_sigma)
+            self._inv_cdf_func = self.make_function(inv_cdf, domain=[0.0, 1.0], order=func_order, numel=func_numel)
+
+        # generate a standard gaussian noise source
+        expr = self.arbitrary_noise(self._inv_cdf_func, clk=clk, rst=rst, ce=ce, lfsr_width=lfsr_width,
+                                    lfsr_init=lfsr_init, lfsr_name=lfsr_name, uniform_name=uniform_name,
+                                    noise_name=noise_name)
+
+        # scale and shift based on the standard deviation and mean
+        if (std is not None) and (std != 1):
+            expr = expr * std
+        if (mean is not None) and (mean != 0):
+            expr = expr + mean
+
+        self.set_this_cycle(signal, expr)
 
     def set_from_sync_rom(self, signal: Union[Signal, str], table: Table, addr: ModelExpr, clk=None, ce=None):
         """

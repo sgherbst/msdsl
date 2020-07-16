@@ -306,6 +306,22 @@ class MixedSignalModel:
 
         return self.bind_name(uniform_name, uniform_expr)
 
+    def arbitrary_noise(self, inv_cdf_func, clk=None, rst=None, ce=None, lfsr_width=32,
+                        lfsr_init=None, lfsr_name=None, uniform_name=None, noise_name=None):
+        # set defaults
+        if noise_name is None:
+            noise_name = self.get_next_name(f'arb_noise_')
+        if uniform_name is None:
+            uniform_name = noise_name + 'unf_var'
+        if lfsr_name is None:
+            lfsr_name = noise_name + '_lfsr'
+
+        unf_sig =self.uniform_signal(clk=clk, rst=rst, ce=ce, lfsr_name=lfsr_name, lfsr_width=lfsr_width,
+                                     lfsr_init=lfsr_init, uniform_name=uniform_name)
+
+        return self.set_from_sync_func(signal=noise_name, func=inv_cdf_func, in_=unf_sig,
+                                       clk=clk, ce=ce, rst=rst)
+
     def set_from_sync_rom(self, signal: Union[Signal, str], table: Table, addr: ModelExpr, clk=None, ce=None):
         """
         The behavior of this operation is a lookup from a synchronous ROM (which should synthesize

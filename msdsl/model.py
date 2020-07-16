@@ -343,7 +343,7 @@ class MixedSignalModel:
         if (mean is not None) and (mean != 0):
             expr = expr + mean
 
-        self.set_this_cycle(signal, expr)
+        return self.set_this_cycle(signal, expr)
 
     def set_from_sync_rom(self, signal: Union[Signal, str], table: Table, addr: ModelExpr, clk=None, ce=None):
         """

@@ -2,7 +2,7 @@ import os
 from setuptools import setup, find_packages
 
 name = 'msdsl'
-version = '0.2.8'
+version = '0.2.9'
 
 DESCRIPTION = '''\
 Library for generating synthesizable mixed-signal models for FPGA emulation\

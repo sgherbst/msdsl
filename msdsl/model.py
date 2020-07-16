@@ -16,7 +16,7 @@ from msdsl.eqn.eqn_sys import EqnSys
 from msdsl.expr.expr import (ModelExpr, array, concatenate, sum_op, wrap_constant, min_op, clamp_op,
                              to_sint, to_uint)
 from msdsl.expr.signals import (AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, Signal, AnalogSignal,
-                   AnalogState, DigitalState, RealParameter, DigitalSignal)
+                   AnalogState, DigitalState, RealParameter, DigitalSignal, DigitalParameter)
 from msdsl.generator.generator import CodeGenerator
 from msdsl.util import Namer
 from msdsl.eqn.lds import LdsCollection
@@ -47,6 +47,7 @@ class MixedSignalModel:
         self.probes = []
         self.circuits = []
         self.real_params = []
+        self.digital_params = []
         self.lookup_tables = []
         self.namers = {}
         self.namer = Namer()
@@ -518,7 +519,7 @@ class MixedSignalModel:
 
     # parameter functions
 
-    def add_real_param(self, name: str, default: Number):
+    def add_real_param(self, name: str, default: Number=0):
         """
         Equivalent to a real parameter in a Verilog module definition.  Allows the user to generate a single
         SystemVerilog model that can be used for various purposes.
@@ -530,6 +531,24 @@ class MixedSignalModel:
 
         param = RealParameter(param_name=f'{name}', signal_name=f'{name}_param', default=default)
         self.real_params.append(param)
+
+        setattr(self, name, param)
+
+        return param
+
+    def add_digital_param(self, name: str, width=1, signed=False, default=0, min_val=None, max_val=None):
+        """
+        Equivalent to a signed/unsigned parameter in a Verilog module definition.  Allows the user to generate a single
+        SystemVerilog model that can be used for various purposes.
+
+        :param name:        Name of the parameter.
+        :param default:     Real number default for the parameter.  A ModelExpr is not allowed here.
+        :return:            Returns a signal representing the parameter that can be used in subsequent expressions.
+        """
+
+        param = DigitalParameter(name=name, width=width, signed=signed, default=default, min_val=min_val,
+                                 max_val=max_val)
+        self.digital_params.append(param)
 
         setattr(self, name, param)
 
@@ -834,7 +853,8 @@ class MixedSignalModel:
                 internals.append(signal)
 
         # start module
-        gen.start_module(name=self.module_name, ios=ios, real_params=self.real_params)
+        gen.start_module(name=self.module_name, ios=ios, real_params=self.real_params,
+                         digital_params=self.digital_params)
 
         # declare the internal variables
         if len(internals) > 0:

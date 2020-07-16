@@ -62,7 +62,7 @@ class CodeGenerator:
     def expr_to_signal(self, expr: ModelExpr):
         raise NotImplementedError
 
-    def start_module(self, name: str, ios: List[Signal], real_params: List):
+    def start_module(self, name: str, ios: List[Signal], real_params: List, digital_params: List=None):
         raise NotImplementedError
 
     def end_module(self):

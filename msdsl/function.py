@@ -2,16 +2,88 @@ import numpy as np
 from math import ceil, log2
 from scipy.sparse import coo_matrix, diags
 from .expr.table import RealTable
+from .expr.format import RealFormat
 
-class Function:
-    def __init__(self, func, domain, name='real_func', dir='.',
-                 numel=512, order=0, clamp=True, coeff_widths=None,
-                 coeff_exps=None, verif_per_seg=10, strategy=None):
+class GeneralFunction:
+    def __init__(self, domain, name='real_func', numel=512, order=0,
+                 clamp=True, coeff_widths=None, coeff_exps=None):
         # set defaults
         if coeff_widths is None:
             coeff_widths = [18]*(order+1)
         if coeff_exps is None:
             coeff_exps = [None]*(order+1)
+
+        self.domain = domain
+        self.name = name
+        self.numel = numel
+        self.order = order
+        self.clamp = clamp
+        self.coeff_widths = coeff_widths
+        self.coeff_exps = coeff_exps
+
+    @property
+    def addr_bits(self):
+        return int(ceil(log2(self.numel)))
+
+class PlaceholderFunction(GeneralFunction):
+    def __init__(self, domain, name='real_func', numel=512, order=0,
+                 clamp=True, coeff_ranges=None, coeff_exps=None,
+                 coeff_widths=None):
+        # set default for coefficient widths
+        if coeff_widths is None:
+            if coeff_exps is None:
+                coeff_widths = [18]*(order+1)
+            else:
+                coeff_widths = [self.calc_width(range_, exponent)
+                                for range_, exponent in zip(coeff_ranges, coeff_widths)]
+
+        # set default for coefficient exponents
+        if coeff_exps is None:
+            coeff_exps = [self.calc_exponent(range_, width)
+                          for range_, width in zip(coeff_ranges, coeff_widths)]
+
+        # set default values for coefficient ranges
+        if coeff_ranges is None:
+            coeff_ranges = [self.calc_range(width, exponent)
+                            for width, exponent in zip(coeff_widths, coeff_exps)]
+
+        # save formatting information
+        self.formats = [RealFormat(range_=range_, width=width, exponent=exponent)
+                        for range_, width, exponent in zip(coeff_ranges, coeff_widths, coeff_exps)]
+
+        # call super constructor
+        super().__init__(domain=domain, name=name, numel=numel, order=order,
+                         clamp=clamp, coeff_widths=coeff_widths,
+                         coeff_exps=coeff_exps)
+
+    @staticmethod
+    def calc_exponent(range, width):
+        if range == 0:
+            return 0
+        else:
+            return int(ceil(log2(range/(2**(width-1)-1))))
+
+    @staticmethod
+    def calc_width(range, exponent):
+        if range == 0:
+            return 1
+        else:
+            return int(ceil(1+log2((range/(2**exponent))+1)))
+
+    @staticmethod
+    def calc_range(width, exponent):
+        return 2**(width+exponent-1)
+
+class Function(GeneralFunction):
+    def __init__(self, func, domain, name='real_func', dir='.',
+                 numel=512, order=0, clamp=True, coeff_widths=None,
+                 coeff_exps=None, verif_per_seg=10, strategy=None):
+        # call super constructor
+        super().__init__(domain=domain, name=name, numel=numel, order=order,
+                         clamp=clamp, coeff_widths=coeff_widths,
+                         coeff_exps=coeff_exps)
+
+        # set defaults
         if strategy is None:
             if order in {0, 1}:
                 strategy = 'spline'
@@ -20,24 +92,13 @@ class Function:
 
         # save settings
         self.func = func
-        self.domain = domain
-        self.name = name
         self.dir = dir
-        self.numel = numel
-        self.order = order
-        self.clamp = clamp
-        self.coeff_widths = coeff_widths
-        self.coeff_exps = coeff_exps
         self.verif_per_seg = verif_per_seg
         self.strategy = strategy
 
         # initialize variables
         self.tables = None
         self.create_tables()
-
-    @property
-    def addr_bits(self):
-        return int(ceil(log2(self.numel)))
 
     def create_tables(self):
         if self.strategy == 'cvxpy':

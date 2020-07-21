@@ -1,9 +1,10 @@
 from typing import List
 from numbers import Number
 
-from msdsl.expr.signals import Signal
+from msdsl.expr.signals import Signal, DigitalSignal, AnalogSignal
 from msdsl.expr.expr import ModelExpr
 from msdsl.expr.table import Table
+from msdsl.expr.format import RealFormat
 from msdsl.util import Namer
 
 class CodeGenerator:
@@ -57,6 +58,11 @@ class CodeGenerator:
 
     def make_sync_rom(self, signal: Signal, table: Table, addr: Signal,
                       clk: Signal=None, ce: Signal=None):
+        raise NotImplementedError
+
+    def make_sync_ram(self, signal: AnalogSignal, format_: RealFormat, addr: DigitalSignal,
+                      clk: DigitalSignal=None, ce: DigitalSignal=None, we: DigitalSignal=None,
+                      din: DigitalSignal=None):
         raise NotImplementedError
 
     def expr_to_signal(self, expr: ModelExpr):

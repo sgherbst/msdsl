@@ -173,6 +173,24 @@ class PlaceholderFunction(GeneralFunction):
                          coeff_exps=coeff_exps, verif_per_seg=verif_per_seg,
                          strategy=strategy)
 
+    def coeffs_to_fixed(self, coeffs):
+        retval = []
+        for k in range(self.order+1):
+            retval.append([int(round(coeff*(2**(-self.coeff_exps[k]))))
+                           for coeff in coeffs[k]])
+        return retval
+
+    def get_coeffs_fixed_fmt(self, func):
+        coeffs = self.get_coeffs(func)
+        return self.coeffs_to_fixed(coeffs)
+
+    def get_coeffs_bin_fmt(self, func):
+        retval = []
+        for k, coeff_vec in enumerate(self.get_coeffs_fixed_fmt(func)):
+            retval.append([coeff & ((1<<self.coeff_widths[k])-1)
+                           for coeff in coeff_vec])
+        return retval
+
     @staticmethod
     def calc_exponent(range, width):
         if range == 0:

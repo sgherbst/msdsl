@@ -25,9 +25,6 @@ def pytest_generate_tests(metafunc):
              (1, 0.000318, 7, 18)]
     metafunc.parametrize('order,err_lim,addr_bits,data_bits', tests)
 
-def coeff_to_fixed(val, order):
-    return int(round(val*(2**(-COEFF_EXPS[order]))))
-
 def clip_sin(x):
     # clip input
     x = np.clip(x, -DOMAIN, +DOMAIN)
@@ -40,7 +37,7 @@ def clip_cos(x):
     # apply function
     return np.cos(x)
 
-def gen_model(order=0, addr_bits=9, data_bits=18):
+def gen_model(placeholder, addr_bits=9, data_bits=18):
     # create mixed-signal model
     model = MixedSignalModel('model', build_dir=BUILD_DIR)
     model.add_analog_input('in_')
@@ -52,12 +49,8 @@ def gen_model(order=0, addr_bits=9, data_bits=18):
     model.add_digital_input('waddr', width=addr_bits)
     model.add_digital_input('we')
 
-    # create function
-    real_func = PlaceholderFunction(domain=[-DOMAIN, +DOMAIN], order=order, numel=1<<addr_bits,
-                                    coeff_widths=[data_bits]*(order+1), coeff_exps=COEFF_EXPS[:(order+1)])
-
     # apply function
-    model.set_from_sync_func(model.out, real_func, model.in_, clk=model.clk, rst=model.rst,
+    model.set_from_sync_func(model.out, placeholder, model.in_, clk=model.clk, rst=model.rst,
                              wdata=[model.wdata0, model.wdata1], waddr=model.waddr, we=model.we)
 
     # write the model
@@ -68,7 +61,10 @@ def test_placeholder(simulator, order, err_lim, addr_bits, data_bits):
     np.random.seed(0)
 
     # generate model
-    model_file = gen_model(order=order, addr_bits=addr_bits, data_bits=data_bits)
+    placeholder = PlaceholderFunction(domain=[-DOMAIN, +DOMAIN], order=order,
+                                      numel=1<<addr_bits, coeff_widths=[data_bits]*(order+1),
+                                      coeff_exps=COEFF_EXPS[:(order+1)])
+    model_file = gen_model(placeholder=placeholder, addr_bits=addr_bits, data_bits=data_bits)
 
     # declare circuit
     class dut(m.Circuit):
@@ -96,18 +92,21 @@ def test_placeholder(simulator, order, err_lim, addr_bits, data_bits):
     t.poke(dut.rst, 0)
     t.step(2)
 
-    # run trial using a particular function
+    # define a method for testing out the placeholder feature
+    # with an arbitrary function
     def run_trial(func):
         # determine coefficients for order=0 and order=1
-        x_vec = np.linspace(-DOMAIN, +DOMAIN, 1<<addr_bits)
-        y_vec = func(x_vec)
-        coeffs = [y_vec[:], np.concatenate((np.diff(y_vec), [0]))]
+        coeffs_bin = placeholder.get_coeffs_bin_fmt(func)
 
         # write coefficients
         t.poke(dut.we, 1)
         for i in range(1<<addr_bits):
-            t.poke(dut.wdata0, coeff_to_fixed(coeffs[0][i], 0))
-            t.poke(dut.wdata1, coeff_to_fixed(coeffs[1][i], 1))
+            if order >= 0:
+                t.poke(dut.wdata0, coeffs_bin[0][i])
+            if order >= 1:
+                t.poke(dut.wdata1, coeffs_bin[1][i])
+            if order >= 2:
+                raise Exception('Only order=0 and order=1 are implemented for this test.')
             t.poke(dut.waddr, i)
             t.step(2)
         t.poke(dut.we, 0)
@@ -123,16 +122,19 @@ def test_placeholder(simulator, order, err_lim, addr_bits, data_bits):
         # return the list of saved outputs
         return inpts, apprx
 
+    # actually run the trials, using "sine" and "cosine"
     inpts0, apprx0 = run_trial(clip_sin)
     inpts1, apprx1 = run_trial(clip_cos)
 
-    # run the simulation
+    # define simulation parameters
     parameters = {
         'in_range': 2*DOMAIN,
         'out_range': 2*RANGE,
         'addr_bits': addr_bits,
         'data_bits': data_bits
     }
+
+    # run the simulation
     t.compile_and_run(
         target='system-verilog',
         directory=BUILD_DIR,
@@ -152,10 +154,12 @@ def test_placeholder(simulator, order, err_lim, addr_bits, data_bits):
     exact0 = clip_sin(inpts0)
     exact1 = clip_cos(inpts1)
 
-    # check the result
+    # calculate errors
     err0 = np.sqrt(np.mean((exact0-apprx0)**2))
     err1 = np.sqrt(np.mean((exact1-apprx1)**2))
     print(f'err0: {err0}')
     print(f'err1: {err1}')
+
+    # check the result
     assert err0 <= err_lim, 'err0 is out of spec'
     assert err1 <= err_lim, 'err1 is out of spec'

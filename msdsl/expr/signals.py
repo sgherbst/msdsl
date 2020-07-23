@@ -1,3 +1,5 @@
+from numbers import Number
+
 from msdsl.expr.expr import ModelExpr
 from msdsl.expr.format import RealFormat, UIntFormat, SIntFormat, is_signed
 from msdsl.expr.svreal import RangeOf, WidthOf, ExponentOf, UndefinedRange, ParamRange
@@ -77,16 +79,20 @@ class DigitalSignal(Signal):
     The DigitalSignal object is used within MSDSL to represent a digital signal. Any digital signal that shall be used
     withing the functional model generated via MSDSL needs to be an instance of this class.
 
-    :param name:        Name of the analog signal to be added
+    :param name:        Name of the digital signal to be added
     :param width:       Specify a width different from the default.
     :param signed:      Setting this option to True will change from the unsigned, default representation to a signed one.
+    :param min_val:     Minimum value of the signal.  You should generally leave this as "None" so that it will be
+                        filled in automatically.
+    :param max_val:     Maximum value of the signal.  You should generally leave this as "None" so that it will be
+                        filled in automatically.
     """
-    def __init__(self, name, width=1, signed=False):
+    def __init__(self, name, width=1, signed=False, min_val=None, max_val=None):
         # determine the foramt
         if signed:
-            format_ = SIntFormat(width=width)
+            format_ = SIntFormat(width=width, min_val=min_val, max_val=max_val)
         else:
-            format_ = UIntFormat(width=width)
+            format_ = UIntFormat(width=width, min_val=min_val, max_val=max_val)
 
         # call the super constructor
         super().__init__(name=name, format_=format_)
@@ -99,6 +105,33 @@ class DigitalSignal(Signal):
     def signed(self):
         return is_signed(self.format_)
 
+class DigitalParameter(DigitalSignal):
+    """
+    :param name:        Name of the digital parameter to be added
+    :param width:       Specify a width different from the default.
+    :param signed:      Setting this option to True will change from the unsigned, default representation to a signed one.
+    :param default:     Default value of the parameter if not specified.
+    :param min_val:     Minimum value of the signal.  You should generally leave this as "None" so that it will be
+                        filled in automatically.
+    :param max_val:     Maximum value of the signal.  You should generally leave this as "None" so that it will be
+                        filled in automatically.
+    """
+    def __init__(self, name, width=1, signed=False, default=0, min_val=None, max_val=None):
+        # call the super constructor
+        super().__init__(name=name, width=width, signed=signed, min_val=min_val, max_val=max_val)
+
+        # check that the default value can be properly represented given the formatting of this parameter
+        # if the user provides the default as a string (e.g., "16'ABCD", "param1+param2"), the bounds are
+        # not currently checked
+        if isinstance(default, Number):
+            assert self.format_.min_val <= default <= self.format_.max_val, \
+                f'Default value {default} is not in range [{self.format_.min_val}, {self.format_.max_val}].'
+        else:
+            print(f'Warning: could not validate bounds for default value of parameter {name}')
+
+        # save the default
+        self.default = default
+
 class DigitalState(DigitalSignal):
     """
     The DigitalState object is used within MSDSL to represent a digital state. Any
@@ -108,31 +141,45 @@ class DigitalState(DigitalSignal):
     :param width:       Specify a width different from the default.
     :param signed:      Setting this option to True will change from the unsigned, default representation to a signed one.
     :param init:        Initial value of the analog state.
+    :param min_val:     Minimum value of the signal.  You should generally leave this as "None" so that it will be
+                        filled in automatically.
+    :param max_val:     Maximum value of the signal.  You should generally leave this as "None" so that it will be
+                        filled in automatically.
     """
-    def __init__(self, name, width=1, signed=False, init=0):
+    def __init__(self, name, width=1, signed=False, init=0, min_val=None, max_val=None):
         self.init = init
-        super().__init__(name=name, width=width, signed=signed)
+        super().__init__(name=name, width=width, signed=signed, min_val=min_val, max_val=max_val)
 
 class DigitalOutput(DigitalSignal):
     """
-    The DigitalOutput object is used within MSDSL to represent an digital output such as the voltage of a capacitor. Any
+    The DigitalOutput object is used within MSDSL to represent an digital output such as the output of a logic gate. Any
     digital output that shall be used withing the functional model generated via MSDSL needs to be an instance of this class.
 
-    :param name:        Name of the analog signal to be added
+    :param name:        Name of the digital signal to be added
+    :param width:       Specify a width different from the default.
     :param signed:      Setting this option to True will change from the unsigned, default representation to a signed one.
     :param init:        Initial value of the analog output.
+    :param min_val:     Minimum value of the signal.  You should generally leave this as "None" so that it will be
+                        filled in automatically.
+    :param max_val:     Maximum value of the signal.  You should generally leave this as "None" so that it will be
+                        filled in automatically.
     """
-    def __init__(self, name, width=1, signed=False, init=0):
+    def __init__(self, name, width=1, signed=False, init=0, min_val=None, max_val=None):
         self.init = init
-        super().__init__(name=name, width=width, signed=signed)
+        super().__init__(name=name, width=width, signed=signed, min_val=min_val, max_val=max_val)
 
 class DigitalInput(DigitalSignal):
     """
-    The DigitalInput object is used within MSDSL to represent an digital input such as the voltage of a capacitor. Any
-    digital output that shall be used withing the functional model generated via MSDSL needs to be an instance of this class.
+    The DigitalInput object is used within MSDSL to represent an digital input such as the input of a logic gate. Any
+    digital input that shall be used withing the functional model generated via MSDSL needs to be an instance of this class.
 
     :param name:        Name of the analog signal to be added
+    :param width:       Specify a width different from the default.
     :param signed:      Setting this option to True will change from the unsigned, default representation to a signed one.
+    :param min_val:     Minimum value of the signal.  You should generally leave this as "None" so that it will be
+                        filled in automatically.
+    :param max_val:     Maximum value of the signal.  You should generally leave this as "None" so that it will be
+                        filled in automatically.
     """
     pass
 

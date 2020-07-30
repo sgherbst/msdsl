@@ -9,7 +9,8 @@ from math import ceil, log2
 from scipy.stats import truncnorm
 import random
 
-from msdsl.assignment import ThisCycleAssignment, NextCycleAssignment, BindingAssignment, SyncRomAssignment, Assignment
+from msdsl.assignment import (ThisCycleAssignment, NextCycleAssignment, BindingAssignment,
+                              SyncRomAssignment, Assignment, SyncRamAssignment)
 from msdsl.expr.analyze import signal_names
 from msdsl.eqn.cases import address_to_settings
 from msdsl.eqn.eqn_sys import EqnSys
@@ -24,7 +25,7 @@ from msdsl.expr.format import RealFormat, IntFormat, is_signed
 from msdsl.expr.extras import if_
 from msdsl.circuit import Circuit
 from msdsl.expr.table import Table, RealTable, SIntTable, UIntTable
-from msdsl.function import Function
+from msdsl.function import GeneralFunction, Function, PlaceholderFunction
 from msdsl.lfsr import LFSR
 
 from scipy.signal import cont2discrete
@@ -369,14 +370,28 @@ class MixedSignalModel:
         return self.add_assignment(SyncRomAssignment(signal=signal, table=table, addr=addr,
                                                      clk=clk, ce=ce, should_bind=should_bind))
 
-    def set_from_sync_func(self, signal: Union[Signal, str], func: Function, in_: ModelExpr,
-                           clk=None, ce=None, rst=None):
+    def set_from_sync_ram(self, signal: Union[AnalogSignal, str], format_: RealFormat,
+                          addr: ModelExpr, clk=None, ce=None, we=None, din=None):
+        # bind the signal if necessary
+        should_bind = False
+        if isinstance(signal, str):
+            signal = self.add_signal(Signal(name=signal, format_=format_))
+            should_bind = True
+
+        # return the assignment
+        return self.add_assignment(SyncRamAssignment(signal=signal, format_=format_, addr=addr, clk=clk,
+                                                     ce=ce, we=we, din=din, should_bind=should_bind))
+
+    def set_from_sync_func(self, signal: Union[Signal, str], func: GeneralFunction, in_: ModelExpr,
+                           clk=None, ce=None, rst=None, we=None, wdata=None, waddr=None):
         """
         The behavior of this operation is a an evaluation of a Function.
         There is a one-cycle delay in this operation.
 
         :param signal:   Signal object being assigned
-        :param function: Function object
+        :param function: If a Function is used, ROMs are used for the lookup tables.  Otherwise,
+                         if a PlaceholderFunction is used, then RAMs are used, with the expectation
+                         that the user will set the contents of those RAMs before using the function.
         :param in_:      Real-number input of the function
         :param clk:      Optional input.  Will use `CLK_MSDSL by default.
         :param ce:       Optional input for clock enable.  Will use "1" (i.e., always enabled) by default.
@@ -392,8 +407,6 @@ class MixedSignalModel:
                                         range_=func.numel-1.0)
 
         # convert address to signed integer
-        # TODO: avoid need to re-clamp expression; this is a limitation
-        # of the way ranges for real numbers are represented
         addr_sint_expr = to_sint(addr_real, width=func.addr_bits+1)
         if func.clamp:
             addr_sint_expr = clamp_op(addr_sint_expr, 0, func.numel - 1)
@@ -403,6 +416,11 @@ class MixedSignalModel:
         addr_uint_expr = to_uint(addr_sint, width=func.addr_bits)
         addr_uint = self.set_this_cycle(self.get_next_name(f'{func.name}_addr_uint_'), addr_uint_expr)
 
+        # if needed, mux address and
+        if isinstance(func, PlaceholderFunction):
+            addr_mux_expr = if_(we, waddr, addr_uint)
+            addr_mux = self.set_this_cycle(self.get_next_name(f'{func.name}_addr_mux_'), addr_mux_expr)
+
         # calculate fractional address
         addr_frac_expr = addr_real - addr_sint
         addr_frac = self.set_this_cycle(self.get_next_name(f'{func.name}_addr_frac_'), addr_frac_expr,
@@ -410,8 +428,14 @@ class MixedSignalModel:
 
         # look up coefficient values
         coeffs = [self.get_next_name(f'{func.name}_coeff_{k}_') for k in range(func.order+1)]
-        for coeff, table in zip(coeffs, func.tables):
-            self.set_from_sync_rom(signal=coeff, table=table, addr=addr_uint, clk=clk, ce=ce)
+        for k, coeff in enumerate(coeffs):
+            if isinstance(func, PlaceholderFunction):
+                self.set_from_sync_ram(signal=coeff, format_=func.formats[k], addr=addr_mux,
+                                       clk=clk, ce=ce, we=we, din=wdata[k])
+            elif isinstance(func, Function):
+                self.set_from_sync_rom(signal=coeff, table=func.tables[k], addr=addr_uint, clk=clk, ce=ce)
+            else:
+                raise Exception(f'Unknown function type: {func}')
 
         # compute higher-order products of terms
         prods_imm = [self.get_next_name(f'{func.name}_prod_imm_{k}_') for k in range(func.order)]
@@ -882,6 +906,10 @@ class MixedSignalModel:
             elif isinstance(assignment, SyncRomAssignment):
                 gen.make_sync_rom(signal=assignment.signal, table=assignment.table,
                                   addr=result, clk=assignment.clk, ce=assignment.ce)
+            elif isinstance(assignment, SyncRamAssignment):
+                gen.make_sync_ram(signal=assignment.signal, format_=assignment.format_,
+                                  addr=result, clk=assignment.clk, ce=assignment.ce,
+                                  we=assignment.we, din=assignment.din)
             else:
                 raise Exception('Invalid assignment type.')
 

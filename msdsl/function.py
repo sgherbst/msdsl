@@ -2,11 +2,12 @@ import numpy as np
 from math import ceil, log2
 from scipy.sparse import coo_matrix, diags
 from .expr.table import RealTable
+from .expr.format import RealFormat
 
-class Function:
-    def __init__(self, func, domain, name='real_func', dir='.',
-                 numel=512, order=0, clamp=True, coeff_widths=None,
-                 coeff_exps=None, verif_per_seg=10, strategy=None):
+class GeneralFunction:
+    def __init__(self, domain, name='real_func', numel=512, order=0,
+                 clamp=True, coeff_widths=None, coeff_exps=None,
+                 verif_per_seg=10, strategy=None):
         # set defaults
         if coeff_widths is None:
             coeff_widths = [18]*(order+1)
@@ -19,10 +20,8 @@ class Function:
                 strategy = 'cvxpy'
 
         # save settings
-        self.func = func
         self.domain = domain
         self.name = name
-        self.dir = dir
         self.numel = numel
         self.order = order
         self.clamp = clamp
@@ -31,23 +30,19 @@ class Function:
         self.verif_per_seg = verif_per_seg
         self.strategy = strategy
 
-        # initialize variables
-        self.tables = None
-        self.create_tables()
-
     @property
     def addr_bits(self):
         return int(ceil(log2(self.numel)))
 
-    def create_tables(self):
+    def get_coeffs(self, func):
         if self.strategy == 'cvxpy':
-            self.create_tables_cvxpy()
+            return self.get_coeffs_cvxpy(func)
         elif self.strategy == 'spline':
-            self.create_tables_spline()
+            return self.get_coeffs_spline(func)
         else:
             raise Exception(f'Unknown strategy: {self.strategy}')
 
-    def create_tables_cvxpy(self):
+    def get_coeffs_cvxpy(self, func):
         # load cvxpy module
         try:
             import cvxpy as cp
@@ -61,7 +56,7 @@ class Function:
         x_vec = x_vec + np.random.uniform(0, lsb, x_vec.shape)
 
         # evaluate the function at the sample poitns
-        y_vec = self.func(x_vec)
+        y_vec = func(x_vec)
 
         # create vectors of integer and fractional addresses
         addr_real = (x_vec - self.domain[0])*((self.numel-1)/(self.domain[1]-self.domain[0]))
@@ -108,54 +103,146 @@ class Function:
         prob = cp.Problem(cp.Minimize(cp.sum_squares(cost)), eqn_cons)
         prob.solve()
 
-        # unpack solution into tables
-        self.tables = []
-        for k in range(self.order+1):
-            name = f'{self.name}_lut_{k}'
-            vals = coeffs[k].value
-            table = RealTable(vals=vals, width=self.coeff_widths[k],
-                              exp=self.coeff_exps[k], name=name,
-                              dir=self.dir)
-            self.tables.append(table)
+        # unpack solution
+        return [coeffs[k].value for k in range(self.order+1)]
 
-    def create_tables_spline(self):
+    def get_coeffs_spline(self, func):
         # sample the function
         x_vec = np.linspace(self.domain[0], self.domain[1], self.numel)
-        y_vec = self.func(x_vec)
+        y_vec = func(x_vec)
 
-        # create the tables
-        self.tables = []
-        for k in range(self.order+1):
-            # name the table
-            name = f'{self.name}_lut_{k}'
+        # create the coefficient vectors
+        retval = []
+        if self.order >= 0:
+            retval.append(y_vec[:])
+        if self.order >= 1:
+            retval.append(np.concatenate((np.diff(y_vec), [0])))
+        if self.order >= 2:
+            raise Exception('The spline method only supports order=0 and order=1 for now.')
 
-            # compute table values
-            # TODO: make this more generic
-            if k == 0:
-                vals = y_vec[:]
-            elif k == 1:
-                vals = np.concatenate((np.diff(y_vec), [0]))
-            else:
-                raise Exception('Only order=0 and order=1 are supported for now.')
+        # return the coefficient vector
+        return retval
 
-            # convert to a synthesizable table
-            table = RealTable(vals=vals, width=self.coeff_widths[k], exp=self.coeff_exps[k],
-                              name=name, dir=self.dir)
-
-            # add table to the list of tables
-            self.tables.append(table)
-
-    def eval_on(self, samp):
+    def eval_on(self, samp, coeffs):
         # calculate address as a real value
         addr_real = (samp - self.domain[0])*((self.numel-1)/(self.domain[1]-self.domain[0]))
         if self.clamp:
             addr_real = np.clip(addr_real, 0, self.numel-1)
+
         # calculate integer and fractional addresses
         addr_int = addr_real.astype(np.int)
         addr_frac = addr_real - addr_int
+
         # sum up output contributions
         out = np.zeros(len(samp))
         for k in range(self.order+1):
-            out += self.tables[k].vals[addr_int] * np.power(addr_frac, k)
+            out += coeffs[k][addr_int] * np.power(addr_frac, k)
+
         # return output
         return out
+
+class PlaceholderFunction(GeneralFunction):
+    def __init__(self, domain, name='real_func', numel=512, order=0,
+                 clamp=True, coeff_ranges=None, coeff_exps=None,
+                 coeff_widths=None, verif_per_seg=10, strategy=None):
+        # set default for coefficient widths
+        if coeff_widths is None:
+            if coeff_exps is None:
+                coeff_widths = [18]*(order+1)
+            else:
+                coeff_widths = [self.calc_width(range_, exponent)
+                                for range_, exponent in zip(coeff_ranges, coeff_widths)]
+
+        # set default for coefficient exponents
+        if coeff_exps is None:
+            coeff_exps = [self.calc_exponent(range_, width)
+                          for range_, width in zip(coeff_ranges, coeff_widths)]
+
+        # set default values for coefficient ranges
+        if coeff_ranges is None:
+            coeff_ranges = [self.calc_range(width, exponent)
+                            for width, exponent in zip(coeff_widths, coeff_exps)]
+
+        # save formatting information
+        self.formats = [RealFormat(range_=range_, width=width, exponent=exponent)
+                        for range_, width, exponent in zip(coeff_ranges, coeff_widths, coeff_exps)]
+
+        # call super constructor
+        super().__init__(domain=domain, name=name, numel=numel, order=order,
+                         clamp=clamp, coeff_widths=coeff_widths,
+                         coeff_exps=coeff_exps, verif_per_seg=verif_per_seg,
+                         strategy=strategy)
+
+    def coeffs_to_fixed(self, coeffs):
+        retval = []
+        for k in range(self.order+1):
+            retval.append([int(round(coeff*(2**(-self.coeff_exps[k]))))
+                           for coeff in coeffs[k]])
+        return retval
+
+    def get_coeffs_fixed_fmt(self, func):
+        coeffs = self.get_coeffs(func)
+        return self.coeffs_to_fixed(coeffs)
+
+    def get_coeffs_bin_fmt(self, func):
+        retval = []
+        for k, coeff_vec in enumerate(self.get_coeffs_fixed_fmt(func)):
+            retval.append([coeff & ((1<<self.coeff_widths[k])-1)
+                           for coeff in coeff_vec])
+        return retval
+
+    @staticmethod
+    def calc_exponent(range, width):
+        if range == 0:
+            return 0
+        else:
+            return int(ceil(log2(range/(2**(width-1)-1))))
+
+    @staticmethod
+    def calc_width(range, exponent):
+        if range == 0:
+            return 1
+        else:
+            return int(ceil(1+log2((range/(2**exponent))+1)))
+
+    @staticmethod
+    def calc_range(width, exponent):
+        return 2**(width+exponent-1)
+
+class Function(GeneralFunction):
+    def __init__(self, func, domain, name='real_func', dir='.',
+                 numel=512, order=0, clamp=True, coeff_widths=None,
+                 coeff_exps=None, verif_per_seg=10, strategy=None):
+        # call super constructor
+        super().__init__(domain=domain, name=name, numel=numel, order=order,
+                         clamp=clamp, coeff_widths=coeff_widths,
+                         coeff_exps=coeff_exps, verif_per_seg=verif_per_seg,
+                         strategy=strategy)
+
+        # save settings
+        self.func = func
+        self.dir = dir
+
+        # initialize variables
+        self.tables = None
+        self.create_tables()
+
+    def create_tables(self):
+        # calculate coefficients
+        coeffs = self.get_coeffs(self.func)
+
+        # write coefficients in tables
+        self.tables = []
+        for k, coeff_vec in enumerate(coeffs):
+            name = f'{self.name}_lut_{k}'
+            table = RealTable(vals=coeff_vec, width=self.coeff_widths[k],
+                              exp=self.coeff_exps[k], name=name, dir=self.dir)
+            self.tables.append(table)
+
+    def eval_on(self, samp, coeffs=None):
+        # set defaults
+        if coeffs is None:
+            coeffs = [self.tables[k].vals for k in range(self.order+1)]
+
+        # call the parent method
+        return super().eval_on(samp=samp, coeffs=coeffs)

@@ -156,6 +156,8 @@ class VerilogGenerator(CodeGenerator):
                 init_str = str(init)
             elif isinstance(init, RealParameter):
                 init_str = init.param_name
+            elif isinstance(init, str):
+                init_str = init
             else:
                 raise Exception(f'Could not determine string representation for initial value {init}')
 
@@ -180,6 +182,8 @@ class VerilogGenerator(CodeGenerator):
                 init_str = str(init)
             elif isinstance(init, DigitalParameter):
                 init_str = init.name
+            elif isinstance(init, str):
+                init_str = init
             else:
                 raise Exception(f'Could not determine string representation for initial value {init}')
 
@@ -207,6 +211,20 @@ class VerilogGenerator(CodeGenerator):
                             ce_name, table.addr_bits, table.width, f'"{table.path}"')
         else:
             raise Exception(f'Unknown table type: {type(table)}')
+
+    def make_sync_ram(self, signal: AnalogSignal, format_: RealFormat, addr: DigitalSignal,
+                      clk: DigitalSignal=None, ce: DigitalSignal=None, we: DigitalSignal=None,
+                      din: DigitalSignal=None):
+        # set defaults
+        din_name = din.name if din is not None else "'0"
+        clk_name = clk.name if clk is not None else "`CLK_MSDSL"
+        ce_name = ce.name if ce is not None else "1'b1"
+        we_name = we.name if we is not None else "1'b0"
+
+        # call the SVREAL macro
+        self.macro_call('SYNC_RAM_INTO_REAL', addr.name, din_name, signal.name,
+                        clk_name, ce_name, we_name, addr.format_.width, format_.width,
+                        format_.exponent)
 
     def start_module(self, name: str, ios: List[Signal], real_params: List, digital_params: List=None):
         # set defaults

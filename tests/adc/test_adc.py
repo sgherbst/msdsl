@@ -5,14 +5,10 @@ from pathlib import Path
 
 # AHA imports
 import magma as m
-import fault
-
-# svreal import
-from svreal import get_svreal_header
 
 # msdsl imports
-from ..common import pytest_sim_params, get_file
-from msdsl import MixedSignalModel, VerilogGenerator, to_sint, clamp_op, get_msdsl_header
+from ..common import *
+from msdsl import MixedSignalModel, VerilogGenerator, to_sint, clamp_op
 
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
@@ -61,7 +57,7 @@ def test_adc(simulator, n_adc=8, v_ref_n=-1.0, v_ref_p=+1.0, dt=0.1e-6):
         return code
 
     # create mechanism to run trials
-    t = fault.Tester(dut, expect_strict_default=True)
+    t = MsdslTester(dut)
     def run_trial(a_in, should_print=False):
         t.poke(dut.a_in, a_in)
         t.eval()
@@ -76,12 +72,8 @@ def test_adc(simulator, n_adc=8, v_ref_n=-1.0, v_ref_p=+1.0, dt=0.1e-6):
 
     # run the simulation
     t.compile_and_run(
-        target='system-verilog',
         directory=BUILD_DIR,
         simulator=simulator,
         ext_srcs=[model_file, get_file('adc/test_adc.sv')],
-        inc_dirs=[get_svreal_header().parent, get_msdsl_header().parent],
-        parameters={'n_adc': n_adc},
-        ext_model_file=True,
-        disp_type='realtime'
+        parameters={'n_adc': n_adc}
     )

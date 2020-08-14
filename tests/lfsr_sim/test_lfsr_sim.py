@@ -3,15 +3,11 @@ from pathlib import Path
 
 # AHA imports
 import magma as m
-import fault
 from random import seed, randint
 
-# svreal import
-from svreal import get_svreal_header
-
 # msdsl imports
-from ..common import pytest_sim_params
-from msdsl import MixedSignalModel, VerilogGenerator, get_msdsl_header
+from ..common import *
+from msdsl import MixedSignalModel, VerilogGenerator
 from msdsl.lfsr import LFSR
 
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
@@ -54,7 +50,7 @@ def test_lfsr_sim(simulator, width, init):
         )
 
     # initialize the tester
-    t = fault.Tester(dut, dut.clk)
+    t = MsdslTester(dut, dut.clk)
     t.zero_inputs()
     t.poke(dut.rst, 1)
     t.step(2)
@@ -73,13 +69,9 @@ def test_lfsr_sim(simulator, width, init):
 
     # run the simulation
     t.compile_and_run(
-        target='system-verilog',
         directory=BUILD_DIR,
         simulator=simulator,
-        ext_srcs=[model_file],
-        inc_dirs=[get_svreal_header().parent, get_msdsl_header().parent],
-        ext_model_file=True,
-        disp_type='realtime'
+        ext_srcs=[model_file]
     )
 
     # declare success

@@ -1,6 +1,5 @@
 # general imports
 import numpy as np
-import pytest
 import importlib
 from pathlib import Path
 

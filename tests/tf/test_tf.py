@@ -4,14 +4,10 @@ from pathlib import Path
 
 # AHA imports
 import magma as m
-import fault
-
-# svreal import
-from svreal import get_svreal_header
 
 # msdsl imports
-from ..common import pytest_sim_params, get_file
-from msdsl import MixedSignalModel, VerilogGenerator, get_msdsl_header
+from ..common import *
+from msdsl import MixedSignalModel, VerilogGenerator
 
 NAME = Path(__file__).stem.split('_')[1]
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
@@ -48,7 +44,7 @@ def test_tf(simulator, tau=1e-6, dt=0.1e-6):
         )
 
     # create the tester
-    tester = fault.Tester(dut, dut.clk)
+    tester = MsdslTester(dut, dut.clk)
 
     # initialize
     v_in = 1.0
@@ -74,11 +70,7 @@ def test_tf(simulator, tau=1e-6, dt=0.1e-6):
 
     # run the simulation
     tester.compile_and_run(
-        target='system-verilog',
         directory=BUILD_DIR,
         simulator=simulator,
-        ext_srcs=[model_file, get_file(f'{NAME}/test_{NAME}.sv')],
-        inc_dirs=[get_svreal_header().parent, get_msdsl_header().parent],
-        ext_model_file=True,
-        disp_type='realtime'
+        ext_srcs=[model_file, get_file(f'{NAME}/test_{NAME}.sv')]
     )

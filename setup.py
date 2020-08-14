@@ -2,7 +2,7 @@ import os
 from setuptools import setup, find_packages
 
 name = 'msdsl'
-version = '0.3.1'
+version = '0.3.2.dev1'
 
 DESCRIPTION = '''\
 Library for generating synthesizable mixed-signal models for FPGA emulation\
@@ -12,7 +12,7 @@ with open('README.md', 'r') as fh:
     LONG_DESCRIPTION = fh.read()
 
 install_requires = [
-    'svreal>=0.2.2',
+    'svreal>=0.2.5.dev2',
     'scipy',
     'numpy',
     'matplotlib'

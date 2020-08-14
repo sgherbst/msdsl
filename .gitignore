@@ -4,3 +4,5 @@ msdsl.egg-info
 __pycache__
 tests/*/build
 dist/
+HardFloat*/
+install_hardfloat.sh

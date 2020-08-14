@@ -1,6 +1,10 @@
 from pathlib import Path
 from shutil import which
 
+import fault
+from msdsl import get_msdsl_header
+from svreal import *
+
 TEST_DIR = Path(__file__).resolve().parent
 
 def get_file(path):
@@ -29,3 +33,55 @@ def pytest_sim_params(metafunc, simulators=None):
                 targets.append(simulator)
 
         metafunc.parametrize('simulator', targets)
+
+class MsdslTester(fault.Tester):
+    def __init__(self, circuit, clock=None, expect_strict_default=True, debug_mode=True):
+        super().__init__(circuit=circuit, clock=clock,
+                         expect_strict_default=expect_strict_default)
+        self.debug_mode = debug_mode
+
+    def compile_and_run(self, target='system-verilog', ext_srcs=None,
+                        inc_dirs=None, ext_model_file=True, tmp_dir=None,
+                        disp_type=None, real_type='FIXED_POINT',
+                        defines=None, **kwargs):
+        # set defaults
+        if ext_srcs is None:
+            ext_srcs = []
+        if inc_dirs is None:
+            inc_dirs = []
+        if tmp_dir is None:
+            tmp_dir = not self.debug_mode
+        if disp_type is None:
+            disp_type = 'on_error' if (not self.debug_mode) else 'realtime'
+        if defines is None:
+            defines = {}
+
+        # add to ext_srcs
+        if real_type == 'HARD_FLOAT':
+            ext_srcs = get_hard_float_sources() + ext_srcs
+
+        # add to inc_dirs
+        inc_dirs = [get_svreal_header().parent, get_msdsl_header().parent] + inc_dirs
+        if real_type == 'HARD_FLOAT':
+            inc_dirs = get_hard_float_inc_dirs() + inc_dirs
+
+        # add defines as needed for the real number type
+        defines = defines.copy()
+        if real_type == 'FIXED_POINT':
+            pass
+        elif real_type == 'FLOAT_REAL':
+            defines['FLOAT_REAL'] = None
+        elif real_type == 'HARD_FLOAT':
+            defines['HARD_FLOAT'] = None
+
+        # call the command
+        super().compile_and_run(
+            target='system-verilog',
+            ext_srcs=ext_srcs,
+            inc_dirs=inc_dirs,
+            defines=defines,
+            ext_model_file=ext_model_file,
+            tmp_dir=tmp_dir,
+            disp_type=disp_type,
+            **kwargs
+        )

@@ -4,14 +4,10 @@ import numpy as np
 
 # AHA imports
 import magma as m
-import fault
-
-# svreal import
-from svreal import get_svreal_header
 
 # msdsl imports
-from ..common import pytest_sim_params, get_file
-from msdsl import MixedSignalModel, VerilogGenerator, get_msdsl_header
+from ..common import *
+from msdsl import MixedSignalModel, VerilogGenerator
 
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
@@ -62,7 +58,7 @@ def test_table_sim(simulator, addr_bits=8, real_range=10, sint_bits=8, uint_bits
         )
 
     # create the tester
-    tester = fault.Tester(dut, dut.clk)
+    tester = MsdslTester(dut, dut.clk)
 
     # initialize
     tester.poke(dut.clk, 0)
@@ -86,12 +82,8 @@ def test_table_sim(simulator, addr_bits=8, real_range=10, sint_bits=8, uint_bits
         'uint_bits': uint_bits
     }
     tester.compile_and_run(
-        target='system-verilog',
         directory=BUILD_DIR,
         simulator=simulator,
         ext_srcs=[model_file, get_file('table_sim/test_table_sim.sv')],
-        inc_dirs=[get_svreal_header().parent, get_msdsl_header().parent],
-        parameters=parameters,
-        ext_model_file=True,
-        disp_type='realtime'
+        parameters=parameters
     )

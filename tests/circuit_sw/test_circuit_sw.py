@@ -3,14 +3,10 @@ from pathlib import Path
 
 # AHA imports
 import magma as m
-import fault
-
-# svreal import
-from svreal import get_svreal_header
 
 # msdsl imports
-from ..common import pytest_sim_params, get_file
-from msdsl import MixedSignalModel, VerilogGenerator, AnalogSignal, get_msdsl_header
+from ..common import *
+from msdsl import MixedSignalModel, VerilogGenerator, AnalogSignal
 
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
@@ -58,7 +54,7 @@ def test_binding(simulator, rp1=1.0, rn1=2.0, rp2=3.0, rn2=4.0):
             sw2=m.BitIn
         )
 
-    t = fault.Tester(dut)
+    t = MsdslTester(dut)
 
     def model(v_in, sw1, sw2):
         r_up = rp1 if sw1==1 else rn1
@@ -84,11 +80,7 @@ def test_binding(simulator, rp1=1.0, rn1=2.0, rp2=3.0, rn2=4.0):
 
     # run the simulation
     t.compile_and_run(
-        target='system-verilog',
         directory=BUILD_DIR,
         simulator=simulator,
-        ext_srcs=[model_file, get_file('circuit_sw/test_circuit_sw.sv')],
-        inc_dirs=[get_svreal_header().parent, get_msdsl_header().parent],
-        ext_model_file=True,
-        disp_type='realtime'
+        ext_srcs=[model_file, get_file('circuit_sw/test_circuit_sw.sv')]
     )

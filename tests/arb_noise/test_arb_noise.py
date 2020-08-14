@@ -5,14 +5,10 @@ from scipy.stats import truncnorm
 
 # AHA imports
 import magma as m
-import fault
-
-# svreal import
-from svreal import get_svreal_header
 
 # msdsl imports
-from ..common import pytest_sim_params, get_file
-from msdsl import MixedSignalModel, VerilogGenerator, get_msdsl_header
+from ..common import *
+from msdsl import MixedSignalModel, VerilogGenerator
 
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
@@ -51,7 +47,7 @@ def test_arb_noise(simulator, n_trials=10000):
         )
 
     # create the tester
-    t = fault.Tester(dut, dut.clk)
+    t = MsdslTester(dut, dut.clk)
 
     # initialize
     t.poke(dut.clk, 0)
@@ -67,13 +63,9 @@ def test_arb_noise(simulator, n_trials=10000):
 
     # run the simulation
     t.compile_and_run(
-        target='system-verilog',
         directory=BUILD_DIR,
         simulator=simulator,
-        ext_srcs=[model_file, get_file('arb_noise/test_arb_noise.sv')],
-        inc_dirs=[get_svreal_header().parent, get_msdsl_header().parent],
-        ext_model_file=True,
-        disp_type='realtime'
+        ext_srcs=[model_file, get_file('arb_noise/test_arb_noise.sv')]
     )
 
     # analyze the data

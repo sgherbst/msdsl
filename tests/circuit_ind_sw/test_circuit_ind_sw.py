@@ -3,14 +3,10 @@ from pathlib import Path
 
 # AHA imports
 import magma as m
-import fault
-
-# svreal import
-from svreal import get_svreal_header
 
 # msdsl imports
-from ..common import pytest_sim_params, get_file
-from msdsl import MixedSignalModel, VerilogGenerator, AnalogSignal, get_msdsl_header
+from ..common import *
+from msdsl import MixedSignalModel, VerilogGenerator, AnalogSignal
 
 NAME = '_'.join(Path(__file__).stem.split('_')[1:])
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
@@ -68,7 +64,7 @@ def test_circuit_ind_sw(simulator):
             rst=m.BitIn
         )
 
-    t = fault.Tester(dut, dut.clk)
+    t = MsdslTester(dut, dut.clk)
 
     # initialize
     t.poke(dut.v_in, 0.0)
@@ -108,11 +104,7 @@ def test_circuit_ind_sw(simulator):
 
     # run the simulation
     t.compile_and_run(
-        target='system-verilog',
         directory=BUILD_DIR,
         simulator=simulator,
-        ext_srcs=[model_file, get_file(f'{NAME}/test_{NAME}.sv')],
-        inc_dirs=[get_svreal_header().parent, get_msdsl_header().parent],
-        ext_model_file=True,
-        disp_type='realtime'
+        ext_srcs=[model_file, get_file(f'{NAME}/test_{NAME}.sv')]
     )

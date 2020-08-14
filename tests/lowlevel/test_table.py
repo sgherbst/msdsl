@@ -7,7 +7,7 @@ BUILD_DIR = Path(__file__).resolve().parent / 'build'
 def test_real_table(width=18, exp=-16):
     # write values out
     vals_out = np.random.uniform(-1.0, 1.0, 256)
-    table_out = RealTable(vals_out, width=18, exp=exp, dir=BUILD_DIR)
+    table_out = RealTable(vals_out, width=width, exp=exp, dir=BUILD_DIR)
     table_out.to_file()
 
     # read values in

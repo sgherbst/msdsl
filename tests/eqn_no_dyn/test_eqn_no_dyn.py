@@ -13,10 +13,11 @@ BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
 def pytest_generate_tests(metafunc):
     pytest_sim_params(metafunc)
+    pytest_real_type_params(metafunc)
 
-def gen_model(const=1.23):
+def gen_model(const=1.23, real_type=RealType.FixedPoint):
     # declare module
-    m = MixedSignalModel('model')
+    m = MixedSignalModel('model', real_type=real_type)
     m.add_analog_input('a')
     m.add_analog_output('b')
 
@@ -32,8 +33,8 @@ def gen_model(const=1.23):
     # return file location
     return model_file
 
-def test_eqn_no_dyn(simulator, const=1.23):
-    model_file = gen_model(const=const)
+def test_eqn_no_dyn(simulator, real_type, const=1.23):
+    model_file = gen_model(const=const, real_type=real_type)
 
     # declare circuit
     class dut(m.Circuit):
@@ -62,5 +63,6 @@ def test_eqn_no_dyn(simulator, const=1.23):
     t.compile_and_run(
         directory=BUILD_DIR,
         simulator=simulator,
-        ext_srcs=[model_file, get_file(f'{NAME}/test_{NAME}.sv')]
+        ext_srcs=[model_file, get_file(f'{NAME}/test_{NAME}.sv')],
+        real_type=real_type
     )

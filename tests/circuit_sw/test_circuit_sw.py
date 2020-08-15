@@ -12,10 +12,11 @@ BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
 def pytest_generate_tests(metafunc):
     pytest_sim_params(metafunc)
+    pytest_real_type_params(metafunc)
 
-def gen_model(rp1, rn1, rp2, rn2, dt=0.1e-6):
+def gen_model(rp1, rn1, rp2, rn2, real_type, dt=0.1e-6):
     # declare model
-    m = MixedSignalModel('model', dt=dt)
+    m = MixedSignalModel('model', dt=dt, real_type=real_type)
 
     # declare I/O
     m.add_analog_input('v_in')
@@ -41,8 +42,9 @@ def gen_model(rp1, rn1, rp2, rn2, dt=0.1e-6):
     # return file location
     return model_file
 
-def test_binding(simulator, rp1=1.0, rn1=2.0, rp2=3.0, rn2=4.0):
-    model_file = gen_model(rp1=rp1, rn1=rn1, rp2=rp2, rn2=rn2)
+def test_binding(simulator, real_type, rp1=1.0, rn1=2.0, rp2=3.0, rn2=4.0):
+    model_file = gen_model(rp1=rp1, rn1=rn1, rp2=rp2, rn2=rn2,
+                           real_type=real_type)
 
     # declare circuit
     class dut(m.Circuit):
@@ -82,5 +84,6 @@ def test_binding(simulator, rp1=1.0, rn1=2.0, rp2=3.0, rn2=4.0):
     t.compile_and_run(
         directory=BUILD_DIR,
         simulator=simulator,
-        ext_srcs=[model_file, get_file('circuit_sw/test_circuit_sw.sv')]
+        ext_srcs=[model_file, get_file('circuit_sw/test_circuit_sw.sv')],
+        real_type=real_type
     )

@@ -1,5 +1,8 @@
 from pathlib import Path
 from math import ceil, log2
+from svreal import (RealType, fixed2real, real2fixed,
+                    real2recfn, recfn2real, DEF_HARD_FLOAT_SIG_WIDTH,
+                    DEF_HARD_FLOAT_EXP_WIDTH)
 from .format import RealFormat, UIntFormat, SIntFormat
 from numbers import Integral
 
@@ -128,13 +131,22 @@ class SIntTable(Table):
             return clog2(val+1)+1
 
 class RealTable(Table):
-    def __init__(self, vals, width=18, exp=None, name='real_table', dir='.'):
+    def __init__(self, vals, width=18, exp=None, name='real_table', dir='.',
+                 real_type=None, rec_fn_sig_width=None, rec_fn_exp_width=None):
         # calculate the range of values
         range_ = max([abs(val) for val in vals])
 
         # set defaults
         if exp is None:
             exp = self.get_exp(range_, width=width)
+        if real_type is None:
+            real_type = RealType.FixedPoint
+        if rec_fn_sig_width is None:
+            rec_fn_sig_width = DEF_HARD_FLOAT_SIG_WIDTH
+        if rec_fn_exp_width is None:
+            rec_fn_exp_width = DEF_HARD_FLOAT_EXP_WIDTH
+
+        # input validation
         assert isinstance(exp, Integral), 'Exponent must be an integer value.'
 
         # determine the format
@@ -145,6 +157,9 @@ class RealTable(Table):
 
         # save additional settings
         self.exp = exp
+        self.real_type = real_type
+        self.rec_fn_sig_width = rec_fn_sig_width
+        self.rec_fn_exp_width = rec_fn_exp_width
 
     @property
     def path(self):
@@ -155,13 +170,28 @@ class RealTable(Table):
         if path is None:
             path = self.path
 
-        # convert values to SInts and write those to a file
-        sint_vals = [self.float_to_fixed(val, exp=self.exp) for val in self.vals]
-        sint_table = SIntTable(vals=sint_vals, width=self.width)
-        sint_table.to_file(path)
+        # specify the conversion function
+        if self.real_type in {RealType.FixedPoint, RealType.FloatReal}:
+            conv_func = lambda x: real2fixed(x, exp=self.exp, width=self.width,
+                                             treat_as_unsigned=True)
+            conv_width = self.width
+        elif self.real_type == RealType.HardFloat:
+            conv_func = lambda x: real2recfn(x, exp_width=self.rec_fn_exp_width,
+                                             sig_width=self.rec_fn_sig_width)
+            conv_width = 1 + self.rec_fn_exp_width + self.rec_fn_sig_width
+        else:
+            raise Exception('Unsupported RealType.')
+
+        # write the table
+        uint_table = UIntTable(vals=[conv_func(_) for _ in self.vals],
+                               width=conv_width)
+        uint_table.to_file(path)
 
     @classmethod
-    def from_file(cls, name='real_table', dir='.', exp=None):
+    def from_file(cls, name='real_table', dir='.', exp=None,
+                  real_type=RealType.FixedPoint,
+                  rec_fn_sig_width=DEF_HARD_FLOAT_SIG_WIDTH,
+                  rec_fn_exp_width=DEF_HARD_FLOAT_EXP_WIDTH):
         # assemble file naming pattern
         if exp is None:
             pattern = f'{name}_exp_*.mem'
@@ -178,21 +208,36 @@ class RealTable(Table):
             match = matches[0]
 
         # read integers from file
-        sint_table = SIntTable.from_file(name=match.stem, dir=match.parent)
+        uint_table = UIntTable.from_file(name=match.stem, dir=match.parent)
 
         # determine exponent from file name
         if exp is None:
-            tokens = sint_table.name.split('_')
+            tokens = uint_table.name.split('_')
             assert tokens[-2] == 'exp'
             exp = int(tokens[-1])
 
-        # convert integers to floating point
-        vals = [cls.fixed_to_float(sint_val, exp=exp)
-                for sint_val in sint_table.vals]
+        # specify the conversion function
+        if real_type in {RealType.FixedPoint, RealType.FloatReal}:
+            conv_func = lambda x: fixed2real(x, exp=exp, width=uint_table.width,
+                                             treat_as_unsigned=True)
+        elif real_type == RealType.HardFloat:
+            conv_func = lambda x: recfn2real(x, exp_width=rec_fn_exp_width,
+                                             sig_width=rec_fn_sig_width)
+        else:
+            raise Exception('Unsupported RealType.')
 
         # return RealTable
-        name = '_'.join(sint_table.name.split('_')[:-2])
-        return cls(vals=vals, width=sint_table.width, exp=exp, name=name, dir=dir)
+        name = '_'.join(uint_table.name.split('_')[:-2])
+        return cls(
+            vals=[conv_func(_) for _ in uint_table.vals],
+            width=uint_table.width,
+            exp=exp,
+            name=name,
+            dir=dir,
+            real_type=real_type,
+            rec_fn_sig_width=rec_fn_sig_width,
+            rec_fn_exp_width=rec_fn_exp_width
+        )
 
     @classmethod
     def get_exp(cls, range_, width):
@@ -206,11 +251,3 @@ class RealTable(Table):
 
         # return the exponent
         return exp
-
-    @classmethod
-    def fixed_to_float(cls, val, exp):
-        return val*(2**exp)
-
-    @classmethod
-    def float_to_fixed(cls, val, exp):
-        return int(round(val*(2**(-exp))))

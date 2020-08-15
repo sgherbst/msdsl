@@ -13,6 +13,7 @@ BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
 def pytest_generate_tests(metafunc):
     pytest_sim_params(metafunc)
+    pytest_real_type_params(metafunc)
 
 # TODO: fix bug in which this test fails with r_off greater than or equal to 2.7e3
 # The timestep doesn't really affect this particular bug, nor does the inductance,
@@ -22,9 +23,9 @@ def pytest_generate_tests(metafunc):
 # voltage could be enormous.  But this is unlikely to happen, so we need some
 # way to (1) clamp internally to more reasonable values, and (2) detect when
 # this problem is likely to occur.
-def gen_model(r_off=2.6e3, current_range=100):
+def gen_model(r_off=2.6e3, current_range=100, real_type=RealType.FixedPoint):
     # declare model
-    m = MixedSignalModel('model', dt=1e-9)
+    m = MixedSignalModel('model', dt=1e-9, real_type=real_type)
     m.add_analog_input('v_in')
     m.add_analog_output('v_out')
     m.add_digital_input('sw1')
@@ -49,8 +50,8 @@ def gen_model(r_off=2.6e3, current_range=100):
     # return file location
     return model_file
 
-def test_circuit_ind_sw(simulator):
-    model_file = gen_model()
+def test_circuit_ind_sw(simulator, real_type):
+    model_file = gen_model(real_type=real_type)
 
     # declare circuit
     class dut(m.Circuit):
@@ -106,5 +107,6 @@ def test_circuit_ind_sw(simulator):
     t.compile_and_run(
         directory=BUILD_DIR,
         simulator=simulator,
-        ext_srcs=[model_file, get_file(f'{NAME}/test_{NAME}.sv')]
+        ext_srcs=[model_file, get_file(f'{NAME}/test_{NAME}.sv')],
+        real_type=real_type
     )

@@ -14,10 +14,12 @@ BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
 def pytest_generate_tests(metafunc):
     pytest_sim_params(metafunc)
+    pytest_real_type_params(metafunc)
 
-def gen_model(mean=0.0, std=1.0, num_sigma=6.0, order=1, numel=512):
+def gen_model(mean=0.0, std=1.0, num_sigma=6.0, order=1, numel=512,
+              real_type=RealType.FixedPoint):
     # create mixed-signal model
-    model = MixedSignalModel('model', build_dir=BUILD_DIR)
+    model = MixedSignalModel('model', build_dir=BUILD_DIR, real_type=real_type)
     model.add_digital_input('clk')
     model.add_digital_input('rst')
     model.add_analog_output('real_out')
@@ -33,9 +35,9 @@ def gen_model(mean=0.0, std=1.0, num_sigma=6.0, order=1, numel=512):
     # write the model
     return model.compile_to_file(VerilogGenerator())
 
-def test_arb_noise(simulator, n_trials=10000):
+def test_arb_noise(simulator, real_type, n_trials=10000):
     # generate model
-    model_file = gen_model(mean=1.23, std=0.456)
+    model_file = gen_model(mean=1.23, std=0.456, real_type=real_type)
 
     # declare circuit
     class dut(m.Circuit):
@@ -65,7 +67,8 @@ def test_arb_noise(simulator, n_trials=10000):
     t.compile_and_run(
         directory=BUILD_DIR,
         simulator=simulator,
-        ext_srcs=[model_file, get_file('arb_noise/test_arb_noise.sv')]
+        ext_srcs=[model_file, get_file('arb_noise/test_arb_noise.sv')],
+        real_type=real_type
     )
 
     # analyze the data

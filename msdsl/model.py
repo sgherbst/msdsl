@@ -9,6 +9,7 @@ from math import ceil, log2
 from scipy.stats import truncnorm
 import random
 
+from svreal import RealType
 from msdsl.assignment import (ThisCycleAssignment, NextCycleAssignment, BindingAssignment,
                               SyncRomAssignment, Assignment, SyncRamAssignment)
 from msdsl.expr.analyze import signal_names
@@ -36,11 +37,12 @@ class Bus:
         self.n = n
 
 class MixedSignalModel:
-    def __init__(self, module_name, *ios, dt=None, build_dir='build'):
+    def __init__(self, module_name, *ios, dt=None, build_dir='build', real_type=RealType.FixedPoint):
         # save settings
         self.module_name = module_name
         self.dt = dt
         self.build_dir = Path(build_dir)
+        self.real_type = real_type
 
         # initialize
         self.signals = OrderedDict()
@@ -371,7 +373,12 @@ class MixedSignalModel:
                                                      clk=clk, ce=ce, should_bind=should_bind))
 
     def set_from_sync_ram(self, signal: Union[AnalogSignal, str], format_: RealFormat,
-                          addr: ModelExpr, clk=None, ce=None, we=None, din=None):
+                          addr: ModelExpr, clk=None, ce=None, we=None, din=None,
+                          real_type=None, rec_fn_exp_width=None, rec_fn_sig_width=None):
+        # set defaults
+        if real_type is None:
+            real_type = self.real_type
+
         # bind the signal if necessary
         should_bind = False
         if isinstance(signal, str):
@@ -380,7 +387,9 @@ class MixedSignalModel:
 
         # return the assignment
         return self.add_assignment(SyncRamAssignment(signal=signal, format_=format_, addr=addr, clk=clk,
-                                                     ce=ce, we=we, din=din, should_bind=should_bind))
+                                                     ce=ce, we=we, din=din, should_bind=should_bind,
+                                                     real_type=real_type, rec_fn_exp_width=rec_fn_exp_width,
+                                                     rec_fn_sig_width=rec_fn_sig_width))
 
     def set_from_sync_func(self, signal: Union[Signal, str], func: GeneralFunction, in_: ModelExpr,
                            clk=None, ce=None, rst=None, we=None, wdata=None, waddr=None):
@@ -475,15 +484,19 @@ class MixedSignalModel:
 
     # table creation functions
 
-    def make_real_table(self, vals, width=18, exp=None, name=None, dir=None):
+    def make_real_table(self, vals, width=18, exp=None, name=None, dir=None,
+                        real_type=None):
         # set defaults
         if name is None:
             name = self.get_next_name('real_table_')
         if dir is None:
             dir = self.build_dir
+        if real_type is None:
+            real_type = self.real_type
 
         # create the table, register it, and return it
-        table = RealTable(vals=vals, width=width, exp=exp, name=name, dir=dir)
+        table = RealTable(vals=vals, width=width, exp=exp, name=name,
+                          dir=dir, real_type=real_type)
         self.lookup_tables.append(table)
         return table
 
@@ -513,15 +526,19 @@ class MixedSignalModel:
 
     # function creation
 
-    def make_function(self, func, domain, name=None, dir=None, **kwargs):
+    def make_function(self, func, domain, name=None, dir=None, real_type=None,
+                      **kwargs):
         # set defaults
         if name is None:
             name = self.get_next_name('real_func_')
         if dir is None:
             dir = self.build_dir
+        if real_type is None:
+            real_type = self.real_type
 
         # create the table, register it, and return it
-        function = Function(func=func, domain=domain, name=name, dir=dir, **kwargs)
+        function = Function(func=func, domain=domain, name=name, dir=dir,
+                            real_type=real_type, **kwargs)
 
         # append values
         self.lookup_tables.extend(function.tables)
@@ -909,7 +926,10 @@ class MixedSignalModel:
             elif isinstance(assignment, SyncRamAssignment):
                 gen.make_sync_ram(signal=assignment.signal, format_=assignment.format_,
                                   addr=result, clk=assignment.clk, ce=assignment.ce,
-                                  we=assignment.we, din=assignment.din)
+                                  we=assignment.we, din=assignment.din,
+                                  real_type=assignment.real_type,
+                                  rec_fn_exp_width=assignment.rec_fn_exp_width,
+                                  rec_fn_sig_width=assignment.rec_fn_sig_width)
             else:
                 raise Exception('Invalid assignment type.')
 

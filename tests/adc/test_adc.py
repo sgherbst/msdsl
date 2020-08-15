@@ -14,10 +14,11 @@ BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
 def pytest_generate_tests(metafunc):
     pytest_sim_params(metafunc)
+    pytest_real_type_params(metafunc)
 
-def gen_model(n, vn, vp, dt):
+def gen_model(n, vn, vp, dt, real_type):
     # declare model I/O
-    m = MixedSignalModel('model', dt=dt)
+    m = MixedSignalModel('model', dt=dt, real_type=real_type)
     m.add_analog_input('a_in')
     m.add_digital_output('d_out', width=n, signed=True)
 
@@ -38,8 +39,10 @@ def gen_model(n, vn, vp, dt):
     # return file location
     return model_file
 
-def test_adc(simulator, n_adc=8, v_ref_n=-1.0, v_ref_p=+1.0, dt=0.1e-6):
-    model_file = gen_model(n=n_adc, vn=v_ref_n, vp=v_ref_p, dt=dt)
+def test_adc(simulator, real_type, n_adc=8, v_ref_n=-1.0, v_ref_p=+1.0,
+             dt=0.1e-6):
+    model_file = gen_model(n=n_adc, vn=v_ref_n, vp=v_ref_p, dt=dt,
+                           real_type=real_type)
 
     # declare circuit
     class dut(m.Circuit):
@@ -75,5 +78,6 @@ def test_adc(simulator, n_adc=8, v_ref_n=-1.0, v_ref_p=+1.0, dt=0.1e-6):
         directory=BUILD_DIR,
         simulator=simulator,
         ext_srcs=[model_file, get_file('adc/test_adc.sv')],
-        parameters={'n_adc': n_adc}
+        parameters={'n_adc': n_adc},
+        real_type=real_type
     )

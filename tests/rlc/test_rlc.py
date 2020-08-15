@@ -14,10 +14,12 @@ BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
 def pytest_generate_tests(metafunc):
     pytest_sim_params(metafunc)
+    pytest_real_type_params(metafunc)
 
-def gen_model(cap=0.16e-6, ind=0.16e-6, res=0.1, dt=0.01e-6):
+def gen_model(cap=0.16e-6, ind=0.16e-6, res=0.1, dt=0.01e-6,
+              real_type=RealType.FixedPoint):
     # declare model
-    m = MixedSignalModel('model', dt=dt)
+    m = MixedSignalModel('model', dt=dt, real_type=real_type)
     m.add_analog_input('v_in')
     m.add_analog_output('v_out')
     m.add_digital_input('clk')
@@ -41,8 +43,9 @@ def gen_model(cap=0.16e-6, ind=0.16e-6, res=0.1, dt=0.01e-6):
 
     return model_file
 
-def test_rlc(simulator, cap=0.16e-6, ind=0.16e-6, res=0.1, dt=0.01e-6):
-    model_file = gen_model(cap=cap, ind=ind, res=res, dt=dt)
+def test_rlc(simulator, real_type, cap=0.16e-6, ind=0.16e-6, res=0.1, dt=0.01e-6):
+    model_file = gen_model(cap=cap, ind=ind, res=res, dt=dt,
+                           real_type=real_type)
 
     # declare circuit
     class dut(m.Circuit):
@@ -87,5 +90,6 @@ def test_rlc(simulator, cap=0.16e-6, ind=0.16e-6, res=0.1, dt=0.01e-6):
     tester.compile_and_run(
         directory=BUILD_DIR,
         simulator=simulator,
-        ext_srcs=[model_file, get_file(f'{NAME}/test_{NAME}.sv')]
+        ext_srcs=[model_file, get_file(f'{NAME}/test_{NAME}.sv')],
+        real_type=real_type
     )

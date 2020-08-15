@@ -1,5 +1,6 @@
 # general imports
 from pathlib import Path
+import pytest
 import numpy as np
 
 # AHA imports
@@ -14,9 +15,11 @@ BUILD_DIR = Path(__file__).resolve().parent / 'build'
 def pytest_generate_tests(metafunc):
     pytest_sim_params(metafunc)
 
-def gen_model(real_vals, sint_vals, uint_vals, addr_bits, sint_bits, uint_bits):
+def gen_model(real_vals, sint_vals, uint_vals, addr_bits,
+              sint_bits, uint_bits, real_type):
     # create mixed-signal model
-    model = MixedSignalModel('model', build_dir=BUILD_DIR)
+    model = MixedSignalModel('model', build_dir=BUILD_DIR,
+                             real_type=real_type)
     model.add_digital_input('addr', width=addr_bits)
     model.add_digital_input('clk')
     model.add_analog_output('real_out')
@@ -36,7 +39,9 @@ def gen_model(real_vals, sint_vals, uint_vals, addr_bits, sint_bits, uint_bits):
     # write the model
     return model.compile_to_file(VerilogGenerator())
 
-def test_table_sim(simulator, addr_bits=8, real_range=10, sint_bits=8, uint_bits=8):
+@pytest.mark.parametrize('real_type', [RealType.FixedPoint, RealType.HardFloat])
+def test_table_sim(simulator, real_type, addr_bits=8, real_range=10, sint_bits=8,
+                   uint_bits=8):
     # generate random data to go into the table
     n_samp = 1<<addr_bits
     real_vals = np.random.uniform(-real_range, +real_range, n_samp)
@@ -44,7 +49,10 @@ def test_table_sim(simulator, addr_bits=8, real_range=10, sint_bits=8, uint_bits
     uint_vals = np.random.randint(0, 1<<uint_bits, n_samp)
 
     # generate model
-    model_file = gen_model(real_vals, sint_vals, uint_vals, addr_bits, sint_bits, uint_bits)
+    model_file = gen_model(real_vals=real_vals, sint_vals=sint_vals,
+                           uint_vals=uint_vals, addr_bits=addr_bits,
+                           sint_bits=sint_bits, uint_bits=uint_bits,
+                           real_type=real_type)
 
     # declare circuit
     class dut(m.Circuit):
@@ -85,5 +93,6 @@ def test_table_sim(simulator, addr_bits=8, real_range=10, sint_bits=8, uint_bits
         directory=BUILD_DIR,
         simulator=simulator,
         ext_srcs=[model_file, get_file('table_sim/test_table_sim.sv')],
-        parameters=parameters
+        parameters=parameters,
+        real_type=real_type
     )

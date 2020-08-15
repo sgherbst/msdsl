@@ -13,10 +13,11 @@ BUILD_DIR = THIS_DIR / 'build'
 
 def pytest_generate_tests(metafunc):
     pytest_sim_params(metafunc)
+    pytest_real_type_params(metafunc)
 
-def gen_model():
+def gen_model(real_type):
     # declare module
-    m = MixedSignalModel('model')
+    m = MixedSignalModel('model', real_type=real_type)
     m.add_digital_input('clk')
     m.add_digital_input('rst')
     m.add_analog_output('g')
@@ -50,8 +51,8 @@ def gen_model():
     # return file location
     return model_file
 
-def test_parameters(simulator):
-    model_file = gen_model()
+def test_parameters(simulator, real_type):
+    model_file = gen_model(real_type=real_type)
 
     param_a = 0
     param_b = 1
@@ -86,6 +87,7 @@ def test_parameters(simulator):
         simulator=simulator,
         ext_srcs=[model_file, THIS_DIR / 'test_parameters.sv'],
         parameters={'param_a': param_a, 'param_b': param_b, 'param_c': param_c,
-                    'param_d': param_d, 'param_e': param_e, 'param_f': param_f}
+                    'param_d': param_d, 'param_e': param_e, 'param_f': param_f},
+        real_type=real_type
     )
 

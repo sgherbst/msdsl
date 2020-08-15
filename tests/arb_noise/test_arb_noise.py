@@ -56,6 +56,7 @@ def test_arb_noise(simulator, real_type, n_trials=10000):
     t.poke(dut.rst, 1)
     t.step(2)
     t.poke(dut.rst, 0)
+    t.step(2)
 
     # print the first few outputs
     data = []

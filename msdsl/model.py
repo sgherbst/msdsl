@@ -373,12 +373,7 @@ class MixedSignalModel:
                                                      clk=clk, ce=ce, should_bind=should_bind))
 
     def set_from_sync_ram(self, signal: Union[AnalogSignal, str], format_: RealFormat,
-                          addr: ModelExpr, clk=None, ce=None, we=None, din=None,
-                          real_type=None, rec_fn_exp_width=None, rec_fn_sig_width=None):
-        # set defaults
-        if real_type is None:
-            real_type = self.real_type
-
+                          addr: ModelExpr, clk=None, ce=None, we=None, din=None):
         # bind the signal if necessary
         should_bind = False
         if isinstance(signal, str):
@@ -387,9 +382,7 @@ class MixedSignalModel:
 
         # return the assignment
         return self.add_assignment(SyncRamAssignment(signal=signal, format_=format_, addr=addr, clk=clk,
-                                                     ce=ce, we=we, din=din, should_bind=should_bind,
-                                                     real_type=real_type, rec_fn_exp_width=rec_fn_exp_width,
-                                                     rec_fn_sig_width=rec_fn_sig_width))
+                                                     ce=ce, we=we, din=din, should_bind=should_bind))
 
     def set_from_sync_func(self, signal: Union[Signal, str], func: GeneralFunction, in_: ModelExpr,
                            clk=None, ce=None, rst=None, we=None, wdata=None, waddr=None):
@@ -926,10 +919,7 @@ class MixedSignalModel:
             elif isinstance(assignment, SyncRamAssignment):
                 gen.make_sync_ram(signal=assignment.signal, format_=assignment.format_,
                                   addr=result, clk=assignment.clk, ce=assignment.ce,
-                                  we=assignment.we, din=assignment.din,
-                                  real_type=assignment.real_type,
-                                  rec_fn_exp_width=assignment.rec_fn_exp_width,
-                                  rec_fn_sig_width=assignment.rec_fn_sig_width)
+                                  we=assignment.we, din=assignment.din)
             else:
                 raise Exception('Invalid assignment type.')
 

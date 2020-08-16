@@ -3,7 +3,6 @@ from numbers import Number
 from math import ceil, log2
 import datetime
 
-from svreal import RealType, DEF_HARD_FLOAT_EXP_WIDTH, DEF_HARD_FLOAT_SIG_WIDTH
 from msdsl.generator.generator import CodeGenerator
 from msdsl.expr.expr import ModelExpr, wrap_constant, ModelOperator, Constant, ArithmeticOperator, ComparisonOperator, \
     BitwiseOperator, Concatenate, Array, TypeConversion, SIntToReal, UIntToSInt, BitwiseInv, ArithmeticShift, \
@@ -201,14 +200,8 @@ class VerilogGenerator(CodeGenerator):
         ce_name = ce.name if ce is not None else "1'b1"
 
         if isinstance(table, RealTable):
-            if table.real_type in {RealType.FixedPoint, RealType.FloatReal}:
-                table_width = table.width
-            elif table.real_type == RealType.HardFloat:
-                table_width = 1 + table.rec_fn_exp_width + table.rec_fn_sig_width
-            else:
-                raise Exception('Unsupported RealType.')
             self.macro_call('SYNC_ROM_INTO_REAL', addr.name, signal.name, clk_name,
-                            ce_name, table.addr_bits, table_width, f'"{table.path}"',
+                            ce_name, table.addr_bits, table.width, f'"{table.path}"',
                             table.exp)
         elif isinstance(table, SIntTable):
             self.macro_call('SYNC_ROM_INTO_SINT', addr.name, signal.name, clk_name,
@@ -221,26 +214,16 @@ class VerilogGenerator(CodeGenerator):
 
     def make_sync_ram(self, signal: AnalogSignal, format_: RealFormat, addr: DigitalSignal,
                       clk: DigitalSignal=None, ce: DigitalSignal=None, we: DigitalSignal=None,
-                      din: DigitalSignal=None, real_type: RealType=None,
-                      rec_fn_exp_width: Number=None, rec_fn_sig_width: Number=None):
+                      din: DigitalSignal=None):
         # set defaults
         din_name = din.name if din is not None else "'0"
         clk_name = clk.name if clk is not None else "`CLK_MSDSL"
         ce_name = ce.name if ce is not None else "1'b1"
         we_name = we.name if we is not None else "1'b0"
-        real_type = real_type if real_type is not None else RealType.FixedPoint
-        rec_fn_exp_width = rec_fn_exp_width if rec_fn_exp_width is not None else DEF_HARD_FLOAT_EXP_WIDTH
-        rec_fn_sig_width = rec_fn_sig_width if rec_fn_sig_width is not None else DEF_HARD_FLOAT_SIG_WIDTH
-
-        # determine the format width
-        if real_type in {RealType.FixedPoint, RealType.FloatReal}:
-            format_width = format_.width
-        elif real_type == RealType.HardFloat:
-            format_width = 1 + rec_fn_exp_width + rec_fn_sig_width
 
         # call the SVREAL macro
         self.macro_call('SYNC_RAM_INTO_REAL', addr.name, din_name, signal.name,
-                        clk_name, ce_name, we_name, addr.format_.width, format_width,
+                        clk_name, ce_name, we_name, addr.format_.width, format_.width,
                         format_.exponent)
 
     def start_module(self, name: str, ios: List[Signal], real_params: List, digital_params: List=None):

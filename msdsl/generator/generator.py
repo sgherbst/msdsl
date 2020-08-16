@@ -1,7 +1,6 @@
 from typing import List
 from numbers import Number
 
-from svreal import RealType
 from msdsl.expr.signals import Signal, DigitalSignal, AnalogSignal
 from msdsl.expr.expr import ModelExpr
 from msdsl.expr.table import Table
@@ -63,8 +62,7 @@ class CodeGenerator:
 
     def make_sync_ram(self, signal: AnalogSignal, format_: RealFormat, addr: DigitalSignal,
                       clk: DigitalSignal=None, ce: DigitalSignal=None, we: DigitalSignal=None,
-                      din: DigitalSignal=None, real_type: RealType=None,
-                      rec_fn_exp_width: Number=None, rec_fn_sig_width: Number=None):
+                      din: DigitalSignal=None):
         raise NotImplementedError
 
     def expr_to_signal(self, expr: ModelExpr):

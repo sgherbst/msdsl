@@ -4,7 +4,7 @@ from typing import List
 from msdsl.expr.format import RealFormat, UIntFormat
 from msdsl.expr.expr import wrap_constants, promote_operands, EqualTo, Sum, Product, prod_op, sum_op, ModelExpr
 from msdsl.expr.signals import DigitalSignal, Signal
-from msdsl.expr.svreal import UndefinedRange
+from msdsl.expr.svreal_tools import UndefinedRange
 
 def subst_case(expr, sel_bit_settings):
     if isinstance(expr, EqnCase):

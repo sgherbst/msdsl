@@ -78,7 +78,7 @@ class ModelExpr:
         return (-self).__add__(other)
 
     def __neg__(self):
-        return -1.0*self
+        return NegationOperator(self)
 
     def __pos__(self):
         return self
@@ -245,6 +245,16 @@ class BitwiseOperator(ModelOperator):
 
         # Call the super constructor
         super().__init__(operands=operands, format_=UIntFormat(width=width))
+
+# Negation
+
+class NegationOperator(UnaryOperator):
+    def __init__(self, operand):
+        format_ = operand.format_.negate()
+        super().__init__(operand=operand, format_=format_)
+
+    def __str__(self):
+        return f'(-({self.operand}))'
 
 # Sum
 

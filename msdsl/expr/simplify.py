@@ -1,9 +1,14 @@
 from collections import OrderedDict
 
-from msdsl.expr.expr import Constant, Sum, sum_op, Product
+from msdsl.expr.expr import Constant, Sum, sum_op, Product, NegationOperator
 from msdsl.expr.signals import Signal
 
 def distribute_mult(expr):
+    # first convert the expression from a negation to a multiplication if needed
+    if isinstance(expr, NegationOperator):
+        expr = -1.0 * expr.operand
+        print('hi!' + str(expr))
+
     if isinstance(expr, Sum):
         # distribute multiplication in a bottom-up fashion
         operands = [distribute_mult(operand) for operand in expr.operands]

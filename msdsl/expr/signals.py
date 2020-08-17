@@ -2,7 +2,7 @@ from numbers import Number
 
 from msdsl.expr.expr import ModelExpr
 from msdsl.expr.format import RealFormat, UIntFormat, SIntFormat, is_signed
-from msdsl.expr.svreal import RangeOf, WidthOf, ExponentOf, UndefinedRange, ParamRange
+from msdsl.expr.svreal_tools import RangeOf, WidthOf, ExponentOf, UndefinedRange, ParamRange
 
 class Signal(ModelExpr):
     def __init__(self, name, format_):

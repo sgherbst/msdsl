@@ -1,5 +1,5 @@
 from msdsl.expr.signals import AnalogSignal, Signal
-from msdsl.expr.svreal import UndefinedRange
+from msdsl.expr.svreal_tools import UndefinedRange
 
 def deriv_str(name):
     return 'Deriv(' + name + ')'

@@ -1,5 +1,5 @@
 from .files import get_msdsl_header
-from .expr.svreal import RangeOf
+from .expr.svreal_tools import RangeOf
 from .expr.signals import AnalogSignal, DigitalOutput, DigitalInput, AnalogInput, AnalogOutput, DigitalSignal
 from .expr.simplify import distribute_mult
 from .model import MixedSignalModel

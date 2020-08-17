@@ -8,13 +8,13 @@ from msdsl.expr.expr import ModelExpr, wrap_constant, ModelOperator, Constant, A
     BitwiseOperator, Concatenate, Array, TypeConversion, SIntToReal, UIntToSInt, BitwiseInv, ArithmeticShift, \
     BitwiseAccess, RealToSInt, SIntToUInt, BitwiseAnd, BitwiseOr, BitwiseXor, ArithmeticRightShift, \
     ArithmeticLeftShift, LessThan, LessThanOrEquals, GreaterThan, GreaterThanOrEquals, EqualTo, NotEqualTo, \
-    Sum, Product, Min, Max
+    Sum, Product, Min, Max, NegationOperator
 from msdsl.expr.table import Table, RealTable, UIntTable, SIntTable
 from msdsl.expr.format import UIntFormat, SIntFormat, RealFormat, IntFormat
 from msdsl.expr.signals import Signal, AnalogSignal, DigitalSignal, AnalogInput, AnalogOutput, DigitalOutput, \
     DigitalInput, DigitalParameter, RealParameter
 from msdsl.generator.tree_op import tree_op
-from msdsl.generator.svreal import compile_range_expr, compile_width_expr, compile_exponent_expr
+from msdsl.generator.svreal_gen import compile_range_expr, compile_width_expr, compile_exponent_expr
 from msdsl.expr.analyze import signal_names, signal_name
 from msdsl.generator.case_statement import case_statment
 
@@ -79,6 +79,8 @@ class VerilogGenerator(CodeGenerator):
             return self.make_constant(expr)
         elif isinstance(expr, ArithmeticOperator):
             return self.make_arithmetic_operator(expr)
+        elif isinstance(expr, NegationOperator):
+            return self.make_negation_operator(expr)
         elif isinstance(expr, BitwiseInv):
             return self.make_bitwise_inv(expr)
         elif isinstance(expr, BitwiseOperator):
@@ -434,6 +436,21 @@ class VerilogGenerator(CodeGenerator):
         input_ = self.expr_to_signal(expr.operand)
         value = f'~{input_.name}'
         self.digital_assignment(signal=output, value=value)
+
+        return output
+
+    def make_negation_operator(self, expr: NegationOperator):
+        output = Signal(name=next(self.namer), format_=expr.format_)
+        self.make_signal(output)
+
+        input_ = self.expr_to_signal(expr.operand)
+        if isinstance(output.format_, RealFormat):
+            self.macro_call('NEGATE_REAL', input_, output)
+        elif isinstance(output.format_, IntFormat):
+            value = f'-{input_.name}'
+            self.digital_assignment(signal=output, value=value)
+        else:
+            raise ValueError(f'Unsupported format: {output.format_.__class__.__name__}')
 
         return output
 

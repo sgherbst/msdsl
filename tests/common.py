@@ -22,8 +22,9 @@ def get_dirs(*args):
     return get_files(*args)
 
 def pytest_sim_params(metafunc, simulators=None):
-    if simulators is None:
-        simulators = ['vcs', 'vivado', 'ncsim', 'iverilog']
+#    if simulators is None:
+#        simulators = ['vcs', 'vivado', 'ncsim', 'iverilog']
+    simulators = ['iverilog']
 
     # parameterize with the simulators available
     if 'simulator' in metafunc.fixturenames:
@@ -35,8 +36,9 @@ def pytest_sim_params(metafunc, simulators=None):
         metafunc.parametrize('simulator', targets)
 
 def pytest_real_type_params(metafunc, real_types=None):
-    if real_types is None:
-        real_types = [RealType.FixedPoint, RealType.FloatReal, RealType.HardFloat]
+#    if real_types is None:
+#        real_types = [RealType.FixedPoint, RealType.FloatReal, RealType.HardFloat]
+    real_types = [RealType.FixedPoint]
 
     if 'real_type' in metafunc.fixturenames:
         metafunc.parametrize('real_type', real_types)

@@ -61,6 +61,7 @@ class EqnSys(EqnList):
             # prepare equation for analysis
             eqn = eqn.lhs - eqn.rhs
             eqn = distribute_mult(eqn)
+            print(eqn)
 
             # extract coefficients of signals (note that some signals may be repeated - we deal with this in the next step
             coeffs, others = extract_coeffs(eqn)

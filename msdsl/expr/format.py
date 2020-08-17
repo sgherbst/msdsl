@@ -1,8 +1,9 @@
 from typing import Union
 from numbers import Number
 from math import log2, ceil
+from copy import deepcopy
 
-from msdsl.expr.svreal import RangeExpr, range_max
+from msdsl.expr.svreal_tools import RangeExpr, range_max
 
 class Format:
     shortname = None
@@ -19,6 +20,9 @@ class Format:
         raise NotImplementedError
 
     def max_with(self, other):
+        raise NotImplementedError
+
+    def negate(self):
         raise NotImplementedError
 
     @classmethod
@@ -79,6 +83,9 @@ class RealFormat(Format):
             return RealFormat(range_=range_)
         else:
             raise NotImplementedError
+
+    def negate(self):
+        return deepcopy(self)
 
     @classmethod
     def cover(cls, formats):
@@ -205,6 +212,9 @@ class SIntFormat(IntFormat):
         # call the super constructor
         super().__init__(width=width, min_val=min_val, max_val=max_val)
 
+    def negate(self):
+        return self.from_values([-self.min_val, -self.max_val])
+
     @classmethod
     def width_of(cls, value):
         if value < 0:
@@ -233,6 +243,14 @@ class UIntFormat(IntFormat):
 
         # call the super constructor
         super().__init__(width=width, min_val=min_val, max_val=max_val)
+
+    def negate(self):
+        # negation of a UInt will produce a negative result unless the
+        # signal is always zero
+        if (self.min_val == 0) and (self.max_val == 0):
+            return self.from_value(0)
+        else:
+            return SIntFormat.from_values([-self.min_val, -self.max_val])
 
     @classmethod
     def width_of(cls, value):

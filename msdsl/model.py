@@ -863,6 +863,11 @@ class MixedSignalModel:
         # return result
         return hist
 
+    def cycle_delay(self, signal: ModelExpr, number: Integral,
+                    clk=None, rst=None, ce=None):
+        return self.make_history(first=signal, length=number+1,
+                                 clk=clk, rst=rst, ce=ce)[number]
+
     def make_circuit(self, clk=None, rst=None):
         c = Circuit(self, clk=clk, rst=rst)
         self.circuits.append(c)

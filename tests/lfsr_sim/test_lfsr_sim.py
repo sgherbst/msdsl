@@ -3,27 +3,24 @@ from pathlib import Path
 
 # AHA imports
 import magma as m
-import fault
 from random import seed, randint
 
-# svreal import
-from svreal import get_svreal_header
-
 # msdsl imports
-from ..common import pytest_sim_params
-from msdsl import MixedSignalModel, VerilogGenerator, get_msdsl_header
+from ..common import *
+from msdsl import MixedSignalModel, VerilogGenerator
 from msdsl.lfsr import LFSR
 
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
 def pytest_generate_tests(metafunc):
     pytest_sim_params(metafunc)
+    pytest_real_type_params(metafunc)
     seed(0)
     metafunc.parametrize('width,init', [(k, randint(0, (1<<k)-2)) for k in range(3, 10)])
 
-def gen_model(width, init):
+def gen_model(width, init, real_type):
     # declare module
-    m = MixedSignalModel('model')
+    m = MixedSignalModel('model', real_type=real_type)
     m.add_digital_input('clk')
     m.add_digital_input('rst')
     m.add_digital_output('out', width=width)
@@ -40,9 +37,9 @@ def gen_model(width, init):
     # return file location
     return model_file
 
-def test_lfsr_sim(simulator, width, init):
+def test_lfsr_sim(simulator, width, init, real_type):
     # generate the SystemVerilog code
-    model_file = gen_model(width=width, init=init)
+    model_file = gen_model(width=width, init=init, real_type=real_type)
 
     # declare circuit
     class dut(m.Circuit):
@@ -54,7 +51,7 @@ def test_lfsr_sim(simulator, width, init):
         )
 
     # initialize the tester
-    t = fault.Tester(dut, dut.clk)
+    t = MsdslTester(dut, dut.clk)
     t.zero_inputs()
     t.poke(dut.rst, 1)
     t.step(2)
@@ -73,13 +70,10 @@ def test_lfsr_sim(simulator, width, init):
 
     # run the simulation
     t.compile_and_run(
-        target='system-verilog',
         directory=BUILD_DIR,
         simulator=simulator,
         ext_srcs=[model_file],
-        inc_dirs=[get_svreal_header().parent, get_msdsl_header().parent],
-        ext_model_file=True,
-        disp_type='realtime'
+        real_type=real_type
     )
 
     # declare success

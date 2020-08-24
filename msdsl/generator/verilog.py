@@ -1,5 +1,5 @@
 from typing import List, Union
-from numbers import Number
+from numbers import Number, Integral
 from math import ceil, log2
 import datetime
 
@@ -280,8 +280,13 @@ class VerilogGenerator(CodeGenerator):
         output = Signal(name=next(self.namer), format_=expr.format_)
 
         if isinstance(expr.format_, RealFormat):
-            # compile the range, width, and exponent expressions
-            const = str(expr.value)
+            # compile the range, width, and exponent expressions.
+            if isinstance(expr.value, Integral):
+                # avoid a synthesis corner-case:
+                # https://forums.xilinx.com/t5/Synthesis/Possible-synthesis-bug-casting-integer-to-real-in-a-function/td-p/1140910
+                const = str(float(expr.value))
+            else:
+                const = str(expr.value)
             range = compile_range_expr(expr.format_.range_)
             width = compile_width_expr(expr.format_.width)
             exponent = compile_exponent_expr(expr.format_.exponent)
@@ -360,8 +365,15 @@ class VerilogGenerator(CodeGenerator):
         # create the output signal
         output = Signal(name=next(self.namer), format_=expr.format_)
 
-        # call the special multiplication macro
-        self.macro_call('MUL_CONST_REAL', str(constant.value), signal.name, output.name)
+        # call the special multiplication macro, avoiding a synthesis corner-case:
+        # https://forums.xilinx.com/t5/Synthesis/Possible-synthesis-bug-casting-integer-to-real-in-a-function/td-p/1140910
+        if isinstance(constant.value, Integral):
+            # avoid a synthesis corner-case:
+            # https://forums.xilinx.com/t5/Synthesis/Possible-synthesis-bug-casting-integer-to-real-in-a-function/td-p/1140910
+            const_as_str = str(float(constant.value))
+        else:
+            const_as_str = str(constant.value)
+        self.macro_call('MUL_CONST_REAL', const_as_str, signal.name, output.name)
 
         # return the output signal
         return output

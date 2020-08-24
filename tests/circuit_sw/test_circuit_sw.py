@@ -3,23 +3,20 @@ from pathlib import Path
 
 # AHA imports
 import magma as m
-import fault
-
-# svreal import
-from svreal import get_svreal_header
 
 # msdsl imports
-from ..common import pytest_sim_params, get_file
-from msdsl import MixedSignalModel, VerilogGenerator, AnalogSignal, get_msdsl_header
+from ..common import *
+from msdsl import MixedSignalModel, VerilogGenerator, AnalogSignal
 
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
 def pytest_generate_tests(metafunc):
     pytest_sim_params(metafunc)
+    pytest_real_type_params(metafunc)
 
-def gen_model(rp1, rn1, rp2, rn2, dt=0.1e-6):
+def gen_model(rp1, rn1, rp2, rn2, real_type, dt=0.1e-6):
     # declare model
-    m = MixedSignalModel('model', dt=dt)
+    m = MixedSignalModel('model', dt=dt, real_type=real_type)
 
     # declare I/O
     m.add_analog_input('v_in')
@@ -45,8 +42,9 @@ def gen_model(rp1, rn1, rp2, rn2, dt=0.1e-6):
     # return file location
     return model_file
 
-def test_binding(simulator, rp1=1.0, rn1=2.0, rp2=3.0, rn2=4.0):
-    model_file = gen_model(rp1=rp1, rn1=rn1, rp2=rp2, rn2=rn2)
+def test_binding(simulator, real_type, rp1=1.0, rn1=2.0, rp2=3.0, rn2=4.0):
+    model_file = gen_model(rp1=rp1, rn1=rn1, rp2=rp2, rn2=rn2,
+                           real_type=real_type)
 
     # declare circuit
     class dut(m.Circuit):
@@ -58,7 +56,7 @@ def test_binding(simulator, rp1=1.0, rn1=2.0, rp2=3.0, rn2=4.0):
             sw2=m.BitIn
         )
 
-    t = fault.Tester(dut)
+    t = MsdslTester(dut)
 
     def model(v_in, sw1, sw2):
         r_up = rp1 if sw1==1 else rn1
@@ -84,11 +82,8 @@ def test_binding(simulator, rp1=1.0, rn1=2.0, rp2=3.0, rn2=4.0):
 
     # run the simulation
     t.compile_and_run(
-        target='system-verilog',
         directory=BUILD_DIR,
         simulator=simulator,
         ext_srcs=[model_file, get_file('circuit_sw/test_circuit_sw.sv')],
-        inc_dirs=[get_svreal_header().parent, get_msdsl_header().parent],
-        ext_model_file=True,
-        disp_type='realtime'
+        real_type=real_type
     )

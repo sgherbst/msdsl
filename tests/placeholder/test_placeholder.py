@@ -4,14 +4,11 @@ import numpy as np
 
 # AHA imports
 import magma as m
-import fault
-
-# svreal import
-from svreal import get_svreal_header
 
 # msdsl imports
-from ..common import pytest_sim_params, get_file
-from msdsl import MixedSignalModel, VerilogGenerator, get_msdsl_header
+from ..common import *
+from svreal import DEF_HARD_FLOAT_EXP_WIDTH, DEF_HARD_FLOAT_SIG_WIDTH
+from msdsl import MixedSignalModel, VerilogGenerator
 from msdsl.function import PlaceholderFunction
 
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
@@ -21,9 +18,10 @@ COEFF_EXPS = [-16, -20]
 
 def pytest_generate_tests(metafunc):
     pytest_sim_params(metafunc)
-    tests = [(0, 0.0105, 9, 18),
-             (1, 0.000318, 7, 18)]
-    metafunc.parametrize('order,err_lim,addr_bits,data_bits', tests)
+    pytest_real_type_params(metafunc)
+    tests = [(0, 0.0105, 9),
+             (1, 0.000318, 7)]
+    metafunc.parametrize('order,err_lim,addr_bits', tests)
 
 def clip_sin(x):
     # clip input
@@ -37,9 +35,9 @@ def clip_cos(x):
     # apply function
     return np.cos(x)
 
-def gen_model(placeholder, addr_bits=9, data_bits=18):
+def gen_model(placeholder, real_type, addr_bits, data_bits):
     # create mixed-signal model
-    model = MixedSignalModel('model', build_dir=BUILD_DIR)
+    model = MixedSignalModel('model', build_dir=BUILD_DIR, real_type=real_type)
     model.add_analog_input('in_')
     model.add_analog_output('out')
     model.add_digital_input('clk')
@@ -56,15 +54,24 @@ def gen_model(placeholder, addr_bits=9, data_bits=18):
     # write the model
     return model.compile_to_file(VerilogGenerator())
 
-def test_placeholder(simulator, order, err_lim, addr_bits, data_bits):
+def test_placeholder(simulator, real_type, order, err_lim, addr_bits):
     # set the random seed for repeatable results
     np.random.seed(0)
 
+    # determine the number of data bits
+    if real_type in {RealType.FixedPoint, RealType.FloatReal}:
+        data_bits = 18
+    elif real_type == RealType.HardFloat:
+        data_bits = 1 + DEF_HARD_FLOAT_EXP_WIDTH + DEF_HARD_FLOAT_SIG_WIDTH
+    else:
+        raise Exception('Unsupported RealType.')
+
     # generate model
     placeholder = PlaceholderFunction(domain=[-DOMAIN, +DOMAIN], order=order,
-                                      numel=1<<addr_bits, coeff_widths=[data_bits]*(order+1),
-                                      coeff_exps=COEFF_EXPS[:(order+1)])
-    model_file = gen_model(placeholder=placeholder, addr_bits=addr_bits, data_bits=data_bits)
+                                      numel=1<<addr_bits, coeff_widths=[18]*(order+1),
+                                      coeff_exps=COEFF_EXPS[:(order+1)], real_type=real_type)
+    model_file = gen_model(placeholder=placeholder, addr_bits=addr_bits, data_bits=data_bits,
+                           real_type=real_type)
 
     # declare circuit
     class dut(m.Circuit):
@@ -81,7 +88,7 @@ def test_placeholder(simulator, order, err_lim, addr_bits, data_bits):
         )
 
     # create the tester
-    t = fault.Tester(dut, dut.clk)
+    t = MsdslTester(dut, dut.clk)
 
     # initialize
     t.zero_inputs()
@@ -136,14 +143,11 @@ def test_placeholder(simulator, order, err_lim, addr_bits, data_bits):
 
     # run the simulation
     t.compile_and_run(
-        target='system-verilog',
         directory=BUILD_DIR,
         simulator=simulator,
         ext_srcs=[model_file, get_file('placeholder/test_placeholder.sv')],
-        inc_dirs=[get_svreal_header().parent, get_msdsl_header().parent],
         parameters=parameters,
-        ext_model_file=True,
-        disp_type='realtime'
+        real_type=real_type
     )
 
     # evaluate the outputs

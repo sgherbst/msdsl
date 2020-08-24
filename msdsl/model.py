@@ -9,6 +9,7 @@ from math import ceil, log2
 from scipy.stats import truncnorm
 import random
 
+from svreal import RealType
 from msdsl.assignment import (ThisCycleAssignment, NextCycleAssignment, BindingAssignment,
                               SyncRomAssignment, Assignment, SyncRamAssignment)
 from msdsl.expr.analyze import signal_names
@@ -36,11 +37,12 @@ class Bus:
         self.n = n
 
 class MixedSignalModel:
-    def __init__(self, module_name, *ios, dt=None, build_dir='build'):
+    def __init__(self, module_name, *ios, dt=None, build_dir='build', real_type=RealType.FixedPoint):
         # save settings
         self.module_name = module_name
         self.dt = dt
         self.build_dir = Path(build_dir)
+        self.real_type = real_type
 
         # initialize
         self.signals = OrderedDict()
@@ -475,15 +477,19 @@ class MixedSignalModel:
 
     # table creation functions
 
-    def make_real_table(self, vals, width=18, exp=None, name=None, dir=None):
+    def make_real_table(self, vals, width=18, exp=None, name=None, dir=None,
+                        real_type=None):
         # set defaults
         if name is None:
             name = self.get_next_name('real_table_')
         if dir is None:
             dir = self.build_dir
+        if real_type is None:
+            real_type = self.real_type
 
         # create the table, register it, and return it
-        table = RealTable(vals=vals, width=width, exp=exp, name=name, dir=dir)
+        table = RealTable(vals=vals, width=width, exp=exp, name=name,
+                          dir=dir, real_type=real_type)
         self.lookup_tables.append(table)
         return table
 
@@ -513,15 +519,19 @@ class MixedSignalModel:
 
     # function creation
 
-    def make_function(self, func, domain, name=None, dir=None, **kwargs):
+    def make_function(self, func, domain, name=None, dir=None, real_type=None,
+                      **kwargs):
         # set defaults
         if name is None:
             name = self.get_next_name('real_func_')
         if dir is None:
             dir = self.build_dir
+        if real_type is None:
+            real_type = self.real_type
 
         # create the table, register it, and return it
-        function = Function(func=func, domain=domain, name=name, dir=dir, **kwargs)
+        function = Function(func=func, domain=domain, name=name, dir=dir,
+                            real_type=real_type, **kwargs)
 
         # append values
         self.lookup_tables.extend(function.tables)
@@ -852,6 +862,11 @@ class MixedSignalModel:
 
         # return result
         return hist
+
+    def cycle_delay(self, signal: ModelExpr, number: Integral,
+                    clk=None, rst=None, ce=None):
+        return self.make_history(first=signal, length=number+1,
+                                 clk=clk, rst=rst, ce=ce)[number]
 
     def make_circuit(self, clk=None, rst=None):
         c = Circuit(self, clk=clk, rst=rst)

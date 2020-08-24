@@ -5,23 +5,20 @@ from pathlib import Path
 
 # AHA imports
 import magma as m
-import fault
-
-# svreal import
-from svreal import get_svreal_header
 
 # msdsl imports
-from ..common import pytest_sim_params, get_file
-from msdsl import MixedSignalModel, VerilogGenerator, to_sint, clamp_op, get_msdsl_header
+from ..common import *
+from msdsl import MixedSignalModel, VerilogGenerator, to_sint, clamp_op
 
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
 def pytest_generate_tests(metafunc):
     pytest_sim_params(metafunc)
+    pytest_real_type_params(metafunc)
 
-def gen_model(n, vn, vp, dt):
+def gen_model(n, vn, vp, dt, real_type):
     # declare model I/O
-    m = MixedSignalModel('model', dt=dt)
+    m = MixedSignalModel('model', dt=dt, real_type=real_type)
     m.add_analog_input('a_in')
     m.add_digital_output('d_out', width=n, signed=True)
 
@@ -42,8 +39,10 @@ def gen_model(n, vn, vp, dt):
     # return file location
     return model_file
 
-def test_adc(simulator, n_adc=8, v_ref_n=-1.0, v_ref_p=+1.0, dt=0.1e-6):
-    model_file = gen_model(n=n_adc, vn=v_ref_n, vp=v_ref_p, dt=dt)
+def test_adc(simulator, real_type, n_adc=8, v_ref_n=-1.0, v_ref_p=+1.0,
+             dt=0.1e-6):
+    model_file = gen_model(n=n_adc, vn=v_ref_n, vp=v_ref_p, dt=dt,
+                           real_type=real_type)
 
     # declare circuit
     class dut(m.Circuit):
@@ -61,7 +60,7 @@ def test_adc(simulator, n_adc=8, v_ref_n=-1.0, v_ref_p=+1.0, dt=0.1e-6):
         return code
 
     # create mechanism to run trials
-    t = fault.Tester(dut, expect_strict_default=True)
+    t = MsdslTester(dut)
     def run_trial(a_in, should_print=False):
         t.poke(dut.a_in, a_in)
         t.eval()
@@ -76,12 +75,9 @@ def test_adc(simulator, n_adc=8, v_ref_n=-1.0, v_ref_p=+1.0, dt=0.1e-6):
 
     # run the simulation
     t.compile_and_run(
-        target='system-verilog',
         directory=BUILD_DIR,
         simulator=simulator,
         ext_srcs=[model_file, get_file('adc/test_adc.sv')],
-        inc_dirs=[get_svreal_header().parent, get_msdsl_header().parent],
         parameters={'n_adc': n_adc},
-        ext_model_file=True,
-        disp_type='realtime'
+        real_type=real_type
     )

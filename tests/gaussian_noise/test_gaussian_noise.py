@@ -4,23 +4,20 @@ import numpy as np
 
 # AHA imports
 import magma as m
-import fault
-
-# svreal import
-from svreal import get_svreal_header
 
 # msdsl imports
-from ..common import pytest_sim_params, get_file
-from msdsl import MixedSignalModel, VerilogGenerator, get_msdsl_header
+from ..common import *
+from msdsl import MixedSignalModel, VerilogGenerator
 
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
 def pytest_generate_tests(metafunc):
     pytest_sim_params(metafunc)
+    pytest_real_type_params(metafunc)
 
-def gen_model():
+def gen_model(real_type):
     # create mixed-signal model
-    model = MixedSignalModel('model', build_dir=BUILD_DIR)
+    model = MixedSignalModel('model', build_dir=BUILD_DIR, real_type=real_type)
     model.add_digital_input('clk')
     model.add_digital_input('rst')
     model.add_analog_input('mean_in')
@@ -33,9 +30,9 @@ def gen_model():
     # write the model
     return model.compile_to_file(VerilogGenerator())
 
-def test_gaussian_noise(simulator, n_trials=10000):
+def test_gaussian_noise(simulator, real_type, n_trials=10000):
     # generate model
-    model_file = gen_model()
+    model_file = gen_model(real_type=real_type)
 
     # declare circuit
     class dut(m.Circuit):
@@ -49,7 +46,7 @@ def test_gaussian_noise(simulator, n_trials=10000):
         )
 
     # create the tester
-    t = fault.Tester(dut, dut.clk)
+    t = MsdslTester(dut, dut.clk)
 
     # initialize
     t.zero_inputs()
@@ -58,6 +55,7 @@ def test_gaussian_noise(simulator, n_trials=10000):
     t.poke(dut.rst, 1)
     t.step(2)
     t.poke(dut.rst, 0)
+    t.step(2)
 
     # print the first few outputs
     data = []
@@ -67,13 +65,10 @@ def test_gaussian_noise(simulator, n_trials=10000):
 
     # run the simulation
     t.compile_and_run(
-        target='system-verilog',
         directory=BUILD_DIR,
         simulator=simulator,
         ext_srcs=[model_file, get_file('gaussian_noise/test_gaussian_noise.sv')],
-        inc_dirs=[get_svreal_header().parent, get_msdsl_header().parent],
-        ext_model_file=True,
-        disp_type='realtime'
+        real_type=real_type
     )
 
     # analyze the data

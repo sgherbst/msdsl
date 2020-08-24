@@ -5,14 +5,10 @@ import importlib
 
 # AHA imports
 import magma as m
-import fault
-
-# svreal import
-from svreal import get_svreal_header
 
 # msdsl imports
-from ..common import pytest_sim_params, get_file
-from msdsl import MixedSignalModel, VerilogGenerator, get_msdsl_header
+from ..common import *
+from msdsl import MixedSignalModel, VerilogGenerator
 
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
 DOMAIN = np.pi
@@ -20,6 +16,7 @@ RANGE = 1.0
 
 def pytest_generate_tests(metafunc):
     pytest_sim_params(metafunc)
+    pytest_real_type_params(metafunc)
     tests = [(0, 0.0105, 512),
              (1, 0.000318, 128)]
     if importlib.util.find_spec('cvxpy'):
@@ -32,9 +29,10 @@ def myfunc(x):
     # apply function
     return np.sin(x)
 
-def gen_model(order=0, numel=512):
+def gen_model(order=0, numel=512, real_type=RealType.FixedPoint):
     # create mixed-signal model
-    model = MixedSignalModel('model', build_dir=BUILD_DIR)
+    model = MixedSignalModel('model', build_dir=BUILD_DIR,
+                             real_type=real_type)
     model.add_analog_input('in_')
     model.add_analog_output('out')
     model.add_digital_input('clk')
@@ -49,12 +47,12 @@ def gen_model(order=0, numel=512):
     # write the model
     return model.compile_to_file(VerilogGenerator())
 
-def test_func_sim(simulator, order, err_lim, numel):
+def test_func_sim(simulator, order, err_lim, numel, real_type):
     # set the random seed for repeatable results
     np.random.seed(0)
 
     # generate model
-    model_file = gen_model(order=order, numel=numel)
+    model_file = gen_model(order=order, numel=numel, real_type=real_type)
 
     # declare circuit
     class dut(m.Circuit):
@@ -67,7 +65,7 @@ def test_func_sim(simulator, order, err_lim, numel):
         )
 
     # create the tester
-    tester = fault.Tester(dut, dut.clk)
+    tester = MsdslTester(dut, dut.clk)
 
     # initialize
     tester.poke(dut.in_, 0)
@@ -96,14 +94,11 @@ def test_func_sim(simulator, order, err_lim, numel):
         'out_range': 2*RANGE
     }
     tester.compile_and_run(
-        target='system-verilog',
         directory=BUILD_DIR,
         simulator=simulator,
         ext_srcs=[model_file, get_file('func_sim/test_func_sim.sv')],
-        inc_dirs=[get_svreal_header().parent, get_msdsl_header().parent],
         parameters=parameters,
-        ext_model_file=True,
-        disp_type='realtime'
+        real_type=real_type
     )
 
     # evaluate the outputs

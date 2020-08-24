@@ -3,20 +3,17 @@ from pathlib import Path
 
 # AHA imports
 import magma as m
-import fault
-
-# svreal import
-from svreal import get_svreal_header
 
 # msdsl imports
-from ..common import pytest_sim_params, get_file
-from msdsl import MixedSignalModel, VerilogGenerator, AnalogSignal, get_msdsl_header
+from ..common import *
+from msdsl import MixedSignalModel, VerilogGenerator, AnalogSignal
 
 NAME = '_'.join(Path(__file__).stem.split('_')[1:])
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
 def pytest_generate_tests(metafunc):
     pytest_sim_params(metafunc)
+    pytest_real_type_params(metafunc)
 
 # TODO: fix bug in which this test fails with r_off greater than or equal to 2.7e3
 # The timestep doesn't really affect this particular bug, nor does the inductance,
@@ -26,9 +23,9 @@ def pytest_generate_tests(metafunc):
 # voltage could be enormous.  But this is unlikely to happen, so we need some
 # way to (1) clamp internally to more reasonable values, and (2) detect when
 # this problem is likely to occur.
-def gen_model(r_off=2.6e3, current_range=100):
+def gen_model(r_off=2.6e3, current_range=100, real_type=RealType.FixedPoint):
     # declare model
-    m = MixedSignalModel('model', dt=1e-9)
+    m = MixedSignalModel('model', dt=1e-9, real_type=real_type)
     m.add_analog_input('v_in')
     m.add_analog_output('v_out')
     m.add_digital_input('sw1')
@@ -53,8 +50,8 @@ def gen_model(r_off=2.6e3, current_range=100):
     # return file location
     return model_file
 
-def test_circuit_ind_sw(simulator):
-    model_file = gen_model()
+def test_circuit_ind_sw(simulator, real_type):
+    model_file = gen_model(real_type=real_type)
 
     # declare circuit
     class dut(m.Circuit):
@@ -68,7 +65,7 @@ def test_circuit_ind_sw(simulator):
             rst=m.BitIn
         )
 
-    t = fault.Tester(dut, dut.clk)
+    t = MsdslTester(dut, dut.clk)
 
     # initialize
     t.poke(dut.v_in, 0.0)
@@ -108,11 +105,8 @@ def test_circuit_ind_sw(simulator):
 
     # run the simulation
     t.compile_and_run(
-        target='system-verilog',
         directory=BUILD_DIR,
         simulator=simulator,
         ext_srcs=[model_file, get_file(f'{NAME}/test_{NAME}.sv')],
-        inc_dirs=[get_svreal_header().parent, get_msdsl_header().parent],
-        ext_model_file=True,
-        disp_type='realtime'
+        real_type=real_type
     )

@@ -3,24 +3,21 @@ from pathlib import Path
 
 # AHA imports
 import magma as m
-import fault
-
-# svreal import
-from svreal import get_svreal_header
 
 # msdsl imports
-from ..common import pytest_sim_params, get_file
-from msdsl import MixedSignalModel, VerilogGenerator, get_msdsl_header
+from ..common import *
+from msdsl import MixedSignalModel, VerilogGenerator
 
 THIS_DIR = Path(__file__).resolve().parent
 BUILD_DIR = THIS_DIR / 'build'
 
 def pytest_generate_tests(metafunc):
     pytest_sim_params(metafunc)
+    pytest_real_type_params(metafunc)
 
-def gen_model():
+def gen_model(real_type):
     # declare module
-    m = MixedSignalModel('model')
+    m = MixedSignalModel('model', real_type=real_type)
     m.add_digital_input('clk')
     m.add_digital_input('rst')
     m.add_analog_output('g')
@@ -54,8 +51,8 @@ def gen_model():
     # return file location
     return model_file
 
-def test_parameters(simulator):
-    model_file = gen_model()
+def test_parameters(simulator, real_type):
+    model_file = gen_model(real_type=real_type)
 
     param_a = 0
     param_b = 1
@@ -73,7 +70,7 @@ def test_parameters(simulator):
             g=fault.RealOut
         )
 
-    t = fault.Tester(dut, dut.clk)
+    t = MsdslTester(dut, dut.clk)
 
     t.zero_inputs()
     t.poke(dut.rst, 1)
@@ -86,14 +83,11 @@ def test_parameters(simulator):
 
     # run the simulation
     t.compile_and_run(
-        target='system-verilog',
         directory=BUILD_DIR,
         simulator=simulator,
         ext_srcs=[model_file, THIS_DIR / 'test_parameters.sv'],
-        inc_dirs=[get_svreal_header().parent, get_msdsl_header().parent],
-        ext_model_file=True,
-        disp_type='realtime',
         parameters={'param_a': param_a, 'param_b': param_b, 'param_c': param_c,
-                    'param_d': param_d, 'param_e': param_e, 'param_f': param_f}
+                    'param_d': param_d, 'param_e': param_e, 'param_f': param_f},
+        real_type=real_type
     )
 

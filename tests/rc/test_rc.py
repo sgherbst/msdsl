@@ -4,22 +4,19 @@ from pathlib import Path
 
 # AHA imports
 import magma as m
-import fault
-
-# svreal import
-from svreal import get_svreal_header
 
 # msdsl imports
-from ..common import pytest_sim_params, get_file
-from msdsl import MixedSignalModel, VerilogGenerator, Deriv, get_msdsl_header
+from ..common import *
+from msdsl import MixedSignalModel, VerilogGenerator, Deriv
 
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
 def pytest_generate_tests(metafunc):
     pytest_sim_params(metafunc)
+    pytest_real_type_params(metafunc)
 
-def gen_model(tau, dt):
-    model = MixedSignalModel('model', dt=dt)
+def gen_model(tau, dt, real_type):
+    model = MixedSignalModel('model', dt=dt, real_type=real_type)
     model.add_analog_input('v_in')
     model.add_analog_output('v_out')
     model.add_digital_input('clk')
@@ -34,8 +31,8 @@ def gen_model(tau, dt):
 
     return model_file
 
-def test_rc(simulator, tau=1e-6, dt=0.1e-6):
-    model_file = gen_model(tau=tau, dt=dt)
+def test_rc(simulator, real_type, tau=1e-6, dt=0.1e-6):
+    model_file = gen_model(tau=tau, dt=dt, real_type=real_type)
 
     # declare circuit
     class dut(m.Circuit):
@@ -48,7 +45,7 @@ def test_rc(simulator, tau=1e-6, dt=0.1e-6):
         )
 
     # create the tester
-    tester = fault.Tester(dut, dut.clk)
+    tester = MsdslTester(dut, dut.clk)
 
     # initialize
     v_in = 1.0
@@ -69,11 +66,8 @@ def test_rc(simulator, tau=1e-6, dt=0.1e-6):
 
     # run the simulation
     tester.compile_and_run(
-        target='system-verilog',
         directory=BUILD_DIR,
         simulator=simulator,
         ext_srcs=[model_file, get_file('rc/test_rc.sv')],
-        inc_dirs=[get_svreal_header().parent, get_msdsl_header().parent],
-        ext_model_file=True,
-        disp_type='realtime'
+        real_type=real_type
     )

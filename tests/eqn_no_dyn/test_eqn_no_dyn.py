@@ -3,24 +3,21 @@ from pathlib import Path
 
 # AHA imports
 import magma as m
-import fault
-
-# svreal import
-from svreal import get_svreal_header
 
 # msdsl imports
-from ..common import pytest_sim_params, get_file
-from msdsl import MixedSignalModel, VerilogGenerator, get_msdsl_header
+from ..common import *
+from msdsl import MixedSignalModel, VerilogGenerator
 
 NAME = '_'.join(Path(__file__).stem.split('_')[1:])
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
 def pytest_generate_tests(metafunc):
     pytest_sim_params(metafunc)
+    pytest_real_type_params(metafunc)
 
-def gen_model(const=1.23):
+def gen_model(const=1.23, real_type=RealType.FixedPoint):
     # declare module
-    m = MixedSignalModel('model')
+    m = MixedSignalModel('model', real_type=real_type)
     m.add_analog_input('a')
     m.add_analog_output('b')
 
@@ -36,8 +33,8 @@ def gen_model(const=1.23):
     # return file location
     return model_file
 
-def test_eqn_no_dyn(simulator, const=1.23):
-    model_file = gen_model(const=const)
+def test_eqn_no_dyn(simulator, real_type, const=1.23):
+    model_file = gen_model(const=const, real_type=real_type)
 
     # declare circuit
     class dut(m.Circuit):
@@ -47,7 +44,7 @@ def test_eqn_no_dyn(simulator, const=1.23):
             b=fault.RealOut
         )
 
-    t = fault.Tester(dut)
+    t = MsdslTester(dut)
 
     def run_trial(a, should_print=True):
         t.poke(dut.a, a)
@@ -64,11 +61,8 @@ def test_eqn_no_dyn(simulator, const=1.23):
 
     # run the simulation
     t.compile_and_run(
-        target='system-verilog',
         directory=BUILD_DIR,
         simulator=simulator,
         ext_srcs=[model_file, get_file(f'{NAME}/test_{NAME}.sv')],
-        inc_dirs=[get_svreal_header().parent, get_msdsl_header().parent],
-        ext_model_file=True,
-        disp_type='realtime'
+        real_type=real_type
     )

@@ -3,11 +3,14 @@ from math import ceil, log2
 from scipy.sparse import coo_matrix, diags
 from .expr.table import RealTable
 from .expr.format import RealFormat
+from svreal import (real2recfn, real2fixed, RealType, DEF_HARD_FLOAT_SIG_WIDTH,
+                    DEF_HARD_FLOAT_EXP_WIDTH)
 
 class GeneralFunction:
     def __init__(self, domain, name='real_func', numel=512, order=0,
                  clamp=True, coeff_widths=None, coeff_exps=None,
-                 verif_per_seg=10, strategy=None):
+                 verif_per_seg=10, strategy=None, rec_fn_sig_width=None,
+                 rec_fn_exp_width=None, real_type=None):
         # set defaults
         if coeff_widths is None:
             coeff_widths = [18]*(order+1)
@@ -18,6 +21,12 @@ class GeneralFunction:
                 strategy = 'spline'
             else:
                 strategy = 'cvxpy'
+        if rec_fn_sig_width is None:
+            rec_fn_sig_width = DEF_HARD_FLOAT_SIG_WIDTH
+        if rec_fn_exp_width is None:
+            rec_fn_exp_width = DEF_HARD_FLOAT_EXP_WIDTH
+        if real_type is None:
+            real_type = RealType.FixedPoint
 
         # save settings
         self.domain = domain
@@ -29,6 +38,9 @@ class GeneralFunction:
         self.coeff_exps = coeff_exps
         self.verif_per_seg = verif_per_seg
         self.strategy = strategy
+        self.rec_fn_sig_width = rec_fn_sig_width
+        self.rec_fn_exp_width = rec_fn_exp_width
+        self.real_type = real_type
 
     @property
     def addr_bits(self):
@@ -144,7 +156,9 @@ class GeneralFunction:
 class PlaceholderFunction(GeneralFunction):
     def __init__(self, domain, name='real_func', numel=512, order=0,
                  clamp=True, coeff_ranges=None, coeff_exps=None,
-                 coeff_widths=None, verif_per_seg=10, strategy=None):
+                 coeff_widths=None, verif_per_seg=10, strategy=None,
+                 rec_fn_sig_width=None, rec_fn_exp_width=None,
+                 real_type=None):
         # set default for coefficient widths
         if coeff_widths is None:
             if coeff_exps is None:
@@ -171,25 +185,49 @@ class PlaceholderFunction(GeneralFunction):
         super().__init__(domain=domain, name=name, numel=numel, order=order,
                          clamp=clamp, coeff_widths=coeff_widths,
                          coeff_exps=coeff_exps, verif_per_seg=verif_per_seg,
-                         strategy=strategy)
+                         strategy=strategy, rec_fn_sig_width=rec_fn_sig_width,
+                         rec_fn_exp_width=rec_fn_exp_width, real_type=real_type)
 
-    def coeffs_to_fixed(self, coeffs):
+    def coeffs_to_fixed(self, coeffs, treat_as_unsigned=False):
         retval = []
         for k in range(self.order+1):
-            retval.append([int(round(coeff*(2**(-self.coeff_exps[k]))))
-                           for coeff in coeffs[k]])
+            retval.append([
+                real2fixed(
+                    coeff,
+                    exp=self.coeff_exps[k],
+                    width=self.coeff_widths[k],
+                    treat_as_unsigned=treat_as_unsigned
+                ) for coeff in coeffs[k]
+            ])
         return retval
 
-    def get_coeffs_fixed_fmt(self, func):
+    def coeffs_to_rec_fn(self, coeffs):
+        retval = []
+        for k in range(self.order+1):
+            retval.append([
+                real2recfn(
+                    in_=coeff,
+                    exp_width=self.rec_fn_exp_width,
+                    sig_width=self.rec_fn_sig_width
+                ) for coeff in coeffs[k]
+            ])
+        return retval
+
+    def get_coeffs_fixed_fmt(self, func, treat_as_unsigned=False):
         coeffs = self.get_coeffs(func)
-        return self.coeffs_to_fixed(coeffs)
+        return self.coeffs_to_fixed(coeffs, treat_as_unsigned=treat_as_unsigned)
+
+    def get_coeffs_rec_fn(self, func):
+        coeffs = self.get_coeffs(func)
+        return self.coeffs_to_rec_fn(coeffs)
 
     def get_coeffs_bin_fmt(self, func):
-        retval = []
-        for k, coeff_vec in enumerate(self.get_coeffs_fixed_fmt(func)):
-            retval.append([coeff & ((1<<self.coeff_widths[k])-1)
-                           for coeff in coeff_vec])
-        return retval
+        if self.real_type in {RealType.FixedPoint, RealType.FloatReal}:
+            return self.get_coeffs_fixed_fmt(func, treat_as_unsigned=True)
+        elif self.real_type == RealType.HardFloat:
+            return self.get_coeffs_rec_fn(func)
+        else:
+            raise Exception('Unsupported RealType.')
 
     @staticmethod
     def calc_exponent(range, width):
@@ -212,12 +250,15 @@ class PlaceholderFunction(GeneralFunction):
 class Function(GeneralFunction):
     def __init__(self, func, domain, name='real_func', dir='.',
                  numel=512, order=0, clamp=True, coeff_widths=None,
-                 coeff_exps=None, verif_per_seg=10, strategy=None):
+                 coeff_exps=None, verif_per_seg=10, strategy=None,
+                 rec_fn_sig_width=None, rec_fn_exp_width=None,
+                 real_type=None):
         # call super constructor
         super().__init__(domain=domain, name=name, numel=numel, order=order,
                          clamp=clamp, coeff_widths=coeff_widths,
                          coeff_exps=coeff_exps, verif_per_seg=verif_per_seg,
-                         strategy=strategy)
+                         strategy=strategy, rec_fn_sig_width=rec_fn_sig_width,
+                         rec_fn_exp_width=rec_fn_exp_width, real_type=real_type)
 
         # save settings
         self.func = func
@@ -236,7 +277,8 @@ class Function(GeneralFunction):
         for k, coeff_vec in enumerate(coeffs):
             name = f'{self.name}_lut_{k}'
             table = RealTable(vals=coeff_vec, width=self.coeff_widths[k],
-                              exp=self.coeff_exps[k], name=name, dir=self.dir)
+                              exp=self.coeff_exps[k], name=name, dir=self.dir,
+                              real_type=self.real_type)
             self.tables.append(table)
 
     def eval_on(self, samp, coeffs=None):

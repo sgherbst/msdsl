@@ -66,33 +66,57 @@ class GeneralFunction:
     def calc_addr(self, x_vec):
         if self.log_bits == 0:
             # compute address as a real number
-            addr_real = (x_vec - self.domain[0])*((self.numel-1)/(self.domain[1]-self.domain[0]))
+            addr_lin_real = (x_vec - self.domain[0])*((self.numel-1)/(self.domain[1]-self.domain[0]))
 
             # clamp address
             if self.clamp:
-                addr_real = np.clip(addr_real, 0, self.numel-1)
+                addr_lin_real = np.clip(addr_lin_real, 0, self.numel-1)
 
             # convert address to an integer
-            addr_int = addr_real.astype(np.int)
+            addr_lin_int = addr_lin_real.astype(np.int)
 
             # compute fractional part of address
-            addr_frac = addr_real - addr_int
+            addr_frac = addr_lin_real - addr_lin_int
+
+            # return both integer and fractional address
+            return addr_lin_int, addr_frac
+        else:
+            # clamp to domain
+            if self.clamp:
+                x_vec = np.clip(x_vec, self.domain[0], self.domain[1])
+
+            # rescale to 0-to-1
+            scaled = (x_vec - self.domain[0]) / (self.domain[1] - self.domain[0])
+
+            # take log2
+            log2_vec = np.ceil(np.log2(scaled)).astype(np.int)
+
+            # rescale addresses to 1-2 range
+            one_to_two = scaled / (2.0**(log2_vec-1))
+
+            # determine integer address for rescaled values
+            addr_lin_real = (one_to_two - 1) * ((1 << self.linear_bits) - 1)
+
+            # convert address to an integer
+            addr_lin_int = addr_lin_real.astype(np.int)
+
+            # compute fractional part of address
+            addr_frac = addr_lin_real - addr_lin_int
+
+            # calculate log bits
+            log_bits = ((1 << self.log_bits) - 1) + log2_vec
+
+            # log bits less than zero, clip to zero
+            gez = log_bits >= 0
+            addr_lin_int *= gez
+            log_bits *= gez
+            addr_frac *= gez
+
+            # assemble final address
+            addr_int = (log_bits << self.linear_bits) | addr_lin_int
 
             # return both integer and fractional address
             return addr_int, addr_frac
-        else:
-            # convert to an integer
-            int_vec = np.round(x_vec / self.domain[1]).astype(np.int64)
-
-            # determine the top bit of each signal
-            top_bit = np.floor(np.log2(int_vec)).astype(np.int)
-
-            # determine the linear address bits
-            lin_addr = (int_vec >> (top_bit - self.linear_bits)) & ((1 << self.linear_bits) - 1)
-
-            # determine the remaining bits
-
-            # com
 
     def get_samp_points_cvxpy(self):
         if self.log_bits == 0:
@@ -175,9 +199,19 @@ class GeneralFunction:
             pts = np.append(pts, self.domain[1])
             return [pts]
         else:
-            # TODO
-            pass
+            # linear samples in the 1-2 range
+            one_to_two = np.linspace(1.0, 2.0, self.linear_segm)
+            one_to_two = np.append(one_to_two, 2.0)
 
+            # walk through all exponents
+            retval = []
+            for k in range(1 << self.log_bits):
+                expnt = k - ((1 << self.log_bits) - 1) - 1
+                retval.append(one_to_two * (2.0**expnt))
+
+            # apply scale and offset
+            return [self.domain[0] + (self.domain[1] - self.domain[0])*elem
+                    for elem in retval]
 
     def get_coeffs_spline(self, func):
         # sample the function

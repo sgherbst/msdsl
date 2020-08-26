@@ -10,7 +10,7 @@ class GeneralFunction:
     def __init__(self, domain, name='real_func', numel=512, order=0,
                  clamp=True, coeff_widths=None, coeff_exps=None,
                  verif_per_seg=10, strategy=None, rec_fn_sig_width=None,
-                 rec_fn_exp_width=None, real_type=None, log_bits=0):
+                 rec_fn_exp_width=None, real_type=None):
         # set defaults
         if coeff_widths is None:
             coeff_widths = [18]*(order+1)
@@ -41,19 +41,10 @@ class GeneralFunction:
         self.rec_fn_sig_width = rec_fn_sig_width
         self.rec_fn_exp_width = rec_fn_exp_width
         self.real_type = real_type
-        self.log_bits = log_bits
 
     @property
     def addr_bits(self):
         return int(ceil(log2(self.numel)))
-
-    @property
-    def linear_bits(self):
-        return self.addr_bits - self.log_bits
-
-    @property
-    def linear_segm(self):
-        return 1 << self.linear_bits
 
     def get_coeffs(self, func):
         if self.strategy == 'cvxpy':
@@ -63,79 +54,6 @@ class GeneralFunction:
         else:
             raise Exception(f'Unknown strategy: {self.strategy}')
 
-    def calc_addr(self, x_vec):
-        if self.log_bits == 0:
-            # compute address as a real number
-            addr_lin_real = (x_vec - self.domain[0])*((self.numel-1)/(self.domain[1]-self.domain[0]))
-
-            # clamp address
-            if self.clamp:
-                addr_lin_real = np.clip(addr_lin_real, 0, self.numel-1)
-
-            # convert address to an integer
-            addr_lin_int = addr_lin_real.astype(np.int)
-
-            # compute fractional part of address
-            addr_frac = addr_lin_real - addr_lin_int
-
-            # return both integer and fractional address
-            return addr_lin_int, addr_frac
-        else:
-            # clamp to domain
-            if self.clamp:
-                x_vec = np.clip(x_vec, self.domain[0], self.domain[1])
-
-            # rescale to 0-to-1
-            scaled = (x_vec - self.domain[0]) / (self.domain[1] - self.domain[0])
-
-            # take log2
-            log2_vec = np.ceil(np.log2(scaled)).astype(np.int)
-
-            # rescale addresses to 1-2 range
-            one_to_two = scaled / (2.0**(log2_vec-1))
-
-            # determine integer address for rescaled values
-            addr_lin_real = (one_to_two - 1) * ((1 << self.linear_bits) - 1)
-
-            # convert address to an integer
-            addr_lin_int = addr_lin_real.astype(np.int)
-
-            # compute fractional part of address
-            addr_frac = addr_lin_real - addr_lin_int
-
-            # calculate log bits
-            log_bits = ((1 << self.log_bits) - 1) + log2_vec
-
-            # log bits less than zero, clip to zero
-            gez = log_bits >= 0
-            addr_lin_int *= gez
-            log_bits *= gez
-            addr_frac *= gez
-
-            # assemble final address
-            addr_int = (log_bits << self.linear_bits) | addr_lin_int
-
-            # return both integer and fractional address
-            return addr_int, addr_frac
-
-    def get_samp_points_cvxpy(self):
-        if self.log_bits == 0:
-            # compute step size
-            lsb = (self.domain[1] - self.domain[0]) / (self.numel - 1)
-
-            # sample points between domain[0] and domain[1] with linear spacing
-            x_vec = self.domain[0] + np.arange(self.numel - 1) * lsb
-
-            # run multiple samples within each segment
-            x_vec = np.repeat(x_vec, self.verif_per_seg)
-            x_vec = x_vec + np.random.uniform(0, lsb, x_vec.shape)
-
-            # return the vector of samples
-            return x_vec
-        else:
-            # TODO
-            pass
-
     def get_coeffs_cvxpy(self, func):
         # load cvxpy module
         try:
@@ -144,13 +62,20 @@ class GeneralFunction:
             raise Exception(f"ERROR: module cvxpy could not be loaded, cannot use strategy='cvxpy'")
 
         # create list of sample points
-        x_vec = self.get_samp_points_cvxpy()
+        lsb = (self.domain[1] - self.domain[0])/(self.numel-1)
+        x_vec = self.domain[0] + np.arange(self.numel-1)*lsb
+        x_vec = np.repeat(x_vec, self.verif_per_seg)
+        x_vec = x_vec + np.random.uniform(0, lsb, x_vec.shape)
 
         # evaluate the function at the sample poitns
         y_vec = func(x_vec)
 
         # create vectors of integer and fractional addresses
-        addr_int, addr_frac = self.calc_addr(x_vec)
+        addr_real = (x_vec - self.domain[0])*((self.numel-1)/(self.domain[1]-self.domain[0]))
+        if self.clamp:
+            addr_real = np.clip(addr_real, 0, self.numel-1)
+        addr_int = addr_real.astype(np.int)
+        addr_frac = addr_real - addr_int
 
         # create coefficient vectors
         coeffs = []
@@ -193,45 +118,17 @@ class GeneralFunction:
         # unpack solution
         return [coeffs[k].value for k in range(self.order+1)]
 
-    def get_samp_points_spline(self):
-        if self.log_bits == 0:
-            pts = np.linspace(self.domain[0], self.domain[1], self.numel)
-            pts = np.append(pts, self.domain[1])
-            return [pts]
-        else:
-            # linear samples in the 1-2 range
-            one_to_two = np.linspace(1.0, 2.0, self.linear_segm)
-            one_to_two = np.append(one_to_two, 2.0)
-
-            # walk through all exponents
-            retval = []
-            for k in range(1 << self.log_bits):
-                expnt = k - ((1 << self.log_bits) - 1) - 1
-                retval.append(one_to_two * (2.0**expnt))
-
-            # apply scale and offset
-            return [self.domain[0] + (self.domain[1] - self.domain[0])*elem
-                    for elem in retval]
-
     def get_coeffs_spline(self, func):
         # sample the function
-        pts_list = self.get_samp_points_spline()
-        y_list = [func(pts) for pts in pts_list]
+        x_vec = np.linspace(self.domain[0], self.domain[1], self.numel)
+        y_vec = func(x_vec)
 
         # create the coefficient vectors
         retval = []
         if self.order >= 0:
-            retval.append(
-                np.concatenate(
-                    [y[:-1] for y in y_list]
-                )
-            )
+            retval.append(y_vec[:])
         if self.order >= 1:
-            retval.append(
-                np.concatenate(
-                    [np.diff(y) for y in y_list]
-                )
-            )
+            retval.append(np.concatenate((np.diff(y_vec), [0])))
         if self.order >= 2:
             raise Exception('The spline method only supports order=0 and order=1 for now.')
 
@@ -239,8 +136,14 @@ class GeneralFunction:
         return retval
 
     def eval_on(self, samp, coeffs):
+        # calculate address as a real value
+        addr_real = (samp - self.domain[0])*((self.numel-1)/(self.domain[1]-self.domain[0]))
+        if self.clamp:
+            addr_real = np.clip(addr_real, 0, self.numel-1)
+
         # calculate integer and fractional addresses
-        addr_int, addr_frac = self.calc_addr(samp)
+        addr_int = addr_real.astype(np.int)
+        addr_frac = addr_real - addr_int
 
         # sum up output contributions
         out = np.zeros(len(samp))
@@ -255,7 +158,7 @@ class PlaceholderFunction(GeneralFunction):
                  clamp=True, coeff_ranges=None, coeff_exps=None,
                  coeff_widths=None, verif_per_seg=10, strategy=None,
                  rec_fn_sig_width=None, rec_fn_exp_width=None,
-                 real_type=None, log_bits=0):
+                 real_type=None):
         # set default for coefficient widths
         if coeff_widths is None:
             if coeff_exps is None:
@@ -283,8 +186,7 @@ class PlaceholderFunction(GeneralFunction):
                          clamp=clamp, coeff_widths=coeff_widths,
                          coeff_exps=coeff_exps, verif_per_seg=verif_per_seg,
                          strategy=strategy, rec_fn_sig_width=rec_fn_sig_width,
-                         rec_fn_exp_width=rec_fn_exp_width, real_type=real_type,
-                         log_bits=log_bits)
+                         rec_fn_exp_width=rec_fn_exp_width, real_type=real_type)
 
     def coeffs_to_fixed(self, coeffs, treat_as_unsigned=False):
         retval = []
@@ -350,14 +252,13 @@ class Function(GeneralFunction):
                  numel=512, order=0, clamp=True, coeff_widths=None,
                  coeff_exps=None, verif_per_seg=10, strategy=None,
                  rec_fn_sig_width=None, rec_fn_exp_width=None,
-                 real_type=None, log_mode=False, log_bits=0):
+                 real_type=None):
         # call super constructor
         super().__init__(domain=domain, name=name, numel=numel, order=order,
                          clamp=clamp, coeff_widths=coeff_widths,
                          coeff_exps=coeff_exps, verif_per_seg=verif_per_seg,
                          strategy=strategy, rec_fn_sig_width=rec_fn_sig_width,
-                         rec_fn_exp_width=rec_fn_exp_width, real_type=real_type,
-                         log_bits=log_bits)
+                         rec_fn_exp_width=rec_fn_exp_width, real_type=real_type)
 
         # save settings
         self.func = func

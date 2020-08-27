@@ -989,6 +989,16 @@ class UIntConstant(Constant):
         # call the super constructor
         super().__init__(value=value, format_=format_)
 
+# Compress UInt
+
+class CompressUInt(UnaryOperator):
+    def __init__(self, operand):
+        range_ = operand.format_.width + 1
+        super().__init__(operand=operand, format_=RealFormat(range_=range_))
+
+def compress_uint(x):
+    return CompressUInt(x)
+
 # derived operations
 def clamp_op(val_expr, min_expr, max_expr):
     return min_op([max_op([val_expr, min_expr]), max_expr])

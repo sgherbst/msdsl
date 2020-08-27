@@ -8,7 +8,7 @@ from msdsl.expr.expr import ModelExpr, wrap_constant, ModelOperator, Constant, A
     BitwiseOperator, Concatenate, Array, TypeConversion, SIntToReal, UIntToSInt, BitwiseInv, ArithmeticShift, \
     BitwiseAccess, RealToSInt, SIntToUInt, BitwiseAnd, BitwiseOr, BitwiseXor, ArithmeticRightShift, \
     ArithmeticLeftShift, LessThan, LessThanOrEquals, GreaterThan, GreaterThanOrEquals, EqualTo, NotEqualTo, \
-    Sum, Product, Min, Max
+    Sum, Product, Min, Max, CompressUInt
 from msdsl.expr.table import Table, RealTable, UIntTable, SIntTable
 from msdsl.expr.format import UIntFormat, SIntFormat, RealFormat, IntFormat
 from msdsl.expr.signals import Signal, AnalogSignal, DigitalSignal, AnalogInput, AnalogOutput, DigitalOutput, \
@@ -79,6 +79,8 @@ class VerilogGenerator(CodeGenerator):
             return self.make_constant(expr)
         elif isinstance(expr, ArithmeticOperator):
             return self.make_arithmetic_operator(expr)
+        elif isinstance(expr, CompressUInt):
+            return self.make_compress_uint(expr)
         elif isinstance(expr, BitwiseInv):
             return self.make_bitwise_inv(expr)
         elif isinstance(expr, BitwiseOperator):
@@ -411,6 +413,21 @@ class VerilogGenerator(CodeGenerator):
         case_statment(gen=self, sel=address.name, var=array_name, values=values, default=0)
 
         # return the output signal
+        return output
+
+    def make_compress_uint(self, expr: CompressUInt):
+        # compile the input to a signal
+        input_ = self.expr_to_signal(expr.operand)
+
+        # determine the parameters of the output signal
+        name = next(self.namer)
+        format_ = expr.format_
+        output = Signal(name=name, format_=format_)
+
+        # assign the result
+        self.macro_call('COMPRESS_UINT', input_.name, str(input_.format_.width), output.name)
+
+        # return the resulting signal
         return output
 
     def make_array(self, expr: Array):

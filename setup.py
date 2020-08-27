@@ -12,7 +12,7 @@ with open('README.md', 'r') as fh:
     LONG_DESCRIPTION = fh.read()
 
 install_requires = [
-    'svreal>=0.2.5',
+    'svreal>=0.2.6.dev1',
     'scipy',
     'numpy',
     'matplotlib'

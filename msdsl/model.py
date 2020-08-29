@@ -16,7 +16,7 @@ from msdsl.expr.analyze import signal_names
 from msdsl.eqn.cases import address_to_settings
 from msdsl.eqn.eqn_sys import EqnSys
 from msdsl.expr.expr import (ModelExpr, array, concatenate, sum_op, wrap_constant, min_op, clamp_op,
-                             to_sint, to_uint, compress_uint)
+                             to_sint, to_uint, compress_uint, mt19937)
 from msdsl.expr.signals import (AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, Signal, AnalogSignal,
                    AnalogState, DigitalState, RealParameter, DigitalSignal, DigitalParameter)
 from msdsl.expr.compression import apply_compression, invert_compression
@@ -331,10 +331,17 @@ class MixedSignalModel:
 
     def set_gaussian_noise(self, signal: Union[Signal, str], mean=None, std=1.0, clk=None, rst=None,
                            ce=None, lfsr_width=32, lfsr_init=None, lfsr_name=None, uniform_name=None,
-                           noise_name=None, func_order=1, func_numel=512, num_sigma=8):
+                           noise_name=None, func_order=1, func_numel=512, num_sigma=8,
+                           use_mt19937=True):
         # set defaults
         if noise_name is None:
             noise_name = self.get_next_name(f'gaussian_noise_')
+        if use_mt19937 and (lfsr_name is None):
+            lfsr_name = f'{noise_name}_mt19937'
+
+        # validate input
+        if use_mt19937:
+            assert lfsr_width==32, 'Only width 32 is supported at this time.'
 
         # create the inverse CDF function if needed
         if self._inv_cdf_func is None:
@@ -347,13 +354,16 @@ class MixedSignalModel:
                 numel=func_numel
             )
 
-        # create the LFSR signal
-        lfsr_signal = self.lfsr_signal(width=lfsr_width, clk=clk, rst=rst, ce=ce, name=lfsr_name,
-                                       init=lfsr_init)
+        # create the random integer signal
+        if use_mt19937:
+            rand_uint = self.set_this_cycle(lfsr_name, mt19937(clk=clk, rst=rst, seed=lfsr_init))
+        else:
+            rand_uint = self.lfsr_signal(width=lfsr_width, clk=clk, rst=rst,
+                                         ce=ce, name=lfsr_name, init=lfsr_init)
 
         # separate the sign bit from the data bits
-        sign_bit = self.set_this_cycle(f'{noise_name}_sign_bit', lfsr_signal[0])
-        data_bits = self.set_this_cycle(f'{noise_name}_data_bits', lfsr_signal[lfsr_width-1:1])
+        sign_bit = self.set_this_cycle(f'{noise_name}_sign_bit', rand_uint[0])
+        data_bits = self.set_this_cycle(f'{noise_name}_data_bits', rand_uint[lfsr_width-1:1])
 
         # compress the data bits
         compressed = self.set_this_cycle(f'{noise_name}_compressed', compress_uint(data_bits))

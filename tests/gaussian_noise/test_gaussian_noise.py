@@ -14,10 +14,11 @@ from msdsl import MixedSignalModel, VerilogGenerator
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
 def pytest_generate_tests(metafunc):
-    pytest_sim_params(metafunc)
+    pytest_sim_params(metafunc, ['iverilog'])
     pytest_real_type_params(metafunc)
+    metafunc.parametrize('use_mt19937', [False, True])
 
-def gen_model(real_type):
+def gen_model(real_type, use_mt19937):
     # create mixed-signal model
     model = MixedSignalModel('model', build_dir=BUILD_DIR, real_type=real_type)
     model.add_digital_input('clk')
@@ -28,13 +29,13 @@ def gen_model(real_type):
 
     # apply noise
     model.set_gaussian_noise(model.real_out, std=model.std_in, mean=model.mean_in,
-                             clk=model.clk, rst=model.rst)
+                             clk=model.clk, rst=model.rst, use_mt19937=use_mt19937)
 
     # write the model
     return model.compile_to_file(VerilogGenerator())
 
-def test_gaussian_noise(simulator, real_type, n_trials=10000,
-                        mean_val=1.23, std_val=0.456):
+def test_gaussian_noise(simulator, real_type, use_mt19937,
+                        n_trials=10000, mean_val=1.23, std_val=0.456):
     # set the random seed for repeatable results.  some code uses
     # numpy for random number generation, and some code uses the
     # random package, so both have to be set
@@ -42,7 +43,7 @@ def test_gaussian_noise(simulator, real_type, n_trials=10000,
     random.seed(1)
 
     # generate model
-    model_file = gen_model(real_type=real_type)
+    model_file = gen_model(real_type=real_type, use_mt19937=use_mt19937)
 
     # declare circuit
     class dut(m.Circuit):
@@ -64,10 +65,18 @@ def test_gaussian_noise(simulator, real_type, n_trials=10000,
     t.poke(dut.std_in, std_val)
     t.poke(dut.rst, 1)
     t.step(2)
-    t.poke(dut.rst, 0)
-    t.step(2)
 
-    # print the first few outputs
+    # clear reset and wait for RNG to start
+    # this take a long time when using the MT19937 option
+    t.poke(dut.rst, 0)
+    if use_mt19937:
+        wait_time = 25000
+    else:
+        wait_time = 100
+    for _ in range(wait_time):
+        t.step(2)
+
+    # gather data
     data = []
     for _ in range(n_trials):
         data.append(t.get_value(dut.real_out))

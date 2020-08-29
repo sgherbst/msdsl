@@ -8,20 +8,43 @@ import magma as m
 
 # msdsl imports
 from ..common import *
+from msdsl import MixedSignalModel, VerilogGenerator, mt19937
 
 THIS_DIR = Path(__file__).resolve().parent
 BUILD_DIR = THIS_DIR / 'build'
 
 def pytest_generate_tests(metafunc):
-    pytest_sim_params(metafunc, ['iverilog'])
+    pytest_sim_params(metafunc)
+
+def gen_model():
+    # declare module
+    m = MixedSignalModel('model')
+    m.add_digital_input('clk')
+    m.add_digital_input('rst')
+    m.add_digital_input('seed', width=32)
+    m.add_digital_output('out', width=32)
+
+    # sum signals to output
+    m.set_this_cycle(m.out, mt19937(clk=m.clk, rst=m.rst, seed=m.seed))
+
+    # compile to a file
+    BUILD_DIR.mkdir(parents=True, exist_ok=True)
+    model_file = BUILD_DIR / 'model.sv'
+    m.compile_to_file(VerilogGenerator(), filename=model_file)
+
+    # return file location
+    return model_file
 
 def test_mt19937(simulator):
     # initialize seed for repeatable results
     random.seed(1)
 
+    # generate the model
+    model_file = gen_model()
+
     # declare circuit
     class dut(m.Circuit):
-        name = 'test_mt19937'
+        name = 'model'
         io = m.IO(
             clk=m.ClockIn,
             rst=m.BitIn,
@@ -59,7 +82,7 @@ def test_mt19937(simulator):
     t.compile_and_run(
         directory=BUILD_DIR,
         simulator=simulator,
-        ext_srcs=[THIS_DIR / 'test_mt19937.sv']
+        ext_srcs=[model_file]
     )
 
     # extract results

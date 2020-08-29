@@ -1003,6 +1003,18 @@ def compress_uint(x):
 def clamp_op(val_expr, min_expr, max_expr):
     return min_op([max_op([val_expr, min_expr]), max_expr])
 
+# MT19937
+
+class MT19937(ModelExpr):
+    def __init__(self, clk=None, rst=None, seed=None):
+        self.clk = clk
+        self.rst = rst
+        self.seed = seed
+        super().__init__(format_=UIntFormat(width=32))
+
+def mt19937(clk=None, rst=None, seed=None):
+    return MT19937(clk=clk, rst=rst, seed=seed)
+
 # testing
 
 def main():

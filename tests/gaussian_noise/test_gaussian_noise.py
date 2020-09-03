@@ -14,11 +14,11 @@ from msdsl import MixedSignalModel, VerilogGenerator
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
 def pytest_generate_tests(metafunc):
-    pytest_sim_params(metafunc, ['iverilog'])
+    pytest_sim_params(metafunc)
     pytest_real_type_params(metafunc)
-    metafunc.parametrize('use_mt19937', [False, True])
+    metafunc.parametrize('gen_type', ['lcg', 'mt19937', 'lfsr'])
 
-def gen_model(real_type, use_mt19937):
+def gen_model(real_type, gen_type):
     # create mixed-signal model
     model = MixedSignalModel('model', build_dir=BUILD_DIR, real_type=real_type)
     model.add_digital_input('clk')
@@ -29,12 +29,12 @@ def gen_model(real_type, use_mt19937):
 
     # apply noise
     model.set_gaussian_noise(model.real_out, std=model.std_in, mean=model.mean_in,
-                             clk=model.clk, rst=model.rst, use_mt19937=use_mt19937)
+                             clk=model.clk, rst=model.rst, gen_type=gen_type)
 
     # write the model
     return model.compile_to_file(VerilogGenerator())
 
-def test_gaussian_noise(simulator, real_type, use_mt19937,
+def test_gaussian_noise(simulator, real_type, gen_type,
                         n_trials=10000, mean_val=1.23, std_val=0.456):
     # set the random seed for repeatable results.  some code uses
     # numpy for random number generation, and some code uses the
@@ -43,7 +43,7 @@ def test_gaussian_noise(simulator, real_type, use_mt19937,
     random.seed(1)
 
     # generate model
-    model_file = gen_model(real_type=real_type, use_mt19937=use_mt19937)
+    model_file = gen_model(real_type=real_type, gen_type=gen_type)
 
     # declare circuit
     class dut(m.Circuit):
@@ -69,7 +69,7 @@ def test_gaussian_noise(simulator, real_type, use_mt19937,
     # clear reset and wait for RNG to start
     # this take a long time when using the MT19937 option
     t.poke(dut.rst, 0)
-    if use_mt19937:
+    if gen_type=='mt19937':
         wait_time = 25000
     else:
         wait_time = 100

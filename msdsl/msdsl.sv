@@ -254,6 +254,18 @@
 
 // pseudorandom number generation
 
+`define LCG_MSDSL_INTO(clk_name, rst_name, seed_name, out_name) \
+    lcg_msdsl lcg_msdsl_``out_name`` ( \
+        .clk(``clk_name``), \
+        .rst(``rst_name``), \
+        .seed(``seed_name``), \
+        .out(``out_name``) \
+    )
+
+`define LCG_MSDSL(clk_name, rst_name, seed_name, out_name) \
+    logic [31:0] ``out_name``; \
+    `LCG_MSDSL_INTO(``clk_name``, ``rst_name``, ``seed_name``, ``out_name``)
+
 `define MT19937_INTO(clk_name, rst_name, seed_name, out_name) \
     mt19937_wrapper mt19937_``out_name`` ( \
         .clk(``clk_name``), \
@@ -433,6 +445,24 @@ module pwm #(
     // assign output
     assign out = state;
 
+endmodule
+
+// Linear congruential generator, using the equation
+// defined in IEEE-1364-2001, pp. 318-319
+
+module lcg_msdsl (
+    input clk,
+    input rst,
+    input [31:0] seed,
+    output reg [31:0] out
+);
+    always @(posedge clk) begin
+        if (rst) begin
+            out <= seed;
+        end else begin
+            out <= (32'd69069 * out) + 32'd1;
+        end
+    end
 endmodule
 
 ////////////////////////////////////////////////////////////////////

@@ -11,7 +11,7 @@ from msdsl.expr.expr import ModelExpr, wrap_constant, ModelOperator, Constant, \
     BitwiseAccess, RealToSInt, SIntToUInt, BitwiseAnd, BitwiseOr, BitwiseXor, \
     ArithmeticRightShift, ArithmeticLeftShift, LessThan, LessThanOrEquals, \
     GreaterThan, GreaterThanOrEquals, EqualTo, NotEqualTo, Sum, Product, Min, \
-    Max, CompressUInt, MT19937
+    Max, CompressUInt, RandomInteger, MT19937, LCG
 from msdsl.expr.table import Table, RealTable, UIntTable, SIntTable
 from msdsl.expr.format import UIntFormat, SIntFormat, RealFormat, IntFormat
 from msdsl.expr.signals import Signal, AnalogSignal, DigitalSignal, AnalogInput, AnalogOutput, DigitalOutput, \
@@ -84,8 +84,8 @@ class VerilogGenerator(CodeGenerator):
             return self.make_arithmetic_operator(expr)
         elif isinstance(expr, CompressUInt):
             return self.make_compress_uint(expr)
-        elif isinstance(expr, MT19937):
-            return self.make_mt19937(expr)
+        elif isinstance(expr, RandomInteger):
+            return self.make_random_integer(expr)
         elif isinstance(expr, BitwiseInv):
             return self.make_bitwise_inv(expr)
         elif isinstance(expr, BitwiseOperator):
@@ -435,7 +435,7 @@ class VerilogGenerator(CodeGenerator):
         # return the resulting signal
         return output
 
-    def make_mt19937(self, expr: MT19937):
+    def make_random_integer(self, expr: RandomInteger):
         # validate input
         assert expr.format_.width == 32, 'Only width 32 is supported at this time.'
 
@@ -472,7 +472,12 @@ class VerilogGenerator(CodeGenerator):
         output = Signal(name=name, format_=expr.format_)
 
         # assign the result
-        self.macro_call('MT19937', clk, rst, seed, output.name)
+        if isinstance(expr, MT19937):
+            self.macro_call('MT19937', clk, rst, seed, output.name)
+        elif isinstance(expr, LCG):
+            self.macro_call('LCG_MSDSL', clk, rst, seed, output.name)
+        else:
+            raise Exception(f'Unsupported expression: {expr}')
 
         # return the resulting signal
         return output

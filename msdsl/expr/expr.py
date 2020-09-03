@@ -1003,17 +1003,35 @@ def compress_uint(x):
 def clamp_op(val_expr, min_expr, max_expr):
     return min_op([max_op([val_expr, min_expr]), max_expr])
 
-# MT19937
+# Random integer generator
 
-class MT19937(ModelExpr):
-    def __init__(self, clk=None, rst=None, seed=None):
+class RandomInteger(ModelExpr):
+    def __init__(self, clk=None, rst=None, seed=None, signed=False):
+        # save settings
         self.clk = clk
         self.rst = rst
         self.seed = seed
-        super().__init__(format_=UIntFormat(width=32))
+
+        # determine the output format
+        if signed:
+            format_ = SIntFormat(width=32)
+        else:
+            format_ = UIntFormat(width=32)
+
+        # call the super constructor
+        super().__init__(format_=format_)
+
+class MT19937(RandomInteger):
+    pass
+
+class LCG(RandomInteger):
+    pass
 
 def mt19937(clk=None, rst=None, seed=None):
     return MT19937(clk=clk, rst=rst, seed=seed)
+
+def lcg_op(clk=None, rst=None, seed=None):
+    return LCG(clk=clk, rst=rst, seed=seed)
 
 # testing
 

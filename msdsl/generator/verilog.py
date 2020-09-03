@@ -455,6 +455,13 @@ class VerilogGenerator(CodeGenerator):
         else:
             rst = expr.rst.name
 
+        if expr.cke is None:
+            cke = "1'b1"
+        elif isinstance(expr.cke, str):
+            cke = expr.cke
+        else:
+            cke = expr.cke.name
+
         if expr.seed is None:
             seed = random.randint(0, (1<<expr.format_.width)-1)
             seed = self.hex_format(seed, expr.format_.width)
@@ -473,9 +480,9 @@ class VerilogGenerator(CodeGenerator):
 
         # assign the result
         if isinstance(expr, MT19937):
-            self.macro_call('MT19937', clk, rst, seed, output.name)
+            self.macro_call('MT19937', clk, rst, cke, seed, output.name)
         elif isinstance(expr, LCG):
-            self.macro_call('LCG_MSDSL', clk, rst, seed, output.name)
+            self.macro_call('LCG_MSDSL', clk, rst, cke, seed, output.name)
         else:
             raise Exception(f'Unsupported expression: {expr}')
 

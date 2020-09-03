@@ -254,29 +254,31 @@
 
 // pseudorandom number generation
 
-`define LCG_MSDSL_INTO(clk_name, rst_name, seed_name, out_name) \
+`define LCG_MSDSL_INTO(clk_name, rst_name, cke_name, seed_name, out_name) \
     lcg_msdsl lcg_msdsl_``out_name`` ( \
         .clk(``clk_name``), \
         .rst(``rst_name``), \
+        .cke(``cke_name``), \
         .seed(``seed_name``), \
         .out(``out_name``) \
     )
 
-`define LCG_MSDSL(clk_name, rst_name, seed_name, out_name) \
+`define LCG_MSDSL(clk_name, rst_name, cke_name, seed_name, out_name) \
     logic [31:0] ``out_name``; \
-    `LCG_MSDSL_INTO(``clk_name``, ``rst_name``, ``seed_name``, ``out_name``)
+    `LCG_MSDSL_INTO(``clk_name``, ``rst_name``, ``cke_name``, ``seed_name``, ``out_name``)
 
-`define MT19937_INTO(clk_name, rst_name, seed_name, out_name) \
+`define MT19937_INTO(clk_name, rst_name, cke_name, seed_name, out_name) \
     mt19937_wrapper mt19937_``out_name`` ( \
         .clk(``clk_name``), \
         .rst(``rst_name``), \
+        .cke(``cke_name``), \
         .seed(``seed_name``), \
         .out(``out_name``) \
     )
 
-`define MT19937(clk_name, rst_name, seed_name, out_name) \
+`define MT19937(clk_name, rst_name, cke_name, seed_name, out_name) \
     logic [31:0] ``out_name``; \
-    `MT19937_INTO(``clk_name``, ``rst_name``, ``seed_name``, ``out_name``)
+    `MT19937_INTO(``clk_name``, ``rst_name``, ``cke_name``, ``seed_name``, ``out_name``)
 
 /////////////////////////////////////////////////
 // Module implementations are defined below...
@@ -453,14 +455,17 @@ endmodule
 module lcg_msdsl (
     input clk,
     input rst,
+    input cke,
     input [31:0] seed,
     output reg [31:0] out
 );
     always @(posedge clk) begin
         if (rst) begin
             out <= seed;
-        end else begin
+        end else if (cke) begin
             out <= (32'd69069 * out) + 32'd1;
+        end else begin
+            out <= out;
         end
     end
 endmodule
@@ -731,6 +736,7 @@ endmodule
 module mt19937_wrapper (
     input wire logic clk,
     input wire logic rst,
+    input wire logic cke,
     input wire logic [31:0] seed,
     output wire logic [31:0] out
 );
@@ -746,7 +752,7 @@ module mt19937_wrapper (
         .rst(rst),
         .output_axis_tdata(tdata),
         .output_axis_tvalid(tvalid),
-        .output_axis_tready(1'b1),
+        .output_axis_tready(cke),
         .busy(busy),
         .seed_val(seed),
         .seed_start(seed_start)

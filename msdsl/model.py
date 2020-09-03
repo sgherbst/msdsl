@@ -359,9 +359,9 @@ class MixedSignalModel:
 
         # create the random integer signal
         if gen_type == 'mt19937':
-            rand_uint = self.set_this_cycle(lfsr_name, mt19937(clk=clk, rst=rst, seed=lfsr_init))
+            rand_uint = self.set_this_cycle(lfsr_name, mt19937(clk=clk, rst=rst, cke=ce, seed=lfsr_init))
         elif gen_type == 'lcg':
-            rand_uint = self.set_this_cycle(lfsr_name, lcg_op(clk=clk, rst=rst, seed=lfsr_init))
+            rand_uint = self.set_this_cycle(lfsr_name, lcg_op(clk=clk, rst=rst, cke=ce, seed=lfsr_init))
         else:
             rand_uint = self.lfsr_signal(width=lfsr_width, clk=clk, rst=rst,
                                          ce=ce, name=lfsr_name, init=lfsr_init)

@@ -1006,10 +1006,12 @@ def clamp_op(val_expr, min_expr, max_expr):
 # Random integer generator
 
 class RandomInteger(ModelExpr):
-    def __init__(self, clk=None, rst=None, seed=None, signed=False):
+    def __init__(self, clk=None, rst=None, cke=None,
+                 seed=None, signed=False):
         # save settings
         self.clk = clk
         self.rst = rst
+        self.cke = cke
         self.seed = seed
 
         # determine the output format
@@ -1027,11 +1029,11 @@ class MT19937(RandomInteger):
 class LCG(RandomInteger):
     pass
 
-def mt19937(clk=None, rst=None, seed=None):
-    return MT19937(clk=clk, rst=rst, seed=seed)
+def mt19937(clk=None, rst=None, cke=None, seed=None):
+    return MT19937(clk=clk, rst=rst, cke=cke, seed=seed)
 
-def lcg_op(clk=None, rst=None, seed=None):
-    return LCG(clk=clk, rst=rst, seed=seed)
+def lcg_op(clk=None, rst=None, cke=None, seed=None):
+    return LCG(clk=clk, rst=rst, cke=cke, seed=seed)
 
 # testing
 

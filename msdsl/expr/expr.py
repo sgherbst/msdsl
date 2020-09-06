@@ -989,9 +989,51 @@ class UIntConstant(Constant):
         # call the super constructor
         super().__init__(value=value, format_=format_)
 
+# Compress UInt
+
+class CompressUInt(UnaryOperator):
+    def __init__(self, operand):
+        range_ = operand.format_.width + 1
+        super().__init__(operand=operand, format_=RealFormat(range_=range_))
+
+def compress_uint(x):
+    return CompressUInt(x)
+
 # derived operations
 def clamp_op(val_expr, min_expr, max_expr):
     return min_op([max_op([val_expr, min_expr]), max_expr])
+
+# Random integer generator
+
+class RandomInteger(ModelExpr):
+    def __init__(self, clk=None, rst=None, cke=None,
+                 seed=None, signed=False):
+        # save settings
+        self.clk = clk
+        self.rst = rst
+        self.cke = cke
+        self.seed = seed
+
+        # determine the output format
+        if signed:
+            format_ = SIntFormat(width=32)
+        else:
+            format_ = UIntFormat(width=32)
+
+        # call the super constructor
+        super().__init__(format_=format_)
+
+class MT19937(RandomInteger):
+    pass
+
+class LCG(RandomInteger):
+    pass
+
+def mt19937(clk=None, rst=None, cke=None, seed=None):
+    return MT19937(clk=clk, rst=rst, cke=cke, seed=seed)
+
+def lcg_op(clk=None, rst=None, cke=None, seed=None):
+    return LCG(clk=clk, rst=rst, cke=cke, seed=seed)
 
 # testing
 

@@ -1,14 +1,17 @@
 from typing import List, Union
 from numbers import Number, Integral
+import random
 from math import ceil, log2
 import datetime
 
 from msdsl.generator.generator import CodeGenerator
-from msdsl.expr.expr import ModelExpr, wrap_constant, ModelOperator, Constant, ArithmeticOperator, ComparisonOperator, \
-    BitwiseOperator, Concatenate, Array, TypeConversion, SIntToReal, UIntToSInt, BitwiseInv, ArithmeticShift, \
-    BitwiseAccess, RealToSInt, SIntToUInt, BitwiseAnd, BitwiseOr, BitwiseXor, ArithmeticRightShift, \
-    ArithmeticLeftShift, LessThan, LessThanOrEquals, GreaterThan, GreaterThanOrEquals, EqualTo, NotEqualTo, \
-    Sum, Product, Min, Max
+from msdsl.expr.expr import ModelExpr, wrap_constant, ModelOperator, Constant, \
+    ArithmeticOperator, ComparisonOperator, BitwiseOperator, Concatenate, Array, \
+    TypeConversion, SIntToReal, UIntToSInt, BitwiseInv, ArithmeticShift, \
+    BitwiseAccess, RealToSInt, SIntToUInt, BitwiseAnd, BitwiseOr, BitwiseXor, \
+    ArithmeticRightShift, ArithmeticLeftShift, LessThan, LessThanOrEquals, \
+    GreaterThan, GreaterThanOrEquals, EqualTo, NotEqualTo, Sum, Product, Min, \
+    Max, CompressUInt, RandomInteger, MT19937, LCG
 from msdsl.expr.table import Table, RealTable, UIntTable, SIntTable
 from msdsl.expr.format import UIntFormat, SIntFormat, RealFormat, IntFormat
 from msdsl.expr.signals import Signal, AnalogSignal, DigitalSignal, AnalogInput, AnalogOutput, DigitalOutput, \
@@ -79,6 +82,10 @@ class VerilogGenerator(CodeGenerator):
             return self.make_constant(expr)
         elif isinstance(expr, ArithmeticOperator):
             return self.make_arithmetic_operator(expr)
+        elif isinstance(expr, CompressUInt):
+            return self.make_compress_uint(expr)
+        elif isinstance(expr, RandomInteger):
+            return self.make_random_integer(expr)
         elif isinstance(expr, BitwiseInv):
             return self.make_bitwise_inv(expr)
         elif isinstance(expr, BitwiseOperator):
@@ -413,6 +420,75 @@ class VerilogGenerator(CodeGenerator):
         # return the output signal
         return output
 
+    def make_compress_uint(self, expr: CompressUInt):
+        # compile the input to a signal
+        input_ = self.expr_to_signal(expr.operand)
+
+        # determine the parameters of the output signal
+        name = next(self.namer)
+        format_ = expr.format_
+        output = Signal(name=name, format_=format_)
+
+        # assign the result
+        self.macro_call('COMPRESS_UINT', input_.name, str(input_.format_.width), output.name)
+
+        # return the resulting signal
+        return output
+
+    def make_random_integer(self, expr: RandomInteger):
+        # validate input
+        assert expr.format_.width == 32, 'Only width 32 is supported at this time.'
+
+        # set defaults
+
+        if expr.clk is None:
+            clk = '`CLK_MSDSL'
+        elif isinstance(expr.clk, str):
+            clk = expr.clk
+        else:
+            clk = expr.clk.name
+
+        if expr.rst is None:
+            rst = '`RST_MSDSL'
+        elif isinstance(expr.rst, str):
+            rst = expr.rst
+        else:
+            rst = expr.rst.name
+
+        if expr.cke is None:
+            cke = "1'b1"
+        elif isinstance(expr.cke, str):
+            cke = expr.cke
+        else:
+            cke = expr.cke.name
+
+        if expr.seed is None:
+            seed = random.randint(0, (1<<expr.format_.width)-1)
+            seed = self.hex_format(seed, expr.format_.width)
+        elif isinstance(expr.seed, Integral):
+            assert 0 <= expr.seed <= ((1<<expr.format_.width)-1), \
+                'Seed is out of range.'
+            seed = self.hex_format(expr.seed, expr.format_.width)
+        elif isinstance(expr.seed, str):
+            seed = expr.seed
+        else:
+            seed = expr.seed.name
+
+        # determine the parameters of the output signal
+        name = next(self.namer)
+        output = Signal(name=name, format_=expr.format_)
+
+        # assign the result
+        if isinstance(expr, MT19937):
+            self.macro_call('MT19937', clk, rst, cke, seed, output.name)
+        elif isinstance(expr, LCG):
+            self.macro_call('LCG_MSDSL', clk, rst, cke, seed, output.name)
+        else:
+            raise Exception(f'Unsupported expression: {expr}')
+
+        # return the resulting signal
+        return output
+
     def make_array(self, expr: Array):
         # make the output signal that will hold the results
         output = Signal(name=next(self.namer), format_=expr.format_)
@@ -645,3 +721,8 @@ class VerilogGenerator(CodeGenerator):
             retval += f' [{format_.width-1}:0]'
 
         return retval
+
+    @classmethod
+    def hex_format(cls, val, width):
+        str_width = ceil(width/4)
+        return f"{width}'h{val:0{str_width}x}"

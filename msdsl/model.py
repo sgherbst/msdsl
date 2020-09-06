@@ -16,9 +16,10 @@ from msdsl.expr.analyze import signal_names
 from msdsl.eqn.cases import address_to_settings
 from msdsl.eqn.eqn_sys import EqnSys
 from msdsl.expr.expr import (ModelExpr, array, concatenate, sum_op, wrap_constant, min_op, clamp_op,
-                             to_sint, to_uint)
+                             to_sint, to_uint, compress_uint, mt19937, lcg_op)
 from msdsl.expr.signals import (AnalogInput, AnalogOutput, DigitalInput, DigitalOutput, Signal, AnalogSignal,
                    AnalogState, DigitalState, RealParameter, DigitalSignal, DigitalParameter)
+from msdsl.expr.compression import apply_compression, invert_compression
 from msdsl.generator.generator import CodeGenerator
 from msdsl.util import Namer
 from msdsl.eqn.lds import LdsCollection
@@ -328,23 +329,75 @@ class MixedSignalModel:
         return self.set_from_sync_func(signal=noise_name, func=inv_cdf_func, in_=unf_sig,
                                        clk=clk, ce=ce, rst=rst)
 
-    def set_gaussian_noise(self, signal: Union[Signal, str], mean=None, std=None, clk=None, rst=None,
+    def set_gaussian_noise(self, signal: Union[Signal, str], mean=None, std=1.0, clk=None, rst=None,
                            ce=None, lfsr_width=32, lfsr_init=None, lfsr_name=None, uniform_name=None,
-                           noise_name=None, func_order=1, func_numel=512, num_sigma=6):
+                           noise_name=None, func_order=1, func_numel=512, num_sigma=8,
+                           gen_type='lcg'):
+        # set defaults
+        if noise_name is None:
+            noise_name = self.get_next_name(f'gaussian_noise_')
+        if lfsr_name is None:
+            if gen_type == 'mt19937':
+                lfsr_name = f'{noise_name}_mt19937'
+            elif gen_type == 'lcg':
+                lfsr_name = f'{noise_name}_lcg'
+
+        # validate input
+        if gen_type in {'lcg', 'mt19937'}:
+            assert lfsr_width==32, 'Only width 32 is supported at this time.'
+
         # create the inverse CDF function if needed
         if self._inv_cdf_func is None:
             inv_cdf = lambda x: truncnorm.ppf(x, -num_sigma, +num_sigma)
-            self._inv_cdf_func = self.make_function(inv_cdf, domain=[0.0, 1.0], order=func_order, numel=func_numel)
+            domain = [apply_compression(0), apply_compression((1<<(lfsr_width-1))-1)]
+            self._inv_cdf_func = self.make_function(
+                lambda x: inv_cdf(invert_compression(x)/(1<<lfsr_width)),
+                domain=domain,
+                order=func_order,
+                numel=func_numel
+            )
 
-        # generate a standard gaussian noise source
-        expr = self.arbitrary_noise(self._inv_cdf_func, clk=clk, rst=rst, ce=ce, lfsr_width=lfsr_width,
-                                    lfsr_init=lfsr_init, lfsr_name=lfsr_name, uniform_name=uniform_name,
-                                    noise_name=noise_name)
+        # create the random integer signal
+        if gen_type == 'mt19937':
+            rand_uint = self.set_this_cycle(lfsr_name, mt19937(clk=clk, rst=rst, cke=ce, seed=lfsr_init))
+        elif gen_type == 'lcg':
+            rand_uint = self.set_this_cycle(lfsr_name, lcg_op(clk=clk, rst=rst, cke=ce, seed=lfsr_init))
+        else:
+            rand_uint = self.lfsr_signal(width=lfsr_width, clk=clk, rst=rst,
+                                         ce=ce, name=lfsr_name, init=lfsr_init)
 
-        # scale and shift based on the standard deviation and mean
-        if (std is not None) and (std != 1):
-            expr = expr * std
-        if (mean is not None) and (mean != 0):
+        # separate the sign bit from the data bits; in the LFSR case,
+        # the MSB is quite correlated to the value of the lower bits,
+        # so the LSB is used to select the sign of the result
+        if gen_type in {'lcg', 'mt19937'}:
+            sign_bit_expr = rand_uint[lfsr_width-1]
+            data_bits_expr = rand_uint[lfsr_width-2:0]
+        else:
+            sign_bit_expr = rand_uint[0]
+            data_bits_expr = rand_uint[lfsr_width-1:1]
+        sign_bit = self.set_this_cycle(f'{noise_name}_sign_bit', sign_bit_expr)
+        data_bits = self.set_this_cycle(f'{noise_name}_data_bits', data_bits_expr)
+
+        # compress the data bits
+        compressed = self.set_this_cycle(f'{noise_name}_compressed', compress_uint(data_bits))
+
+        # compute the noise (one-sided)
+        noise_one_sided = self.set_from_sync_func(
+            signal=f'{noise_name}_noise_one_sided',
+            func=self._inv_cdf_func,
+            in_=compressed,
+            clk=clk,
+            rst=rst,
+            ce=ce
+        )
+
+        # now apply the sign bit, along with the standard deviation scaling
+        scale_factor = self.set_this_cycle(f'{noise_name}_scale_factor',
+                                           if_(sign_bit, std, -std))
+        expr = scale_factor * noise_one_sided
+
+        # finally, use a non-zero mean if desired
+        if mean is not None:
             expr = expr + mean
 
         return self.set_this_cycle(signal, expr)

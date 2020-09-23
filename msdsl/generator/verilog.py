@@ -208,14 +208,14 @@ class VerilogGenerator(CodeGenerator):
 
         if isinstance(table, RealTable):
             self.macro_call('SYNC_ROM_INTO_REAL', addr.name, signal.name, clk_name,
-                            ce_name, table.addr_bits, table.width, f'"{table.path}"',
+                            ce_name, table.addr_bits, table.width, f'"{table.path.as_posix()}"',
                             table.exp)
         elif isinstance(table, SIntTable):
             self.macro_call('SYNC_ROM_INTO_SINT', addr.name, signal.name, clk_name,
-                            ce_name, table.addr_bits, table.width, f'"{table.path}"')
+                            ce_name, table.addr_bits, table.width, f'"{table.path.as_posix()}"')
         elif isinstance(table, UIntTable):
             self.macro_call('SYNC_ROM_INTO_UINT', addr.name, signal.name, clk_name,
-                            ce_name, table.addr_bits, table.width, f'"{table.path}"')
+                            ce_name, table.addr_bits, table.width, f'"{table.path.as_posix()}"')
         else:
             raise Exception(f'Unknown table type: {type(table)}')
 

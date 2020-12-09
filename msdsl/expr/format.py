@@ -1,6 +1,5 @@
 from typing import Union
 from numbers import Number
-from math import log2, ceil
 
 from msdsl.expr.svreal import RangeExpr, range_max
 
@@ -207,12 +206,14 @@ class SIntFormat(IntFormat):
 
     @classmethod
     def width_of(cls, value):
+        # it is better to use bit_length than log2, since log2 has limited
+        # precision, whereas bit_length works on arbitrary integers
         if value < 0:
-            return ceil(log2(0 - value)) + 1
+            return (-1-value).bit_length() + 1
         elif value == 0:
             return 1
         else:
-            return ceil(log2(1 + value)) + 1
+            return (value).bit_length() + 1
 
 class UIntFormat(IntFormat):
     # format shortname to aid with human-readable output
@@ -236,12 +237,14 @@ class UIntFormat(IntFormat):
 
     @classmethod
     def width_of(cls, value):
+        # it is better to use bit_length than log2, since log2 has limited
+        # precision, whereas bit_length works on arbitrary integers
         if value < 0:
             raise ValueError('Unsigned data type cannot store a negative number.')
         elif value == 0:
             return 1
         else:
-            return ceil(log2(1 + value))
+            return (value).bit_length()
 
 def is_signed(format_: IntFormat):
     if isinstance(format_, UIntFormat):

@@ -78,7 +78,7 @@ class ModelExpr:
         return (-self).__add__(other)
 
     def __neg__(self):
-        return -1.0*self
+        return -1*self
 
     def __pos__(self):
         return self

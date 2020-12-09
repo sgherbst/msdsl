@@ -6,23 +6,23 @@ import magma as m
 
 # msdsl imports
 from ..common import *
-from msdsl import MixedSignalModel, VerilogGenerator, to_sint
+from msdsl import MixedSignalModel, VerilogGenerator
 
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
 def pytest_generate_tests(metafunc):
     pytest_sim_params(metafunc)
-    pytest_real_type_params(metafunc)
 
-def gen_model(real_type):
+def gen_model():
     # declare model I/O
-    m = MixedSignalModel('model', real_type=real_type)
+    m = MixedSignalModel('model')
     m.add_digital_input('a', width=63, signed=True)
     m.add_digital_input('b', width=63, signed=True)
     m.add_digital_output('c', width=64, signed=True)
 
     # assign expression to output
-    m.set_this_cycle(m.c, m.a - m.b)
+    m.bind_name('d', m.a - m.b)
+    m.set_this_cycle(m.c, m.d)
 
     # compile to a file
     BUILD_DIR.mkdir(parents=True, exist_ok=True)
@@ -32,8 +32,8 @@ def gen_model(real_type):
     # return file location
     return model_file
 
-def test_sub(simulator, real_type):
-    model_file = gen_model(real_type=real_type)
+def test_sub(simulator):
+    model_file = gen_model()
 
     # declare circuit
     class dut(m.Circuit):
@@ -68,6 +68,5 @@ def test_sub(simulator, real_type):
     t.compile_and_run(
         directory=BUILD_DIR,
         simulator=simulator,
-        ext_srcs=[model_file, get_file('sub/test_sub.sv')],
-        real_type=real_type
+        ext_srcs=[model_file, get_file('sub/test_sub.sv')]
     )

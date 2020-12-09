@@ -1,5 +1,5 @@
 # install HardFloat
-wget -O install_hardfloat.sh https://git.io/JJ5YF
+curl -L https://git.io/JJ5YF > install_hardfloat.sh
 source install_hardfloat.sh
 
 # install msdsl

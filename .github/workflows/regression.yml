@@ -40,7 +40,7 @@ jobs:
       run: python -m pip install --upgrade pip
     - name: Install dependencies
       run: |
-        brew install icarus-verilog wget coreutils
+        brew install icarus-verilog coreutils
     - name: Run regression test
       run: source regress.sh
       env:

@@ -13,7 +13,7 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v2
     - name: Set up Python 3.7
-      uses: actions/setup-python@v1
+      uses: actions/setup-python@v2
       with:
         python-version: 3.7
     - name: Update pip
@@ -33,7 +33,7 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v2
     - name: Set up Python 3.7
-      uses: actions/setup-python@v1
+      uses: actions/setup-python@v2
       with:
         python-version: 3.7
     - name: Update pip
@@ -45,3 +45,25 @@ jobs:
       run: source regress.sh
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  windows:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Set up Python 3.7
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.7
+    - name: Install dependencies
+      run: |
+        curl -L https://github.com/sgherbst/anasymod/releases/download/bogus/iverilog-v11-20201123-x64.tar.gz > iverilog-v11-20201123-x64.tar.gz
+        tar xzvf iverilog-v11-20201123-x64.tar.gz
+        echo `realpath iverilog/bin` >> $GITHUB_PATH
+      shell: bash
+    - name: Run regression test
+      run: |
+        source regress.sh
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      shell: bash

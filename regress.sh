@@ -10,7 +10,6 @@ pip install wheel
 pip install pytest pytest-cov
 
 # install msdsl
-pip install wheel
 pip install -e .
 
 # install magma ecosystem

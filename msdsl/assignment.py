@@ -4,9 +4,10 @@ from msdsl.expr.format import RealFormat
 from msdsl.expr.table import Table
 
 class Assignment:
-    def __init__(self, signal: Signal, expr: ModelExpr):
+    def __init__(self, signal: Signal, expr: ModelExpr, check_format=True):
         self.signal = signal
         self.expr = expr
+        self.check_format = check_format
 
 class BindingAssignment(Assignment):
     pass

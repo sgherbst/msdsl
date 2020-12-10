@@ -132,17 +132,18 @@ class VerilogGenerator(CodeGenerator):
         else:
             raise Exception('Invalid signal type.')
 
-    def make_assign(self, input_: Signal, output: Signal):
+    def make_assign(self, input_: Signal, output: Signal, check_format=True):
         if isinstance(input_.format_, RealFormat) and isinstance(output.format_, RealFormat):
             self.macro_call('ASSIGN_REAL', input_.name, output.name)
-        elif (isinstance(input_.format_, SIntFormat) and isinstance(output.format_, SIntFormat)) or \
-             (isinstance(input_.format_, UIntFormat) and isinstance(output.format_, UIntFormat)):
+        elif ((not check_format) or
+              ((isinstance(input_.format_, SIntFormat) and isinstance(output.format_, SIntFormat)) or
+               (isinstance(input_.format_, UIntFormat) and isinstance(output.format_, UIntFormat)))):
             self.digital_assignment(signal=output, value=input_.name)
         else:
             raise Exception(f'Input and output formats do not match: {input_.name} with {input_.format_} vs. {output.name} with {output.format_}')
 
     def make_mem(self, next_: Signal, curr: Signal, init: Union[Number, DigitalParameter, RealParameter]=0,
-                 clk: Signal=None, rst: Signal=None, ce: Signal = None):
+                 clk: Signal=None, rst: Signal=None, ce: Signal = None, check_format=True):
         # set defaults
         clk_name = clk.name if clk is not None else '`CLK_MSDSL'
 
@@ -171,18 +172,24 @@ class VerilogGenerator(CodeGenerator):
             # call the macro to create the memory
             self.macro_call('DFF_INTO_REAL', next_.name, curr.name, rst_name, clk_name, ce_name, init_str)
         # create memory for integer
-        elif (isinstance(next_.format_, SIntFormat) and isinstance(curr.format_, SIntFormat)) or \
-             (isinstance(next_.format_, UIntFormat) and isinstance(curr.format_, UIntFormat)):
+        elif ((not check_format) or
+              ((isinstance(next_.format_, SIntFormat) and isinstance(curr.format_, SIntFormat)) or
+              (isinstance(next_.format_, UIntFormat) and isinstance(curr.format_, UIntFormat)))):
             # check that initial value is valid, if it's number. range checking for DigitalParameters is not
             # yet implemented
-            if isinstance(init, Number):
-                assert (curr.format_.min_val <= init <= curr.format_.max_val), \
-                    f'Initial value {init} does not fit in the range [{curr.format_.min_val}, {curr.format_.max_val}] of signal {curr.name}.'
-            else:
-                print(f'Warning: could not validate range of init value {init}')
+            if check_format:
+                if isinstance(init, Number):
+                    assert (curr.format_.min_val <= init <= curr.format_.max_val), \
+                        (f'Initial value {init} does not fit in the range [{curr.format_.min_val}, '
+                         f'{curr.format_.max_val}] of signal {curr.name}.')
+                else:
+                    print(f'Warning: could not validate range of init value {init}')
 
             # check that the widths of next_ and curr match
-            assert next_.format_.width == curr.format_.width, f'The widths of {next_.name} ({next_.format_.width}) does not match the width of {curr.name} ({curr.format_.width}).'
+            if check_format:
+                assert next_.format_.width == curr.format_.width, \
+                    (f'The widths of {next_.name} ({next_.format_.width}) does not match '
+                     f'the width of {curr.name} ({curr.format_.width}).')
 
             # determine string expression for the initial value
             if isinstance(init, Number):
@@ -195,10 +202,13 @@ class VerilogGenerator(CodeGenerator):
                 raise Exception(f'Could not determine string representation for initial value {init}')
 
             # call the macro to create the memory
-            self.macro_call('MEM_INTO_DIGITAL', next_.name, curr.name, ce_name, clk_name, rst_name, init_str,
-                            str(next_.format_.width))
+            self.macro_call('MEM_INTO_DIGITAL', next_.name, curr.name, ce_name, clk_name,
+                            rst_name, init_str, str(next_.format_.width))
         else:
-            raise Exception(f'Next and current formats do not match: {next_.name} with {next_.format_} vs. {curr.name} with {curr.format_}')
+            raise Exception(
+                f'Next and current formats do not match: {next_.name} '
+                f'with {next_.format_} vs. {curr.name} with {curr.format_}'
+            )
 
     def make_sync_rom(self, signal: Signal, table: Table, addr: Signal,
                       clk: Signal=None, ce: Signal=None):

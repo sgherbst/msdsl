@@ -189,25 +189,37 @@ class MixedSignalModel:
 
         return assignment.signal
 
-    def immediate_assign(self, signal: Union[Signal, str], expr: ModelExpr):
+    def immediate_assign(
+            self, signal: Union[Signal, str], expr: ModelExpr, range_=None,
+            width=None, exponent=None, check_format=True
+    ):
         """
         Alias for set_this_cycle.
         """
 
-        return self.set_this_cycle(signal=signal, expr=expr)
+        return self.set_this_cycle(
+            signal=signal, expr=expr, range_=range_, width=width,
+            exponent=exponent, check_format=check_format
+        )
 
-    def bind_name(self, signal: Union[Signal, str], expr: ModelExpr, range_=None,
-                  width=None, exponent=None):
+    def bind_name(
+            self, signal: Union[Signal, str], expr: ModelExpr, range_=None,
+            width=None, exponent=None, check_format=True
+    ):
         """
         TODO: consider deprecating.
         Alias for set_this_cycle.
         """
 
-        return self.set_this_cycle(signal=signal, expr=expr, range_=range_,
-                                   width=width, exponent=exponent)
+        return self.set_this_cycle(
+            signal=signal, expr=expr, range_=range_, width=width,
+            exponent=exponent, check_format=check_format
+        )
 
-    def set_this_cycle(self, signal: Union[Signal, str], expr: ModelExpr, range_=None,
-                       width=None, exponent=None):
+    def set_this_cycle(
+            self, signal: Union[Signal, str], expr: ModelExpr, range_=None,
+            width=None, exponent=None, check_format=True
+    ):
         """
         The behavior of this function is essentially a blocking assignment (in Verilog nomenclature). The provided
         expression is continuously written to the provided signal.
@@ -234,16 +246,26 @@ class MixedSignalModel:
         else:
             raise Exception(f'Invalid signal type: {type(signal)}.')
 
-        return self.add_assignment(assignment_cls(signal=signal, expr=expr))
+        return self.add_assignment(assignment_cls(signal=signal, expr=expr,
+                                                  check_format=check_format))
 
-    def next_cycle_assign(self, signal: Signal, expr: ModelExpr, clk=None, rst=None, ce=None):
+    def next_cycle_assign(
+            self, signal: Signal, expr: ModelExpr, clk=None,
+            rst=None, ce=None, check_format=True
+    ):
         """
         Alias for set_next_cycle.
         """
 
-        return self.set_next_cycle(signal=signal, expr=expr, clk=clk, rst=rst, ce=ce)
+        return self.set_next_cycle(
+            signal=signal, expr=expr, clk=clk, rst=rst,
+            ce=ce, check_format=check_format
+        )
 
-    def set_next_cycle(self, signal: Signal, expr: ModelExpr, clk=None, rst=None, ce=None):
+    def set_next_cycle(
+            self, signal: Signal, expr: ModelExpr, clk=None,
+            rst=None, ce=None, check_format=True
+    ):
         """
         The behavior of this function is essentially a non-blocking assignment (in Verilog nomenclature). The provided
         expression is written to the provided signal at the next positive edge of the clock signal.
@@ -256,7 +278,8 @@ class MixedSignalModel:
         :return:
         """
 
-        return self.add_assignment(NextCycleAssignment(signal=signal, expr=expr, clk=clk, rst=rst, ce=ce))
+        return self.add_assignment(NextCycleAssignment(signal=signal, expr=expr, clk=clk,
+                                                       rst=rst, ce=ce, check_format=check_format))
 
     def lfsr_signal(self, width: int, clk=None, rst=None, ce=None, name=None, init=None):
         """
@@ -964,13 +987,16 @@ class MixedSignalModel:
 
             # implement the update expression
             if isinstance(assignment, ThisCycleAssignment):
-                gen.make_assign(input_=result, output=assignment.signal)
+                gen.make_assign(input_=result, output=assignment.signal,
+                                check_format=assignment.check_format)
             elif isinstance(assignment, NextCycleAssignment):
-                gen.make_mem(next_=result, curr=assignment.signal, init=assignment.signal.init, clk=assignment.clk,
-                             rst=assignment.rst, ce=assignment.ce)
+                gen.make_mem(next_=result, curr=assignment.signal, init=assignment.signal.init,
+                             clk=assignment.clk, rst=assignment.rst, ce=assignment.ce,
+                             check_format=assignment.check_format)
             elif isinstance(assignment, BindingAssignment):
                 gen.make_signal(assignment.signal)
-                gen.make_assign(input_=result, output=assignment.signal)
+                gen.make_assign(input_=result, output=assignment.signal,
+                                check_format=assignment.check_format)
             elif isinstance(assignment, SyncRomAssignment):
                 gen.make_sync_rom(signal=assignment.signal, table=assignment.table,
                                   addr=result, clk=assignment.clk, ce=assignment.ce)

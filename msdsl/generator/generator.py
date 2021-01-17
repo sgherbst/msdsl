@@ -50,10 +50,11 @@ class CodeGenerator:
     def make_probe(self, s: Signal):
         raise NotImplementedError
 
-    def make_assign(self, input_: Signal, output: Signal):
+    def make_assign(self, input_: Signal, output: Signal, check_format=True):
         raise NotImplementedError
 
-    def make_mem(self, next_: Signal, curr: Signal, init: Number=0, clk: Signal=None, rst: Signal=None, ce: Signal=None):
+    def make_mem(self, next_: Signal, curr: Signal, init: Number=0, clk: Signal=None,
+                 rst: Signal=None, ce: Signal=None, check_format=True):
         raise NotImplementedError
 
     def make_sync_rom(self, signal: Signal, table: Table, addr: Signal,

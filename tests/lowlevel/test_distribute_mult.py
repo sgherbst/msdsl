@@ -2,6 +2,7 @@ from numpy import isclose
 from msdsl import VerilogGenerator, AnalogSignal, distribute_mult
 from msdsl.expr.expr import Sum, Product
 
+
 def test_distribute_mult():
     a = AnalogSignal('a')
     b = AnalogSignal('b')
@@ -44,5 +45,3 @@ def test_distribute_mult():
     assert isclose(res['c'], 3.4*5.6)
     assert isclose(res['d'], 3.4*5.6*7.8)
 
-if __name__ == '__main__':
-    test_distribute_mult()

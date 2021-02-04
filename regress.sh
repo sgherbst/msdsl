@@ -9,6 +9,10 @@ source install_hardfloat.sh
 pip install wheel
 pip install pytest pytest-cov
 
+# temporary fix
+pip install numpy
+pip install cvxpy==1.1.7
+
 # install msdsl
 pip install -e .
 

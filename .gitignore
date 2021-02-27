@@ -6,3 +6,4 @@ tests/*/build
 dist/
 HardFloat*/
 install_hardfloat.sh
+peters_01_0605_B1_thru.s4p

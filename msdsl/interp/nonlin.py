@@ -7,7 +7,7 @@ def v2db(x):
 
 
 def db2v(x):
-    return 10**(-x/20)
+    return 10**(x/20)
 
 
 def tanhsat(v, vsat):
@@ -23,7 +23,7 @@ def calc_tanh_vsat(compr, units=None, veval=1.0):
             raise Exception(f'Unknown units: {units}')
 
     # solve nonlinear equation for vsat
-    func = lambda vsat: tanhsat(veval, vsat) - compr
+    func = lambda vsat: tanhsat(veval, vsat) - compr*veval
     root = scipy.optimize.fsolve(func, veval)  # second argument is the initial guess
     vsat = np.abs(root[0])
 

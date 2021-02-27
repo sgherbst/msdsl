@@ -14,11 +14,7 @@ def calc_piecewise_poly(u, order=3, strategy='overlap'):
     W = calc_interp_w(npts=len(u), order=order, strategy=strategy)
 
     # generate coefficients
-    U = np.zeros((len(u), order+1), dtype=float)
-    for j in range(len(u)):
-        for k in range(order+1):
-            for i in range(len(u)):
-                U[j, k] += W[j, k, i]*u[i]
+    U = (W*u).sum(axis=2)
 
     # return coefficients
     return U
@@ -40,10 +36,7 @@ def calc_interp_w(npts, order=3, strategy='overlap'):
 
     # fill in the W tensor
     W = np.zeros((npts, order+1, npts), dtype=float)
-    for j in range(npts-1):
-        for k in range(order+1):
-            for i in range(npts):
-                W[j, k, i] = C[(j*(order+1))+k, i]
+    W[:-1, :, :] = C.reshape((npts-1, order+1, npts))
 
     # a final PWC segment is included for make the math easier
     W[-1, 0, -1] = 1
@@ -94,7 +87,7 @@ def eval_poly(x, order):
     return x**np.arange(order+1)
 
 # evaluate a piecewise polynomial waveform
-# X[i, j] is the ith segment, jth coefficient (i.e., jth power)
+# U[i, j] is the ith segment, jth coefficient (i.e., jth power)
 def eval_piecewise_poly(t, th, U):
     # convert t to a numpy array if needed
     t = np.array(t)
@@ -104,8 +97,8 @@ def eval_piecewise_poly(t, th, U):
     rvec = (t-(ivec*th))/th
 
     # sum contributions from each polynomial order
-    retval = np.zeros_like(t, dtype=float)
-    for k in range(U.shape[1]):
-        retval += U[ivec, k]*(rvec**k)
+    pows = rvec[..., np.newaxis]**np.arange(U.shape[1])
+    retval = (U[ivec, :]*pows).sum(axis=len(pows.shape)-1)
 
+    # return result
     return retval

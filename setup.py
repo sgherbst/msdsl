@@ -15,7 +15,8 @@ install_requires = [
     'svreal>=0.2.7',
     'scipy',
     'numpy',
-    'matplotlib'
+    'matplotlib',
+    'scikit-rf'
 ]
 if os.name != 'nt':
     install_requires.append('cvxpy')

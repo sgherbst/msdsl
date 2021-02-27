@@ -1,4 +1,6 @@
-from msdsl.interp.interp import *
+import numpy as np
+from msdsl.interp.interp import (myinterp, eval_piecewise_poly, eval_poly, ovl_pwp_mats,
+                                 calc_interp_w, calc_piecewise_poly)
 
 def test_myinterp():
     x0, a0 = 0.234, 1.23

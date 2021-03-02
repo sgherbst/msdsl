@@ -110,6 +110,7 @@ def calc_lds_d_tilde(A, B, C, D, W):
 
 
 # consumes and produces splines for LDS behavior
+# implicitly assumes time has been normalized so dtmax=1
 class SplineLDS:
     def __init__(self, A, B, C, D, W):
         # save settings

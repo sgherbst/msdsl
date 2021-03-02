@@ -130,6 +130,23 @@ class SplineLDS:
     def B_tilde(self, t):
         return calc_lds_b_tilde(A=self.A, B=self.B, W=self.W, t=t)
 
+    def calc_update(self, xo, inpt, dt):
+        # calculate output
+        y = np.zeros((self.npts,), dtype=float)
+        for p in range(self.npts):
+            y[p] += self.C_tilde[p].dot(xo)
+            for i in range(self.npts):
+                y[p] += self.D_tilde[p, i] * inpt[i]
+
+        # calculate state update
+        xn = self.A_tilde(dt).dot(xo)
+        B_tilde = self.B_tilde(dt)
+        for i in range(self.npts):
+            xn += B_tilde[i].flatten() * inpt[i]
+
+        # return output points
+        return xn, y
+
     @property
     def npts(self):
         return self.W.shape[0]

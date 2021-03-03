@@ -461,10 +461,10 @@ class MixedSignalModel:
                                                      ce=ce, we=we, din=din, should_bind=should_bind))
 
     def set_from_sync_func(self, *args, **kwargs):
-        self.set_from_func(*args, func_mode='sync', **kwargs)
+        return self.set_from_func(*args, func_mode='sync', **kwargs)
 
     def set_from_async_func(self, *args, **kwargs):
-        self.set_from_func(*args, func_mode='async', **kwargs)
+        return self.set_from_func(*args, func_mode='async', **kwargs)
 
     def set_from_func(self, signal: Union[Signal, str], func: GeneralFunction, in_: ModelExpr,
                       clk=None, ce=None, rst=None, we=None, wdata=None, waddr=None,

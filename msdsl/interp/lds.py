@@ -152,5 +152,9 @@ class SplineLDS:
         return self.W.shape[0]
 
     @property
+    def nstates(self):
+        return self.A.shape[0]
+
+    @property
     def order(self):
         return self.W.shape[1] - 1

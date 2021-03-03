@@ -16,7 +16,8 @@ install_requires = [
     'scipy',
     'numpy',
     'matplotlib',
-    'scikit-rf'
+    'scikit-rf',
+    'tqdm'
 ]
 if os.name != 'nt':
     install_requires.append('cvxpy')

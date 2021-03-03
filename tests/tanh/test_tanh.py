@@ -8,7 +8,7 @@ import magma as m
 # msdsl imports
 from ..common import *
 from msdsl import VerilogGenerator
-from msdsl.templates.saturation import Saturation
+from msdsl.templates.saturation import SaturationModel
 
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
@@ -21,7 +21,7 @@ def test_tanh(simulator, real_type, err_lim=2.5e-4):
     np.random.seed(0)
 
     # generate model
-    model = Saturation('model', build_dir=BUILD_DIR, real_type=real_type)
+    model = SaturationModel('model', build_dir=BUILD_DIR, real_type=real_type)
     model_file = model.compile_to_file(VerilogGenerator())
 
     # declare circuit

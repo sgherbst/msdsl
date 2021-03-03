@@ -460,8 +460,15 @@ class MixedSignalModel:
         return self.add_assignment(SyncRamAssignment(signal=signal, format_=format_, addr=addr, clk=clk,
                                                      ce=ce, we=we, din=din, should_bind=should_bind))
 
-    def set_from_sync_func(self, signal: Union[Signal, str], func: GeneralFunction, in_: ModelExpr,
-                           clk=None, ce=None, rst=None, we=None, wdata=None, waddr=None):
+    def set_from_sync_func(self, *args, **kwargs):
+        self.set_from_func(*args, func_mode='sync', **kwargs)
+
+    def set_from_async_func(self, *args, **kwargs):
+        self.set_from_func(*args, func_mode='async', **kwargs)
+
+    def set_from_func(self, signal: Union[Signal, str], func: GeneralFunction, in_: ModelExpr,
+                      clk=None, ce=None, rst=None, we=None, wdata=None, waddr=None,
+                      func_mode=None):
         """
         The behavior of this operation is a an evaluation of a Function.
         There is a one-cycle delay in this operation.
@@ -507,13 +514,21 @@ class MixedSignalModel:
         # look up coefficient values
         coeffs = [self.get_next_name(f'{func.name}_coeff_{k}_') for k in range(func.order+1)]
         for k, coeff in enumerate(coeffs):
-            if isinstance(func, PlaceholderFunction):
-                self.set_from_sync_ram(signal=coeff, format_=func.formats[k], addr=addr_mux,
-                                       clk=clk, ce=ce, we=we, din=wdata[k])
-            elif isinstance(func, Function):
-                self.set_from_sync_rom(signal=coeff, table=func.tables[k], addr=addr_uint, clk=clk, ce=ce)
+            if func_mode in {'sync'}:
+                if isinstance(func, PlaceholderFunction):
+                    self.set_from_sync_ram(signal=coeff, format_=func.formats[k], addr=addr_mux,
+                                           clk=clk, ce=ce, we=we, din=wdata[k])
+                elif isinstance(func, Function):
+                    self.set_from_sync_rom(signal=coeff, table=func.tables[k], addr=addr_uint, clk=clk, ce=ce)
+                else:
+                    raise Exception(f'Unsupported function type: {func}')
+            elif func_mode in {'async'}:
+                if isinstance(func, Function):
+                    self.set_this_cycle(coeff, array(func.tables[k].vals, addr_uint))
+                else:
+                    raise Exception(f'Unsupported function type: {func}')
             else:
-                raise Exception(f'Unknown function type: {func}')
+                raise Exception(f'Unsupported mode: {func_mode}')
 
         # compute higher-order products of terms
         prods_imm = [self.get_next_name(f'{func.name}_prod_imm_{k}_') for k in range(func.order)]
@@ -523,22 +538,27 @@ class MixedSignalModel:
             else:
                 self.set_this_cycle(prods_imm[k], addr_frac*self.get_signal(prods_imm[k-1]))
 
-        # delay products by one cycle
-        prods_del = []
-        for k in range(func.order):
-            # get value of immediate product
-            prod_imm = self.get_signal(prods_imm[k])
-            # create a delayed signal with the same format
-            prod_del = self.add_analog_state(
-                self.get_next_name(f'{func.name}_prod_del_{k}_'),
-                range_=prod_imm.format_.range_,
-                width=prod_imm.format_.width,
-                exponent=prod_imm.format_.exponent
-            )
-            # assign to that signal with a delay
-            self.set_next_cycle(prod_del, prod_imm, clk=clk, rst=rst, ce=ce)
-            # save the signal
-            prods_del.append(prod_del)
+        # delay products by one cycle (for "sync" mode only)
+        if func_mode in {'sync'}:
+            prods_del = []
+            for k in range(func.order):
+                # get value of immediate product
+                prod_imm = self.get_signal(prods_imm[k])
+                # create a delayed signal with the same format
+                prod_del = self.add_analog_state(
+                    self.get_next_name(f'{func.name}_prod_del_{k}_'),
+                    range_=prod_imm.format_.range_,
+                    width=prod_imm.format_.width,
+                    exponent=prod_imm.format_.exponent
+                )
+                # assign to that signal with a delay
+                self.set_next_cycle(prod_del, prod_imm, clk=clk, rst=rst, ce=ce)
+                # save the signal
+                prods_del.append(prod_del)
+        elif func_mode in {'async'}:
+            prods_del = [self.get_signal(elem) for elem in prods_imm]
+        else:
+            raise Exception(f'Unsupported mode: {func_mode}')
 
         # compute output terms to be summed
         terms = []
@@ -554,7 +574,7 @@ class MixedSignalModel:
     # table creation functions
 
     def make_real_table(self, vals, width=18, exp=None, name=None, dir=None,
-                        real_type=None):
+                        real_type=None, write_table=True):
         # set defaults
         if name is None:
             name = self.get_next_name('real_table_')
@@ -566,10 +586,14 @@ class MixedSignalModel:
         # create the table, register it, and return it
         table = RealTable(vals=vals, width=width, exp=exp, name=name,
                           dir=dir, real_type=real_type)
-        self.lookup_tables.append(table)
+
+        if write_table:
+            self.lookup_tables.append(table)
+
         return table
 
-    def make_sint_table(self, vals, width=None, name=None, dir=None):
+    def make_sint_table(self, vals, width=None, name=None, dir=None,
+                        write_table=True):
         # set defaults
         if name is None:
             name = self.get_next_name('sint_table_')
@@ -578,10 +602,14 @@ class MixedSignalModel:
 
         # create the table, register it, and return it
         table = SIntTable(vals=vals, width=width, name=name, dir=dir)
-        self.lookup_tables.append(table)
+
+        if write_table:
+            self.lookup_tables.append(table)
+
         return table
 
-    def make_uint_table(self, vals, width=None, name=None, dir=None):
+    def make_uint_table(self, vals, width=None, name=None, dir=None,
+                        write_table=True):
         # set defaults
         if name is None:
             name = self.get_next_name('uint_table_')
@@ -590,13 +618,16 @@ class MixedSignalModel:
 
         # create the table, register it, and return it
         table = UIntTable(vals=vals, width=width, name=name, dir=dir)
-        self.lookup_tables.append(table)
+
+        if write_table:
+            self.lookup_tables.append(table)
+
         return table
 
     # function creation
 
     def make_function(self, func, domain, name=None, dir=None, real_type=None,
-                      **kwargs):
+                      write_tables=True, **kwargs):
         # set defaults
         if name is None:
             name = self.get_next_name('real_func_')
@@ -610,7 +641,8 @@ class MixedSignalModel:
                             real_type=real_type, **kwargs)
 
         # append values
-        self.lookup_tables.extend(function.tables)
+        if write_tables:
+            self.lookup_tables.extend(function.tables)
 
         # return function
         return function

@@ -41,6 +41,13 @@ def pytest_real_type_params(metafunc, real_types=None):
     if 'real_type' in metafunc.fixturenames:
         metafunc.parametrize('real_type', real_types)
 
+def pytest_func_mode_params(metafunc, func_modes=None):
+    if func_modes is None:
+        func_modes = ['sync', 'async']
+
+    if 'func_mode' in metafunc.fixturenames:
+        metafunc.parametrize('func_mode', func_modes)
+
 class MsdslTester(fault.Tester):
     def __init__(self, circuit, clock=None, expect_strict_default=True, debug_mode=True):
         super().__init__(circuit=circuit, clock=clock,

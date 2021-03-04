@@ -35,7 +35,16 @@ class LDSModel(MixedSignalModel):
         states = []
         for k in range(num_states):
             # TODO: determine state range automatically
+            # TODO: does this have to be marked as a state?
             states.append(self.add_analog_state(f'state_{k}', range_=1))
+
+        # store previous values
+        states_prev = []
+        for k in range(num_states):
+            states_prev.append(self.cycle_delay(states[k], 1, clk=clk, rst=rst, ce=ce))
+        inputs_prev = []
+        for k in range(num_spline):
+            inputs_prev.append(self.cycle_delay(inputs[k], 1, clk=clk, rst=rst, ce=ce))
 
         # calculate the interpolation matrix
         W = calc_interp_w(npts=num_spline, order=spline_order)
@@ -94,16 +103,16 @@ class LDSModel(MixedSignalModel):
         xn = [0] * num_states
         for i in range(num_states):
             for j in range(num_states):
-                xn[i] += A_tilde[i][j] * states[j]
+                xn[i] += A_tilde[i][j] * states_prev[j]
 
         # calculate input-to-state update
         for i in range(num_spline):
             for j in range(num_states):
-                xn[j] += B_tilde[i][j] * inputs[i]
+                xn[j] += B_tilde[i][j] * inputs_prev[i]
 
         # update the state
         for i in range(num_states):
-            self.set_next_cycle(states[i], xn[i], clk=clk, rst=rst, ce=ce)
+            self.set_this_cycle(states[i], xn[i])
 
     def build_a_tilde_funcs(self, order, numel):
         # sample A_tilde

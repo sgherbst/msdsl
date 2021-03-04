@@ -39,7 +39,11 @@ def pytest_generate_tests(metafunc):
     pytest_real_type_params(metafunc)
 
 def test_ctle_interp(simulator, real_type, fz=0.8e9, fp1=1.6e9, gbw=40e9,
-                     dtmax=62.5e-12, nover=100000, err_lim=1e-4):
+                     dtmax=62.5e-12, nover=2500000, n_segs=25, err_lim=5e-4):
+    # make sure test is repeatable
+    # the seed is chosen to make sure the curve is interesting enough
+    np.random.seed(4)
+
     # generate model
     model = CTLEModel(fz=fz, fp1=fp1, gbw=gbw, dtmax=dtmax, module_name='model',
                       build_dir=BUILD_DIR, clk='clk', rst='rst',
@@ -76,13 +80,18 @@ def test_ctle_interp(simulator, real_type, fz=0.8e9, fp1=1.6e9, gbw=40e9,
         return retval
 
     # define input segments
-    seg1 = [-2, 0, -0.25, 1.75]
-    seg2 = [1.75, 0, 0.1, -0.3]
-    seg3 = [-0.3, -0.1, -0.1, 1.25]
+    min_v, max_v = -2, +2
+    widths = np.random.uniform(0, 1, n_segs)
+    times = np.concatenate(([0], np.cumsum(widths)))
+    segs = [np.random.uniform(min_v, max_v, NPTS)]
+    for k in range(1, n_segs):
+        prv = make_cubic_func(*segs[k-1])(widths[k-1])
+        nxt = np.random.uniform(min_v, max_v, NPTS-1)
+        segs.append(np.concatenate(([prv], nxt)))
 
     # initialize
     poke_input_spline([0]*NPTS)
-    tester.poke(dut.dt, 1.0)
+    tester.poke(dut.dt, 0)
     tester.poke(dut.clk, 0)
     tester.poke(dut.rst, 1)
     tester.eval()
@@ -94,70 +103,57 @@ def test_ctle_interp(simulator, real_type, fz=0.8e9, fp1=1.6e9, gbw=40e9,
     tester.poke(dut.rst, 0)
     tester.step(2)
 
-    # segment 1
-    poke_input_spline(seg1)
-    tester.eval()
-    y1_meas = get_output_spline()
-    tester.step(2)
-
-    # segment 2
-    poke_input_spline(seg2)
-    tester.eval()
-    y2_meas = get_output_spline()
-    tester.step(2)
-
-    # segment 3
-    poke_input_spline(seg3)
-    tester.eval()
-    y3_meas = get_output_spline()
-    tester.step(2)
+    # apply segments
+    meas = []
+    for k in range(n_segs):
+        poke_input_spline(segs[k])
+        tester.poke(dut.dt, widths[k])
+        tester.eval()
+        meas.append(get_output_spline())
+        tester.step(2)
 
     # run the simulation
     parameters = {
-        'in_range': 3.5,
-        'out_range': 3.5
+        'in_range': 4.5,
+        'out_range': 4.5
     }
     tester.compile_and_run(
         directory=BUILD_DIR,
         simulator=simulator,
         ext_srcs=[model_file, get_file('ctle_interp/test_ctle_interp.sv')],
         parameters=parameters,
-        real_type=real_type
+        real_type=real_type,
+        #dump_waveforms=True
     )
 
     # convert measurements to arrays
-    y1_meas = np.array([elem.value for elem in y1_meas])
-    y2_meas = np.array([elem.value for elem in y2_meas])
-    y3_meas = np.array([elem.value for elem in y3_meas])
+    y_meas = [np.array([pt.value for pt in seg]) for seg in meas]
 
     # calculate response using conventional method
     num, den = calc_ctle_num_den(fz=fz*dtmax, fp1=fp1*dtmax, gbw=gbw*dtmax)
-    tvec = np.linspace(0, 1, nover)
-    xvec = np.concatenate((
-        make_cubic_func(*seg1)(tvec[:-1]),
-        make_cubic_func(*seg2)(tvec[:-1]),
-        make_cubic_func(*seg3)(tvec)
-    ))
-    b, a, _ = cont2discrete((num, den), dt=1/(nover-1))
-    y_expt = lfilter(b[0], a, xvec)
+    tvec = np.linspace(0, times[-1], nover)
+    ivec = [0] + [np.searchsorted(tvec, time) for time in times[1:-1]] + [len(tvec)]
+    xvec = []
+    for k in range(n_segs):
+        lo, hi = ivec[k], ivec[k+1]
+        xvec.append(make_cubic_func(*segs[k])(tvec[lo:hi]-times[k]))
+    xvec = np.concatenate(xvec)
+
+    b, a, _ = cont2discrete((num, den), dt=times[-1]/(nover-1))
+    yvec = lfilter(b[0], a, xvec)
 
     # check the output a certain specific points
-    y1_expt = y_expt[(0*(nover-1)):((1*nover)-0)]
-    y2_expt = y_expt[(1*(nover-1)):((2*nover)-1)]
-    y3_expt = y_expt[(2*(nover-1)):((3*nover)-2)]
+    y_expt = []
+    for k in range(n_segs):
+        lo, hi = ivec[k], ivec[k+1]
+        expt_i = interp1d(tvec[lo:hi]-tvec[lo], yvec[lo:hi], bounds_error=False, fill_value='extrapolate')
+        svec = np.arange(0, widths[k], 1/(NPTS-1))
+        y_expt.append(expt_i(svec))
 
-    # sanity check to make sure slices are OK
-    assert len(y1_expt) == nover
-    assert len(y2_expt) == nover
-    assert len(y3_expt) == nover
+    # compute errors
+    errs = [m[:len(e)]-e for m, e in zip(y_meas, y_expt)]
+    max_err = max([np.max(np.abs(elem)) for elem in errs])
+    print(f'max_err: {max_err}')
 
-    # sample output of conventional method
-    svec = np.linspace(0, 1, NPTS)
-    y1_expt_i = interp1d(tvec, y1_expt)(svec)
-    y2_expt_i = interp1d(tvec, y2_expt)(svec)
-    y3_expt_i = interp1d(tvec, y3_expt)(svec)
-
-    # run comparisons
-    assert np.max(np.abs(y1_meas - y1_expt_i)) < err_lim
-    assert np.max(np.abs(y2_meas - y2_expt_i)) < err_lim
-    assert np.max(np.abs(y3_meas - y3_expt_i)) < err_lim
+    # check errors
+    assert max_err < err_lim

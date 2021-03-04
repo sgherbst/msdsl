@@ -1,5 +1,6 @@
 import numpy as np
 from tqdm import tqdm
+from collections.abc import Iterable
 from scipy.interpolate import interp1d
 
 from msdsl import MixedSignalModel
@@ -11,9 +12,16 @@ from msdsl.interp.ctle import calc_ctle_abcd
 # implicitly assumes time has been normalized so dtmax=1
 class LDSModel(MixedSignalModel):
     def __init__(self, A, B, C, D, num_spline=4, spline_order=3, func_order=1, func_numel=512,
-                 in_prefix='in', out_prefix='out', dt='dt', clk=None, rst=None, ce=None, **kwargs):
+                 in_prefix='in', out_prefix='out', dt='dt', clk=None, rst=None, ce=None,
+                 state_range=None, **kwargs):
         # call the super constructor
         super().__init__(**kwargs)
+
+        # set defaults
+        if state_range is None:
+            state_range = 1
+        if not isinstance(state_range, Iterable):
+            state_range = [state_range]*A.shape[0]
 
         # create IOs
         inputs, outputs = [], []
@@ -34,9 +42,8 @@ class LDSModel(MixedSignalModel):
         num_states = A.shape[0]
         states = []
         for k in range(num_states):
-            # TODO: determine state range automatically
             # TODO: does this have to be marked as a state?
-            states.append(self.add_analog_state(f'state_{k}', range_=1))
+            states.append(self.add_analog_state(f'state_{k}', range_=state_range[k]))
 
         # store previous values
         states_prev = []

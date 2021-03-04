@@ -127,33 +127,34 @@ def test_ctle_interp(simulator, real_type, fz=0.8e9, fp1=1.6e9, gbw=40e9,
     )
 
     # convert measurements to arrays
-    y_meas = [np.array([pt.value for pt in seg]) for seg in meas]
+    meas = [np.array([pt.value for pt in seg]) for seg in meas]
 
-    # calculate response using conventional method
-    num, den = calc_ctle_num_den(fz=fz*dtmax, fp1=fp1*dtmax, gbw=gbw*dtmax)
+    # create oversampled time vector and split into chunks corresponding to each cubic section
     tvec = np.linspace(0, times[-1], nover)
-    ivec = [0] + [np.searchsorted(tvec, time) for time in times[1:-1]] + [len(tvec)]
-    xvec = []
-    for k in range(n_segs):
-        lo, hi = ivec[k], ivec[k+1]
-        xvec.append(make_cubic_func(*segs[k])(tvec[lo:hi]-times[k]))
+    ivec = [np.searchsorted(tvec, time) for time in times[1:-1]]
+    tvec = np.split(tvec, ivec)
+
+    # create a flat vector of input values
+    xvec = [make_cubic_func(*segs[k])(tvec[k]-times[k]) for k in range(n_segs)]
     xvec = np.concatenate(xvec)
 
+    # apply CTLE dynamics to flat input vector, then split output values into chunks
+    # corresponding to each cubic section
+    num, den = calc_ctle_num_den(fz=fz*dtmax, fp1=fp1*dtmax, gbw=gbw*dtmax)
     b, a, _ = cont2discrete((num, den), dt=times[-1]/(nover-1))
     yvec = lfilter(b[0], a, xvec)
+    yvec = np.split(yvec, ivec)
 
-    # check the output a certain specific points
-    y_expt = []
+    # evaluate the error for the chunk corresponding to each cubic section
+    errs = []
     for k in range(n_segs):
-        lo, hi = ivec[k], ivec[k+1]
-        expt_i = interp1d(tvec[lo:hi]-tvec[lo], yvec[lo:hi], bounds_error=False, fill_value='extrapolate')
         svec = np.arange(0, widths[k], 1/(NPTS-1))
-        y_expt.append(expt_i(svec))
+        expt = interp1d(tvec[k]-times[k], yvec[k], bounds_error=False, fill_value='extrapolate')(svec)
+        errs.append(meas[k][:len(expt)]-expt)
 
-    # compute errors
-    errs = [m[:len(e)]-e for m, e in zip(y_meas, y_expt)]
+    # compute maximum error
     max_err = max([np.max(np.abs(elem)) for elem in errs])
     print(f'max_err: {max_err}')
 
-    # check errors
+    # make sure the worst-case error is within tolerance
     assert max_err < err_lim

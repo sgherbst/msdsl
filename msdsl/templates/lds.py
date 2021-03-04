@@ -1,20 +1,19 @@
 import numpy as np
 from tqdm import tqdm
-from scipy.signal import tf2ss
 from scipy.interpolate import interp1d
 
 from msdsl import MixedSignalModel
 from msdsl.interp.interp import calc_interp_w
 from msdsl.interp.lds import SplineLDS
-from msdsl.interp.ctle import calc_ctle_num_den
+from msdsl.interp.ctle import calc_ctle_abcd
 
 # consumes and produces splines for LDS behavior
 # implicitly assumes time has been normalized so dtmax=1
 class LDSModel(MixedSignalModel):
-    def __init__(self, A, B, C, D, *args, num_spline=4, spline_order=3, func_order=1, func_numel=512,
+    def __init__(self, A, B, C, D, num_spline=4, spline_order=3, func_order=1, func_numel=512,
                  in_prefix='in', out_prefix='out', dt='dt', clk=None, rst=None, ce=None, **kwargs):
         # call the super constructor
-        super().__init__(*args, **kwargs)
+        super().__init__(**kwargs)
 
         # create IOs
         inputs, outputs = [], []
@@ -28,6 +27,8 @@ class LDSModel(MixedSignalModel):
             clk = self.add_digital_input(clk)
         if rst is not None:
             rst = self.add_digital_input(rst)
+        if ce is not None:
+            ce = self.add_digital_input(ce)
 
         # create internal state variable
         num_states = A.shape[0]
@@ -164,27 +165,15 @@ class LDSModel(MixedSignalModel):
         # lds.D_tilde is a matrix that is (num_spline, num_spline)
         return self.lds.D_tilde
 
-class TFModel(LDSModel):
-    def __init__(self, num, den, *args, **kwargs):
-        # scale numerator and denominator by dtmax
-        num_sc = [elem for elem in num]
-        den_sc = [elem for elem in den]
 
-        # calculate A, B, C, D matrices
-        A, B, C, D = tf2ss(num_sc, den_sc)
-
-        # call the super constructor
-        super().__init__(A=A, B=B, C=C, D=D, *args, **kwargs)
-
-
-class CTLEModel(TFModel):
-    def __init__(self, fz, fp1, dtmax, *args, fp2=None, gbw=None, **kwargs):
-        # calculate the numerator and denominator
+class CTLEModel(LDSModel):
+    def __init__(self, fz, fp1, dtmax, fp2=None, gbw=None, **kwargs):
+        # calculate the state-space representation
         fz = fz*dtmax
         fp1 = fp1*dtmax
         fp2 = fp2*dtmax if fp2 is not None else None
         gbw = gbw*dtmax if gbw is not None else None
-        num, den = calc_ctle_num_den(fz=fz, fp1=fp1, fp2=fp2, gbw=gbw)
+        A, B, C, D = calc_ctle_abcd(fz=fz, fp1=fp1, fp2=fp2, gbw=gbw)
 
         # call the super constructor
-        super().__init__(num=num, den=den, *args, **kwargs)
+        super().__init__(A=A, B=B, C=C, D=D, **kwargs)

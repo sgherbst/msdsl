@@ -16,16 +16,16 @@ from msdsl.rf import s4p_to_step
 THIS_DIR = Path(__file__).resolve().parent
 BUILD_DIR = THIS_DIR / 'build'
 TOP_DIR = THIS_DIR.parent.parent
+S4P_FILE = 'peters_01_0605_B1_thru.s4p'
 NPTS = 4
 
 def pytest_generate_tests(metafunc):
     pytest_sim_params(metafunc)
     pytest_real_type_params(metafunc, [RealType.FloatReal, RealType.FixedPoint])
-    #pytest_real_type_params(metafunc, [RealType.FloatReal])
 
 @pytest.mark.parametrize(
     'test_pts,chan_type,err_lim', [
-        (200, 'exp', 5e-3),
+        (200, 'exp', 1e-4),
         (200, 's4p', 5e-3)
     ]
 )
@@ -40,19 +40,13 @@ def test_chan_interp(simulator, real_type, test_pts, err_lim, chan_type,
         t_step = np.linspace(0, t_dur, func_numel)
         v_step = 1.0-np.exp(-0.5*t_step/ui)
     elif chan_type in {'s4p'}:
-        # get high-resolution step response
-        t_orig, v_orig = s4p_to_step(TOP_DIR/'peters_01_0605_B1_thru.s4p', dt=0.1e-12, T=10e-9)
-        # trim to func_numel points around the "interesting part" of the waveform
-        t_step = np.linspace(2e-9, 6e-9, func_numel)
-        v_step = interp1d(t_orig, v_orig)(t_step)
-        t_step -= t_step[0]
-        t_dur = t_step[-1]-t_step[0]
+        t_dur = 10e-9
+        t_step, v_step = s4p_to_step(TOP_DIR/S4P_FILE, dt=t_dur/func_numel, T=t_dur)
     else:
         raise Exception(f'Unknown chan_type: {chan_type}')
 
     # determine number of terms for the history
-    num_terms = int(round(0.6*t_dur/ui))
-    print(f'num_terms: {num_terms}')
+    num_terms = int(round(t_dur/ui))
 
     # generate model
     model = ChannelModel(

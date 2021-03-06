@@ -318,8 +318,20 @@ class MixedSignalModel:
         # return the signal representing the LFSR state
         return lfsr_state
 
+    def random_uint(self, name, width=32, init=None, gen_type='lfsr', clk=None, rst=None, ce=None):
+        if gen_type in {'mt19937'}:
+            assert width == 32, 'Only width 32 is supported for mt19937'
+            return self.set_this_cycle(name, mt19937(clk=clk, rst=rst, cke=ce, seed=init))
+        elif gen_type in {'lcg'}:
+            assert width == 32, 'Only width 32 is supported for lcg'
+            return self.set_this_cycle(name, lcg_op(clk=clk, rst=rst, cke=ce, seed=init))
+        elif gen_type in {'lfsr'}:
+            return self.lfsr_signal(width=width, clk=clk, rst=rst, ce=ce, name=name, init=init)
+        else:
+            raise Exception(f'Unknown gen_type: {gen_type}')
+
     def uniform_signal(self, min_val=0.0, max_val=1.0, clk=None, rst=None, ce=None, lfsr_name=None,
-                       lfsr_width=32, lfsr_init=None, uniform_name=None):
+                       lfsr_width=32, lfsr_init=None, uniform_name=None, gen_type='lfsr'):
         # set defaults
         if uniform_name is None:
             uniform_name = self.get_next_name(f'uniform_var_')
@@ -327,17 +339,18 @@ class MixedSignalModel:
             lfsr_name = uniform_name + '_lfsr_state'
 
         # create the LFSR signal
-        lfsr_signal = self.lfsr_signal(width=lfsr_width, clk=clk, rst=rst, ce=ce, name=lfsr_name,
-                                       init=lfsr_init)
+        rand_uint = self.random_uint(name=lfsr_name, width=lfsr_width, init=lfsr_init,
+                                     gen_type=gen_type, clk=clk, rst=rst, ce=ce)
 
         # bind the uniform variable
         scale_factor = (max_val-min_val)/((1<<lfsr_width)-1)
-        uniform_expr = (lfsr_signal * scale_factor) + min_val
+        uniform_expr = (rand_uint * scale_factor) + min_val
 
         return self.bind_name(uniform_name, uniform_expr)
 
     def arbitrary_noise(self, inv_cdf_func, clk=None, rst=None, ce=None, lfsr_width=32,
-                        lfsr_init=None, lfsr_name=None, uniform_name=None, noise_name=None):
+                        lfsr_init=None, lfsr_name=None, uniform_name=None, noise_name=None,
+                        gen_type='lfsr'):
         # set defaults
         if noise_name is None:
             noise_name = self.get_next_name(f'arb_noise_')
@@ -347,7 +360,7 @@ class MixedSignalModel:
             lfsr_name = noise_name + '_lfsr'
 
         unf_sig =self.uniform_signal(clk=clk, rst=rst, ce=ce, lfsr_name=lfsr_name, lfsr_width=lfsr_width,
-                                     lfsr_init=lfsr_init, uniform_name=uniform_name)
+                                     lfsr_init=lfsr_init, uniform_name=uniform_name, gen_type=gen_type)
 
         return self.set_from_sync_func(signal=noise_name, func=inv_cdf_func, in_=unf_sig,
                                        clk=clk, ce=ce, rst=rst)
@@ -365,10 +378,6 @@ class MixedSignalModel:
             elif gen_type == 'lcg':
                 lfsr_name = f'{noise_name}_lcg'
 
-        # validate input
-        if gen_type in {'lcg', 'mt19937'}:
-            assert lfsr_width==32, 'Only width 32 is supported at this time.'
-
         # create the inverse CDF function if needed
         if self._inv_cdf_func is None:
             inv_cdf = lambda x: truncnorm.ppf(x, -num_sigma, +num_sigma)
@@ -381,13 +390,8 @@ class MixedSignalModel:
             )
 
         # create the random integer signal
-        if gen_type == 'mt19937':
-            rand_uint = self.set_this_cycle(lfsr_name, mt19937(clk=clk, rst=rst, cke=ce, seed=lfsr_init))
-        elif gen_type == 'lcg':
-            rand_uint = self.set_this_cycle(lfsr_name, lcg_op(clk=clk, rst=rst, cke=ce, seed=lfsr_init))
-        else:
-            rand_uint = self.lfsr_signal(width=lfsr_width, clk=clk, rst=rst,
-                                         ce=ce, name=lfsr_name, init=lfsr_init)
+        rand_uint = self.random_uint(name=lfsr_name, width=lfsr_width, init=lfsr_init,
+                                     gen_type=gen_type, clk=clk, rst=rst, ce=ce)
 
         # separate the sign bit from the data bits; in the LFSR case,
         # the MSB is quite correlated to the value of the lower bits,

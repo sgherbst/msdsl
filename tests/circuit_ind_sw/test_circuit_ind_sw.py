@@ -15,15 +15,15 @@ def pytest_generate_tests(metafunc):
     pytest_sim_params(metafunc)
     pytest_real_type_params(metafunc)
 
-# TODO: fix bug in which this test fails with r_off greater than or equal to 2.7e3
+# TODO: fix bug in which this test fails with r_off greater than or equal to 2.5e3
 # The timestep doesn't really affect this particular bug, nor does the inductance,
 # or the "ON" resistance of the switch.  Instead, the problem is related to the
-# produce to "r_off" and "current_range".  If both switches are off, and the
+# product of "r_off" and "current_range".  If both switches are off, and the
 # current through the inductor is actually at the specified limit, the output
 # voltage could be enormous.  But this is unlikely to happen, so we need some
 # way to (1) clamp internally to more reasonable values, and (2) detect when
 # this problem is likely to occur.
-def gen_model(r_off=2.6e3, current_range=100, real_type=RealType.FixedPoint):
+def gen_model(r_off=2.5e3, current_range=100, real_type=RealType.FixedPoint):
     # declare model
     m = MixedSignalModel('model', dt=1e-9, real_type=real_type)
     m.add_analog_input('v_in')

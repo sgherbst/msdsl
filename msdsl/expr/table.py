@@ -133,8 +133,8 @@ class SIntTable(Table):
 class RealTable(Table):
     def __init__(self, vals, width=18, exp=None, name='real_table', dir='.',
                  real_type=None, rec_fn_sig_width=None, rec_fn_exp_width=None):
-        # calculate the range of values
-        range_ = max([abs(val) for val in vals])
+        # calculate the range of values (slightly overestimated to prevent range violations due to rounding)
+        range_ = max([abs(val) for val in vals])*1.01
 
         # set defaults
         if exp is None:

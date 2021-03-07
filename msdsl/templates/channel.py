@@ -49,7 +49,7 @@ class ChannelModel(MixedSignalModel):
                 time_mux.append(0)
             else:
                 # create the signal
-                mem_sig = AnalogState(name=f'time_mem_{j}', range_=t_step[-1], init=0.0)
+                mem_sig = AnalogState(name=f'time_mem_{j}', range_=t_step[-1]*1.01, init=0.0)
                 self.add_signal(mem_sig)
 
                 # increment time by dt_sig (this is the output from the current tap)

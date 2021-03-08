@@ -1,10 +1,9 @@
 import numpy as np
 from tqdm import tqdm
-from collections.abc import Iterable
 from scipy.linalg import expm
 from scipy.interpolate import interp1d
 
-from msdsl import MixedSignalModel
+from msdsl import MixedSignalModel, RangeOf
 from msdsl.interp.interp import calc_interp_w
 from msdsl.interp.lds import SplineLDS
 from msdsl.interp.ctle import calc_ctle_abcd
@@ -14,20 +13,17 @@ from msdsl.interp.ctle import calc_ctle_abcd
 class LDSModel(MixedSignalModel):
     def __init__(self, A, B, C, D, num_spline=4, spline_order=3, func_order=1, func_numel=512,
                  in_prefix='in', out_prefix='out', dt='dt', clk=None, rst=None, ce=None,
-                 in_range=None, state_ranges=None, out_range=None, num_terms=100,
-                 state_range_safety=10, **kwargs):
+                 state_ranges=None, out_range=None, num_terms=100, state_range_safety=10, **kwargs):
         # call the super constructor
         super().__init__(**kwargs)
 
         # set defaults
-        if in_range is None:
-            in_range = (-1, 1)
         if (state_ranges is None) or (out_range is None):
-            state_range_calc, out_range_calc = self.calc_ranges(
-                A=A, B=B, C=C, D=D, in_range=in_range, dt=1/(num_spline-1),
+            state_ranges_calc, out_range_calc = self.calc_ranges(
+                A=A, B=B, C=C, D=D, in_range=[-1, 1], dt=1/(num_spline-1),
                 num_terms=((num_spline-1)*num_terms)+1)
             if state_ranges is None:
-                state_ranges = state_range_calc
+                state_ranges = state_ranges_calc
             if out_range is None:
                 out_range = out_range_calc
 
@@ -55,8 +51,9 @@ class LDSModel(MixedSignalModel):
         states = []
         for k in range(num_states):
             state_min, state_max = self.state_ranges[k]
+            state_range = max(abs(state_min), abs(state_max))
             states.append(self.add_analog_state(
-                f'state_{k}', range_=max(abs(state_min), abs(state_max))*state_range_safety))
+                f'state_{k}', range_=RangeOf(inputs[0])*state_range*state_range_safety))
 
         # store previous values
         states_prev = []

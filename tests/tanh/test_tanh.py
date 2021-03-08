@@ -21,7 +21,7 @@ def test_tanh(simulator, real_type, err_lim=2.5e-4):
     np.random.seed(0)
 
     # generate model
-    model = SaturationModel('model', build_dir=BUILD_DIR, real_type=real_type)
+    model = SaturationModel(module_name='model', build_dir=BUILD_DIR, real_type=real_type)
     model_file = model.compile_to_file(VerilogGenerator())
 
     # declare circuit

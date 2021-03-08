@@ -1,6 +1,7 @@
 import numpy as np
 from tqdm import tqdm
 from collections.abc import Iterable
+from scipy.linalg import expm
 from scipy.interpolate import interp1d
 
 from msdsl import MixedSignalModel
@@ -13,15 +14,26 @@ from msdsl.interp.ctle import calc_ctle_abcd
 class LDSModel(MixedSignalModel):
     def __init__(self, A, B, C, D, num_spline=4, spline_order=3, func_order=1, func_numel=512,
                  in_prefix='in', out_prefix='out', dt='dt', clk=None, rst=None, ce=None,
-                 state_range=None, **kwargs):
+                 in_range=None, state_ranges=None, out_range=None, num_terms=100,
+                 state_range_safety=10, **kwargs):
         # call the super constructor
         super().__init__(**kwargs)
 
         # set defaults
-        if state_range is None:
-            state_range = 1
-        if not isinstance(state_range, Iterable):
-            state_range = [state_range]*A.shape[0]
+        if in_range is None:
+            in_range = (-1, 1)
+        if (state_ranges is None) or (out_range is None):
+            state_range_calc, out_range_calc = self.calc_ranges(
+                A=A, B=B, C=C, D=D, in_range=in_range, dt=1/(num_spline-1),
+                num_terms=((num_spline-1)*num_terms)+1)
+            if state_ranges is None:
+                state_ranges = state_range_calc
+            if out_range is None:
+                out_range = out_range_calc
+
+        # save settings
+        self.state_ranges = state_ranges
+        self.out_range = out_range
 
         # create IOs
         inputs, outputs = [], []
@@ -42,8 +54,9 @@ class LDSModel(MixedSignalModel):
         num_states = A.shape[0]
         states = []
         for k in range(num_states):
-            # TODO: does this have to be marked as a state?
-            states.append(self.add_analog_state(f'state_{k}', range_=state_range[k]))
+            state_min, state_max = self.state_ranges[k]
+            states.append(self.add_analog_state(
+                f'state_{k}', range_=max(abs(state_min), abs(state_max))*state_range_safety))
 
         # store previous values
         states_prev = []
@@ -180,6 +193,56 @@ class LDSModel(MixedSignalModel):
     def build_d_tilde(self):
         # lds.D_tilde is a matrix that is (num_spline, num_spline)
         return self.lds.D_tilde
+
+
+    @staticmethod
+    def calc_ranges(A, B, C, D, in_range, dt, num_terms):
+        # convenience definitions
+        num_states = A.shape[0]
+        min_in, max_in = in_range[0], in_range[1]
+
+        # calculate transfer matrices
+        A_tilde = expm(dt*A)
+        I = np.eye(*A.shape)
+        B_tilde = np.linalg.solve(A, (A_tilde-I).dot(B))
+
+        # calculate powers of Atilde (first is most recent)
+        A_tilde_pow = [I]
+        for i in range(num_terms-1):
+            A_tilde_pow.append(A_tilde_pow[-1].dot(A_tilde))
+
+        # calculate contribution of inputs to states
+        inputs_to_states = []
+        for i in range(num_terms):
+            inputs_to_states.append((A_tilde_pow[i].dot(B_tilde)).flatten())
+
+        state_ranges = []
+        for j in range(num_states):
+            state_ranges.append(np.zeros((2,), dtype=float))
+        for i in range(num_terms):
+            for j in range(num_states):
+                coeff = inputs_to_states[i][j]
+                if coeff >= 0:
+                    state_ranges[j] += [coeff*min_in, coeff*max_in]
+                else:
+                    state_ranges[j] += [coeff*max_in, coeff*min_in]
+
+        # calculate contribution of inputs to outputs
+        inputs_to_outputs = []
+        for i in range(num_terms):
+            inputs_to_outputs.append(float(C.dot(A_tilde_pow[i].dot(B_tilde))))
+        inputs_to_outputs[0] += float(D)
+
+        out_range = np.zeros((2,), dtype=float)
+        for i in range(num_terms):
+            coeff = inputs_to_outputs[i]
+            if coeff >= 0:
+                out_range += [coeff*min_in, coeff*max_in]
+            else:
+                out_range += [coeff*max_in, coeff*min_in]
+
+        # return results
+        return state_ranges, out_range
 
 
 class CTLEModel(LDSModel):

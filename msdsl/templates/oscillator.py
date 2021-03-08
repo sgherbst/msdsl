@@ -3,14 +3,14 @@ from msdsl.expr.extras import if_
 
 class OscillatorModel(MixedSignalModel):
     def __init__(self, period='period', dt_req='dt_req', emu_dt='emu_dt', clk_en='clk_en',
-                 clk=None, rst=None, dt_width=32, dt_scale=1e-15, **kwargs):
+                 clk=None, rst=None, init=0, dt_width=32, dt_scale=1e-15, **kwargs):
         # call the super constructor
         super().__init__(**kwargs)
 
         # add other signals
         period = self.add_analog_input(period)
         emu_dt = self.add_digital_input(emu_dt, width=dt_width)
-        dt_req = self.add_digital_output(dt_req, width=dt_width)
+        dt_req = self.add_digital_output(dt_req, width=dt_width, init=init)
         clk_en = self.add_digital_output(clk_en)
         if clk is not None:
             clk = self.add_digital_input(clk)

@@ -7,8 +7,8 @@ module test_osc_model #(
     input real ext_dt,
     output real dt_req,
     output clk_en,
-    input emu_clk,
-    input emu_rst
+    input clk,
+    input rst
 );
     // wire period
     `MAKE_REAL(period_int, period_range);
@@ -32,7 +32,7 @@ module test_osc_model #(
         .dt_req(dt_req_int),
         .emu_dt(emu_dt),
         .clk_en(clk_en),
-        .emu_clk(emu_clk),
-        .emu_rst(emu_rst)
+        .clk(clk),
+        .rst(rst)
     );
 endmodule

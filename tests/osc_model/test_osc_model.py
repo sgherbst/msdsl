@@ -22,8 +22,8 @@ def test_osc_model(simulator, real_type, dt_width=32, dt_scale=1e-18, abs_tol=0.
     # generate model
     model = OscillatorModel(
         module_name='model',
-        emu_clk='emu_clk',
-        emu_rst='emu_rst',
+        clk='clk',
+        rst='rst',
         dt_width=dt_width,
         dt_scale=dt_scale,
         real_type=real_type,
@@ -37,28 +37,28 @@ def test_osc_model(simulator, real_type, dt_width=32, dt_scale=1e-18, abs_tol=0.
         io = m.IO(
             period=fault.RealIn,
             ext_dt=fault.RealIn,
-            emu_clk=m.ClockIn,
-            emu_rst=m.BitIn,
+            clk=m.ClockIn,
+            rst=m.BitIn,
             dt_req=fault.RealOut,
             clk_en=m.BitOut
         )
 
     # create the tester
-    tester = MsdslTester(dut, dut.emu_clk)
+    tester = MsdslTester(dut, dut.clk)
 
     # initialize
     period = 62.5e-12
     tester.poke(dut.period, period)
     tester.poke(dut.ext_dt, 0)
-    tester.poke(dut.emu_clk, 0)
-    tester.poke(dut.emu_rst, 0)
+    tester.poke(dut.clk, 0)
+    tester.poke(dut.rst, 0)
     tester.eval()
 
     # apply reset
     tester.step(2)
 
     # clear reset
-    tester.poke(dut.emu_rst, 0)
+    tester.poke(dut.rst, 0)
     tester.step(2)
 
     # software model of the oscillator

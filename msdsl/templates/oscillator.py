@@ -3,7 +3,7 @@ from msdsl.expr.extras import if_
 
 class OscillatorModel(MixedSignalModel):
     def __init__(self, period='period', dt_req='dt_req', emu_dt='emu_dt', clk_en='clk_en',
-                 emu_clk=None, emu_rst=None, dt_width=32, dt_scale=1e-15, **kwargs):
+                 clk=None, rst=None, dt_width=32, dt_scale=1e-15, **kwargs):
         # call the super constructor
         super().__init__(**kwargs)
 
@@ -12,10 +12,10 @@ class OscillatorModel(MixedSignalModel):
         emu_dt = self.add_digital_input(emu_dt, width=dt_width)
         dt_req = self.add_digital_output(dt_req, width=dt_width)
         clk_en = self.add_digital_output(clk_en)
-        if emu_clk is not None:
-            emu_clk = self.add_digital_input(emu_clk)
-        if emu_rst is not None:
-            emu_rst = self.add_digital_input(emu_rst)
+        if clk is not None:
+            clk = self.add_digital_input(clk)
+        if rst is not None:
+            rst = self.add_digital_input(rst)
 
         # determine if the request was granted
         self.set_this_cycle(clk_en, self.dt_req == self.emu_dt)
@@ -31,4 +31,4 @@ class OscillatorModel(MixedSignalModel):
         # update the timestep request
         dt_req_decr = self.set_this_cycle('dt_req_decr', to_uint(clamp_op(dt_req-emu_dt, 0, (1<<dt_width)-1)))
         dt_req_imm = self.set_this_cycle('dt_req_imm', if_(clk_en, period_uint, dt_req_decr))
-        self.set_next_cycle(dt_req, dt_req_imm, clk=emu_clk, rst=emu_rst)
+        self.set_next_cycle(dt_req, dt_req_imm, clk=clk, rst=rst)

@@ -2,9 +2,8 @@ from msdsl import MixedSignalModel
 from msdsl.interp.nonlin import calc_tanh_vsat, tanhsat
 
 class SaturationModel(MixedSignalModel):
-    def __init__(self, compr=-1, units='dB', veval=1.0, in_='in_',
-                 out='out', domain=None, order=1, numel=64,
-                 in_range=None, out_range=None, **kwargs):
+    def __init__(self, compr=-1, units='dB', veval=1.0, in_='in_', out='out', domain=None, order=1,
+                 numel=64, in_range=None, out_range=None, clk=None, rst=None, **kwargs):
         # call the super constructor
         super().__init__(**kwargs)
 

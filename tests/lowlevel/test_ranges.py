@@ -45,7 +45,7 @@ def test_chan_range_realistic(dtmax=62.5e-12, num_spline=4, tdur=10e-9):
     num_terms = int(round(tdur/dtmax))
     m = S4PModel(
         module_name='model', s4p_file=S4P_FILE, tdur=tdur, tover=tover,
-        dtmax=dtmax, num_spline=num_spline, num_terms=num_terms, in_range=[-1, 1])
+        dtmax=dtmax, num_spline=num_spline, num_terms=num_terms)
 
     min_val_meas = m.out_range[0]
     max_val_meas = m.out_range[1]

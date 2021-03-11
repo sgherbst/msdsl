@@ -92,7 +92,7 @@ def test_ctle2(fz, fp1, npts, order, gbw, dtmax, err_lim):
     # uncomment to plot results
     # import matplotlib.pyplot as plt
     # plt.plot(t_resp, y_expt)
-    # plt.plot(t_resp, )
+    # plt.plot(t_resp, y_meas)
     # plt.show()
 
     # calculate error

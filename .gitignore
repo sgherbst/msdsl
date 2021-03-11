@@ -7,3 +7,4 @@ dist/
 HardFloat*/
 install_hardfloat.sh
 *.s4p
+*.csv

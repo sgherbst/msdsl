@@ -40,7 +40,8 @@ def interp_emu_res(tvec, vvec, dtmax, tsim, order, npts):
 npts = 4
 order = 3
 gbw = 40e9
-dtmax = 62.5e-12
+ui = 62.5e-12
+dtmax = ui
 dt_nom = 10e-12
 
 ctle1_fz, ctle1_fp = 0.8e9, 1.6e9

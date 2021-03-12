@@ -43,6 +43,7 @@ gbw = 40e9
 ui = 62.5e-12
 dtmax = ui
 dt_nom = 10e-12
+AB_spline = False
 
 ctle1_fz, ctle1_fp = 0.8e9, 1.6e9
 ctle2_fz, ctle2_fp = 3.5e9, 7.0e9
@@ -105,9 +106,9 @@ def run_emulation(t_resp, v_resp):
     W = calc_interp_w(npts=npts, order=order)
 
     # define CTLE objects
-    ctle1 = SplineLDS(A=A1, B=B1, C=C1, D=D1, W=W)
-    ctle2 = SplineLDS(A=A2, B=B2, C=C2, D=D2, W=W)
-    ctle3 = SplineLDS(A=A3, B=B3, C=C3, D=D3, W=W)
+    ctle1 = SplineLDS(A=A1, B=B1, C=C1, D=D1, W=W, AB_spline=AB_spline)
+    ctle2 = SplineLDS(A=A2, B=B2, C=C2, D=D2, W=W, AB_spline=AB_spline)
+    ctle3 = SplineLDS(A=A3, B=B3, C=C3, D=D3, W=W, AB_spline=AB_spline)
 
     # initialize states
     x1 = np.zeros((A1.shape[0],), dtype=float)

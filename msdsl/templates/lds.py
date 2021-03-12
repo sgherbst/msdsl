@@ -13,7 +13,8 @@ from msdsl.interp.ctle import calc_ctle_abcd
 class LDSModel(MixedSignalModel):
     def __init__(self, A, B, C, D, num_spline=4, spline_order=3, func_order=1, func_numel=512,
                  in_prefix='in', out_prefix='out', dt='dt', clk=None, rst=None, ce=None,
-                 state_ranges=None, out_range=None, num_terms=100, state_range_safety=10, **kwargs):
+                 state_ranges=None, out_range=None, num_terms=100, state_range_safety=10,
+                 AB_spline=False, **kwargs):
         # call the super constructor
         super().__init__(**kwargs)
 
@@ -65,7 +66,7 @@ class LDSModel(MixedSignalModel):
 
         # calculate the interpolation matrix
         W = calc_interp_w(npts=num_spline, order=spline_order)
-        self.lds = SplineLDS(A=A, B=B, C=C, D=D, W=W)
+        self.lds = SplineLDS(A=A, B=B, C=C, D=D, W=W, AB_spline=AB_spline)
 
         # build A_tilde functions
         print("Building A_tilde functions...")

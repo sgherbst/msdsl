@@ -9,9 +9,10 @@ def myinterp(x, y):
 
 # calculate coefficients of a polynomial that fits x, y points
 # the polynomial order is len(x)-1 (e.g., 3 points yields quadratic)
-def calc_piecewise_poly(u, order=3, strategy='overlap'):
+def calc_piecewise_poly(u, order=3, W=None, strategy='overlap'):
     # solve the linear system of equations
-    W = calc_interp_w(npts=len(u), order=order, strategy=strategy)
+    if W is None:
+        W = calc_interp_w(npts=len(u), order=order, strategy=strategy)
 
     # generate coefficients
     U = (W*u).sum(axis=2)

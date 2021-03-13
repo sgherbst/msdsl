@@ -1,4 +1,4 @@
-from collections import OrderedDict
+from collections import OrderedDict, Iterable
 from itertools import chain
 from numbers import Integral, Number
 from typing import List, Set, Union
@@ -27,7 +27,7 @@ from msdsl.expr.format import RealFormat, IntFormat, is_signed
 from msdsl.expr.extras import if_
 from msdsl.circuit import Circuit
 from msdsl.expr.table import Table, RealTable, SIntTable, UIntTable
-from msdsl.function import GeneralFunction, Function, PlaceholderFunction
+from msdsl.function import GeneralFunction, Function, PlaceholderFunction, MultiFunction
 from msdsl.lfsr import LFSR
 
 from scipy.signal import cont2discrete
@@ -470,9 +470,9 @@ class MixedSignalModel:
     def set_from_async_func(self, *args, **kwargs):
         return self.set_from_func(*args, func_mode='async', **kwargs)
 
-    def set_from_func(self, signal: Union[Signal, str], func: GeneralFunction, in_: ModelExpr,
-                      clk=None, ce=None, rst=None, we=None, wdata=None, waddr=None,
-                      func_mode=None):
+    def set_from_func(self, signal: Union[Signal, List[Signal], str], func: GeneralFunction,
+                      in_: ModelExpr, clk=None, ce=None, rst=None, we=None, wdata=None,
+                      waddr=None, func_mode=None):
         """
         The behavior of this operation is a an evaluation of a Function.
         There is a one-cycle delay in this operation.
@@ -515,24 +515,37 @@ class MixedSignalModel:
         addr_frac = self.set_this_cycle(self.get_next_name(f'{func.name}_addr_frac_'), addr_frac_expr,
                                         range_=1.01)
 
-        # look up coefficient values
-        coeffs = [self.get_next_name(f'{func.name}_coeff_{k}_') for k in range(func.order+1)]
-        for k, coeff in enumerate(coeffs):
-            if func_mode in {'sync'}:
-                if isinstance(func, PlaceholderFunction):
-                    self.set_from_sync_ram(signal=coeff, format_=func.formats[k], addr=addr_mux,
-                                           clk=clk, ce=ce, we=we, din=wdata[k])
-                elif isinstance(func, Function):
-                    self.set_from_sync_rom(signal=coeff, table=func.tables[k], addr=addr_uint, clk=clk, ce=ce)
+        # Create a list of functions to be implemented from the same input.
+        # For Function and PlaceholderFunction, that list will only have one entry,
+        # but this makes it possible to share code between the single- and multi-
+        # output function versions.
+        if isinstance(func, MultiFunction):
+            funcs = func.funcs
+            signals = signal
+        else:
+            funcs = [func]
+            signals = [signal]
+
+        # look up coefficients for each function output
+        coeffs = []
+        for f in funcs:
+            coeffs.append([self.get_next_name(f'{f.name}_coeff_{k}_') for k in range(f.order+1)])
+            for k, coeff in enumerate(coeffs[-1]):
+                if func_mode in {'sync'}:
+                    if isinstance(f, PlaceholderFunction):
+                        self.set_from_sync_ram(signal=coeff, format_=f.formats[k], addr=addr_mux,
+                                               clk=clk, ce=ce, we=we, din=wdata[k])
+                    elif isinstance(f, Function):
+                        self.set_from_sync_rom(signal=coeff, table=f.tables[k], addr=addr_uint, clk=clk, ce=ce)
+                    else:
+                        raise Exception(f'Unsupported function type: {f}')
+                elif func_mode in {'async'}:
+                    if isinstance(f, Function):
+                        self.set_this_cycle(coeff, array(f.tables[k].vals, addr_uint))
+                    else:
+                        raise Exception(f'Unsupported function type: {f}')
                 else:
-                    raise Exception(f'Unsupported function type: {func}')
-            elif func_mode in {'async'}:
-                if isinstance(func, Function):
-                    self.set_this_cycle(coeff, array(func.tables[k].vals, addr_uint))
-                else:
-                    raise Exception(f'Unsupported function type: {func}')
-            else:
-                raise Exception(f'Unsupported mode: {func_mode}')
+                    raise Exception(f'Unsupported mode: {func_mode}')
 
         # compute higher-order products of terms
         prods_imm = [self.get_next_name(f'{func.name}_prod_imm_{k}_') for k in range(func.order)]
@@ -565,15 +578,21 @@ class MixedSignalModel:
             raise Exception(f'Unsupported mode: {func_mode}')
 
         # compute output terms to be summed
-        terms = []
-        for k in range(func.order+1):
-            if k == 0:
-                terms.append(self.get_signal(coeffs[k]))
-            else:
-                terms.append(self.get_signal(coeffs[k])*prods_del[k-1])
+        retval = []
+        for j in range(len(funcs)):
+            terms = []
+            for k in range(funcs[j].order+1):
+                if k == 0:
+                    terms.append(self.get_signal(coeffs[j][k]))
+                else:
+                    terms.append(self.get_signal(coeffs[j][k])*prods_del[k-1])
+            retval.append(self.set_this_cycle(signals[j], sum_op(terms)))
 
-        # assign output value
-        return self.set_this_cycle(signal, sum_op(terms))
+        # assign output value (single value or list, depending on Function/MultiFunction)
+        if isinstance(func, MultiFunction):
+            return retval
+        else:
+            return retval[0]
 
     # table creation functions
 
@@ -640,11 +659,17 @@ class MixedSignalModel:
         if real_type is None:
             real_type = self.real_type
 
-        # create the table, register it, and return it
-        function = Function(func=func, domain=domain, name=name, dir=dir,
-                            real_type=real_type, **kwargs)
+        # figure out whether this is a regular function or a multi-output function
+        if isinstance(func, Iterable):
+            cls = MultiFunction
+        else:
+            cls = Function
 
-        # append values
+        # create the function
+        function = cls(
+            func=func, domain=domain, name=name, dir=dir, real_type=real_type, **kwargs)
+
+        # indicate that lookup tables should be written during the compilation process
         if write_tables:
             self.lookup_tables.extend(function.tables)
 

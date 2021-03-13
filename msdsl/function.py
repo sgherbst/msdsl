@@ -77,6 +77,13 @@ class GeneralFunction:
         addr_int = addr_real.astype(np.int)
         addr_frac = addr_real - addr_int
 
+        # add one final point at the end (otherwise the last coefficient may end up being zero,
+        # which causes issues when the function is evaluated outside of its domain)
+        x_vec = np.concatenate((x_vec, [self.domain[1]]))
+        y_vec = np.concatenate((y_vec, [func(self.domain[1])]))
+        addr_int = np.concatenate((addr_int, [self.numel-1]))
+        addr_frac = np.concatenate((addr_frac, [0]))
+
         # create coefficient vectors
         coeffs = []
         for k in range(self.order+1):
@@ -288,3 +295,42 @@ class Function(GeneralFunction):
 
         # call the parent method
         return super().eval_on(samp=samp, coeffs=coeffs)
+
+
+class MultiFunction:
+    def __init__(self, func, name='real_multi_func', **kwargs):
+        self.name = name
+        self.funcs = []
+        for k, func in enumerate(func):
+            self.funcs.append(Function(func=func, name=f'{name}_{k}', **kwargs))
+
+    def eval_on(self, samp):
+        return [func.eval_on(samp) for func in self.funcs]
+
+    @property
+    def domain(self):
+        return self.funcs[0].domain
+
+    @property
+    def numel(self):
+        return self.funcs[0].numel
+
+    @property
+    def addr_bits(self):
+        return self.funcs[0].addr_bits
+
+    @property
+    def clamp(self):
+        return self.funcs[0].clamp
+
+    @property
+    def order(self):
+        return self.funcs[0].order
+
+    @property
+    def tables(self):
+        retval = []
+        for func in self.funcs:
+            retval += func.tables
+        return retval
+

@@ -5,7 +5,7 @@ from pathlib import Path
 
 # msdsl imports
 from ..common import pytest_sim_params
-from msdsl import Function
+from msdsl import MultiFunction
 
 BUILD_DIR = Path(__file__).resolve().parent / 'build'
 
@@ -16,27 +16,29 @@ def pytest_generate_tests(metafunc):
     if importlib.util.find_spec('cvxpy'):
         tests.append((2, 0.000232, 32))
     metafunc.parametrize('order,err_lim,numel', tests)
-    metafunc.parametrize('f', [np.sin, np.cos])
 
-def test_real_func(f, order, err_lim, numel):
+def test_multi_func(order, err_lim, numel):
     # set the random seed for repeatable results
     np.random.seed(0)
 
     # function parameters
     domain = [-np.pi, +np.pi]
-    testfun = lambda x: f(np.clip(x, domain[0], domain[1]))
+    test_funcs = [
+        lambda x: np.sin(np.clip(x, domain[0], domain[1])),
+        lambda x: np.cos(np.clip(x, domain[0], domain[1]))
+    ]
 
     # create the function
-    func = Function(func=testfun, domain=domain, order=order, numel=numel)
+    func = MultiFunction(func=test_funcs, domain=domain, order=order, numel=numel)
 
     # evaluate function approximation
     samp = np.random.uniform(1.2*domain[0], 1.2*domain[1], 1000)
-    approx = func.eval_on(samp)
+    meas = func.eval_on(samp)
 
     # evaluate exact function
-    exact = testfun(samp)
+    expt = [test_func(samp) for test_func in test_funcs]
 
     # check error
-    err = np.sqrt(np.mean((exact-approx)**2))
-    print(f'RMS error with order={order}: {err}')
-    assert err <= err_lim
+    errs = np.array([np.sqrt(np.mean((m-e)**2)) for m, e in zip(meas, expt)])
+    print(f'RMS errors with order={order}: {errs}')
+    assert np.all(errs <= err_lim)

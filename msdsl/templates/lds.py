@@ -70,25 +70,19 @@ class LDSModel(MixedSignalModel):
 
         # build A_tilde functions
         print("Building A_tilde functions...")
-        A_tilde_funcs = self.build_a_tilde_funcs(order=func_order, numel=func_numel)
-        A_tilde = []
-        for i in range(num_states):
-            A_tilde.append([])
-            for j in range(num_states):
-                A_tilde[-1].append(self.set_from_sync_func(
-                    signal=f'A_tilde_{i}_{j}', func=A_tilde_funcs[i][j],
-                    in_=dt, clk=clk, ce=ce, rst=rst))
+        A_tilde_funs, A_tilde_sigs = self.build_a_tilde_funcs(numel=func_numel)
+        A_tilde_func = self.make_function(
+            A_tilde_funs, name='A_tilde_func', domain=[0, 1], order=func_order, numel=func_numel)
+        A_tilde = self.set_from_sync_func(
+            signal=A_tilde_sigs, func=A_tilde_func, in_=dt, clk=clk, ce=ce, rst=rst)
 
         # build B_tilde functions
         print("Building B_tilde functions...")
-        B_tilde_funcs = self.build_b_tilde_funcs(order=func_order, numel=func_numel)
-        B_tilde = []
-        for i in range(num_spline):
-            B_tilde.append([])
-            for j in range(num_states):
-                B_tilde[-1].append(self.set_from_sync_func(
-                    signal=f'B_tilde_{i}_{j}', func=B_tilde_funcs[i][j],
-                    in_=dt, clk=clk, ce=ce, rst=rst))
+        B_tilde_funs, B_tilde_sigs = self.build_b_tilde_funcs(numel=func_numel)
+        B_tilde_func = self.make_function(
+            B_tilde_funs, name='B_tilde_func', domain=[0, 1], order=func_order, numel=func_numel)
+        B_tilde = self.set_from_sync_func(
+            signal=B_tilde_sigs, func=B_tilde_func, in_=dt, clk=clk, ce=ce, rst=rst)
 
         # build "tilde" matrices
         C_tilde = self.build_c_tilde()
@@ -121,18 +115,18 @@ class LDSModel(MixedSignalModel):
         xn = [0] * num_states
         for i in range(num_states):
             for j in range(num_states):
-                xn[i] += A_tilde[i][j] * states_prev[j]
+                xn[i] += A_tilde[(i*num_states)+j] * states_prev[j]
 
         # calculate input-to-state update
         for i in range(num_spline):
             for j in range(num_states):
-                xn[j] += B_tilde[i][j] * inputs_prev[i]
+                xn[j] += B_tilde[(i*num_states)+j] * inputs_prev[i]
 
         # update the state
         for i in range(num_states):
             self.set_this_cycle(states[i], xn[i])
 
-    def build_a_tilde_funcs(self, order, numel):
+    def build_a_tilde_funcs(self, numel):
         # sample A_tilde
         tvec = np.linspace(0, 1, numel)
         vvec = np.zeros((len(tvec), self.lds.nstates, self.lds.nstates), dtype=float)
@@ -141,21 +135,16 @@ class LDSModel(MixedSignalModel):
             vvec[i, :, :] = self.lds.A_tilde(tvec[i])
 
         # build functions
-        A_tilde_funcs = []
+        funs, sigs = [], []
         for i in range(self.lds.nstates):
-            A_tilde_funcs.append([])
             for j in range(self.lds.nstates):
-                A_tilde_func = self.make_function(
-                    interp1d(tvec, vvec[:, i, j]),
-                    name=f'A_tilde_func_{i}_{j}',
-                    domain=[0, 1], order=order, numel=numel
-                )
-                A_tilde_funcs[-1].append(A_tilde_func)
+                funs.append(interp1d(tvec, vvec[:, i, j]))
+                sigs.append(f'A_tilde_{i}_{j}')
 
         # return functions
-        return A_tilde_funcs
+        return funs, sigs
 
-    def build_b_tilde_funcs(self, order, numel):
+    def build_b_tilde_funcs(self, numel):
         # sample B_tilde
         tvec = np.linspace(0, 1, numel)
         vvec = np.zeros((len(tvec), self.lds.npts, self.lds.nstates), dtype=float)
@@ -166,19 +155,14 @@ class LDSModel(MixedSignalModel):
                 vvec[i, j, :] = v[j].flatten()
 
         # build functions
-        B_tilde_funcs = []
+        funs, sigs = [], []
         for i in range(self.lds.npts):
-            B_tilde_funcs.append([])
             for j in range(self.lds.nstates):
-                B_tilde_func = self.make_function(
-                    interp1d(tvec, vvec[:, i, j]),
-                    name=f'B_tilde_func_{i}_{j}',
-                    domain=[0, 1], order=order, numel=numel
-                )
-                B_tilde_funcs[-1].append(B_tilde_func)
+                funs.append(interp1d(tvec, vvec[:, i, j]))
+                sigs.append(f'B_tilde_{i}_{j}')
 
         # return functions
-        return B_tilde_funcs
+        return funs, sigs
 
     def build_c_tilde(self):
         C_tilde = np.zeros((self.lds.npts, self.lds.nstates))

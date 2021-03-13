@@ -26,7 +26,7 @@ def pytest_generate_tests(metafunc):
 @pytest.mark.parametrize(
     'test_pts,chan_type,err_lim', [
         (200, 'exp', 1e-4),
-        (200, 's4p', 5e-3)
+        (200, 's4p', 8e-3)
     ]
 )
 def test_chan_interp(simulator, real_type, test_pts, err_lim, chan_type,
@@ -40,8 +40,11 @@ def test_chan_interp(simulator, real_type, test_pts, err_lim, chan_type,
         t_step = np.linspace(0, t_dur, func_numel)
         v_step = 1.0-np.exp(-0.5*t_step/ui)
     elif chan_type in {'s4p'}:
-        t_dur = 10e-9
-        t_step, v_step = s4p_to_step(TOP_DIR/S4P_FILE, dt=t_dur/func_numel, T=t_dur)
+        t_orig, v_orig = s4p_to_step(TOP_DIR/S4P_FILE, dt=0.1e-12, T=10e-9)
+        t_step = np.linspace(2e-9, 6e-9, 40001)  # i.e., 0.1 ps spacing
+        v_step = interp1d(t_orig, v_orig)(t_step)
+        t_step -= t_step[0]
+        t_dur = t_step[-1] - t_step[0]
     else:
         raise Exception(f'Unknown chan_type: {chan_type}')
 

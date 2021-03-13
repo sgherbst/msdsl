@@ -34,9 +34,20 @@ class ChannelModel(MixedSignalModel):
                 dt=dtmax/(num_spline-1), num_terms=((num_spline-1)*num_terms)+1)
         self.out_range = out_range
 
-        # create the step response function
+        # create an interpolator for the step response
+        chan_interp_base = interp1d(
+            t_step, v_step, bounds_error=False, fill_value=(v_step[0], v_step[-1]))
+
+        # generate a list of functions that evaluate the
+        # step response at various offsets
+        chan_interp_funs = []
+        for i in range(num_spline):
+            chan_interp_funs.append(
+                lambda t, i=i: chan_interp_base(t + (i/(num_spline-1))*dtmax))
+
+        # create the single-input, multi-output step response function
         chan_func = self.make_function(
-            interp1d(t_step, v_step),
+            chan_interp_funs,
             name=f'chan_func',
             domain=[t_step[0], t_step[-1]],
             order=func_order,
@@ -72,27 +83,28 @@ class ChannelModel(MixedSignalModel):
                 # delayed assignment
                 self.set_next_cycle(signal=mem_sig, expr=mux_sig, clk=clk, rst=rst)
 
+        # evaluate the step response function
+        step = []
+        for j in range(num_terms+1):
+            # generate names for the step response evaluations
+            names = [f'step_{j}_{i}' for i in range(num_spline)]
+
+            # evaluate the step response function
+            step.append(
+                self.set_from_sync_func(
+                    names, chan_func, time_mux[j], clk=clk, rst=rst))
+
         # loop over all output points
         for i in range(num_spline):
             # build up list of step & pulse responses
-            step = []
             prod = []
-
-            # compute the offset for this spline point
-            offset = (i/(num_spline-1))*dtmax
-
-            # evaluate step response function
-            for j in range(num_terms+1):
-                step_sig = self.set_from_sync_func(
-                    f'step_{i}_{j}', chan_func, offset+time_mux[j], clk=clk, rst=rst)
-                step.append(step_sig)
 
             # compute the products to be summed
             for j in range(num_terms+1):
                 if j == 0:
-                    prod_sig = self.bind_name(f'prod_{i}_{j}', value_hist[j]*step[j])
+                    prod_sig = self.bind_name(f'prod_{i}_{j}', value_hist[j]*step[j][i])
                 else:
-                    prod_sig = self.bind_name(f'prod_{i}_{j}', value_hist[j]*(step[j]-step[j-1]))
+                    prod_sig = self.bind_name(f'prod_{i}_{j}', value_hist[j]*(step[j][i]-step[j-1][i]))
                 prod.append(prod_sig)
 
             # define model behavior

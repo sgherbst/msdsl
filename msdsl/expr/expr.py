@@ -636,6 +636,10 @@ def array(elements: List, address: ModelExpr, real_range_hint: Number=None,
             output_format = RealFormat(**kwargs)
         else:
             output_format = format_cls.cover([element.format_ for element in elements])
+            # bump up range a little bit for RealFormat to avoid rounding issues
+            # TODO: is there a cleaner way to handle this?
+            if isinstance(output_format, RealFormat):
+                output_format = RealFormat(range_=1.01*output_format.range_)
 
         # create the Array object
         return Array(elements=elements, address=address, output_format=output_format)

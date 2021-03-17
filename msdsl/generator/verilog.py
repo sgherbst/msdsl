@@ -382,15 +382,15 @@ class VerilogGenerator(CodeGenerator):
         # create the output signal
         output = Signal(name=next(self.namer), format_=expr.format_)
 
-        # call the special multiplication macro, avoiding a synthesis corner-case:
-        # https://forums.xilinx.com/t5/Synthesis/Possible-synthesis-bug-casting-integer-to-real-in-a-function/td-p/1140910
-        if isinstance(constant.value, Integral):
+        # if multiplying by -1, use a special macro to reduce utilization
+        if constant.value == -1:
+            self.macro_call('NEGATE_REAL', signal.name, output.name)
+        elif isinstance(constant.value, Integral):
             # avoid a synthesis corner-case:
             # https://forums.xilinx.com/t5/Synthesis/Possible-synthesis-bug-casting-integer-to-real-in-a-function/td-p/1140910
-            const_as_str = str(float(constant.value))
+            self.macro_call('MUL_CONST_REAL', str(float(constant.value)), signal.name, output.name)
         else:
-            const_as_str = str(constant.value)
-        self.macro_call('MUL_CONST_REAL', const_as_str, signal.name, output.name)
+            self.macro_call('MUL_CONST_REAL', str(constant.value), signal.name, output.name)
 
         # return the output signal
         return output

@@ -5,6 +5,10 @@ python -m pip install --upgrade pip
 curl -L https://git.io/JJ5YF > install_hardfloat.sh
 source install_hardfloat.sh
 
+# get S4P data
+curl -L https://git.io/JtNrY > peters_01_0605_B1_thru.s4p
+curl -L https://git.io/JqceS > channel_resp_mar11.csv
+
 # install various python dependencies
 pip install wheel
 pip install pytest pytest-cov

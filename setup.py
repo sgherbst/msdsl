@@ -2,7 +2,7 @@ import os
 from setuptools import setup, find_packages
 
 name = 'msdsl'
-version = '0.3.6'
+version = '0.3.7'
 
 DESCRIPTION = '''\
 Library for generating synthesizable mixed-signal models for FPGA emulation\
@@ -15,7 +15,9 @@ install_requires = [
     'svreal>=0.2.7',
     'scipy',
     'numpy',
-    'matplotlib'
+    'matplotlib',
+    'scikit-rf',
+    'tqdm'
 ]
 if os.name != 'nt':
     install_requires.append('cvxpy')

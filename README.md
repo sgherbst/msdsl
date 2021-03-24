@@ -5,7 +5,7 @@
 [![PyPI version](https://badge.fury.io/py/msdsl.svg)](https://badge.fury.io/py/msdsl)
 [![Join the chat at https://gitter.im/sgherbst/msdsl](https://badges.gitter.im/sgherbst/msdsl.svg)](https://gitter.im/sgherbst/msdsl?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
-**msdsl** is a tool for generating synthesizable real number models (RNMs) for analog circuits for use in FPGA emulation. 
+**msdsl** is a tool for generating synthesizable real number models (RNMs) for analog circuits for use in FPGA emulation.  It is part of the mixed-signal emulation framework that include [svreal](https://github.com/sgherbst/svreal) and [anasymod](https://github.com/sgherbst/anasymod).
 
 # Installation
 

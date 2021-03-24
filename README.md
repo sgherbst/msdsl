@@ -22,7 +22,7 @@ If you get a permissions error when running the **pip** command, you can try add
 If you are a developer of **msdsl**, it is more convenient to clone and install the GitHub repository:
 
 ```shell
-> git clone https://github.com/sgherbst/svreal.git
+> git clone https://github.com/sgherbst/msdsl.git
 > cd msdsl 
 > pip install -e .
 ```

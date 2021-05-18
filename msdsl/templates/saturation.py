@@ -18,7 +18,7 @@ class NonlinModel(MixedSignalModel):
         self.func = func
 
         # create and apply function
-        real_func = self.make_function(self.func, domain=domain, order=order, numel=numel, write_tables=False)
+        real_func = self.make_function(func, domain=domain, order=order, numel=numel, write_tables=False)
         self.set_from_func(self.get_signal(out), real_func, self.get_signal(in_), func_mode='async')
 
 
@@ -37,7 +37,7 @@ class SaturationModel(NonlinModel):
         # calculate the output range if needed
         if out_range is None:
             if in_range is not None:
-                out_range = (self.func(in_range[0]), self.func(in_range[1]))
+                out_range = (func(in_range[0]), func(in_range[1]))
 
         # call the super constructor
         super().__init__(func=func, domain=domain, in_range=in_range, out_range=out_range, **kwargs)

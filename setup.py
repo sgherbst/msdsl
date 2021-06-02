@@ -16,7 +16,7 @@ install_requires = [
     'scipy',
     'numpy',
     'matplotlib',
-    'scikit-rf==0.17.0',
+    'scikit-rf',
     'tqdm'
 ]
 if os.name != 'nt':

@@ -2,11 +2,12 @@ import numpy as np
 from tqdm import tqdm
 from scipy.linalg import expm
 from scipy.interpolate import interp1d
+from scipy.signal import tf2ss
 
 from msdsl import MixedSignalModel, RangeOf
 from msdsl.interp.interp import calc_interp_w
 from msdsl.interp.lds import SplineLDS
-from msdsl.interp.ctle import calc_ctle_abcd
+from msdsl.interp.ctle import calc_ctle_num_den
 
 # consumes and produces splines for LDS behavior
 # implicitly assumes time has been normalized so dtmax=1
@@ -227,14 +228,23 @@ class LDSModel(MixedSignalModel):
         return state_ranges, out_range
 
 
-class CTLEModel(LDSModel):
-    def __init__(self, fz, fp1, dtmax, fp2=None, gbw=None, **kwargs):
-        # calculate the state-space representation
-        fz = fz*dtmax
-        fp1 = fp1*dtmax
-        fp2 = fp2*dtmax if fp2 is not None else None
-        gbw = gbw*dtmax if gbw is not None else None
-        A, B, C, D = calc_ctle_abcd(fz=fz, fp1=fp1, fp2=fp2, gbw=gbw)
+class TFModel(LDSModel):
+    def __init__(self, num, den, dtmax, **kwargs):
+        # rescale numerator and coefficients
+        num = [num[k]*((1.0/dtmax)**(len(num)-1-k)) for k in range(len(num))]
+        den = [den[k]*((1.0/dtmax)**(len(den)-1-k)) for k in range(len(den))]
+
+        # convert transfer function to ABCD
+        A, B, C, D = tf2ss(num=num, den=den)
 
         # call the super constructor
         super().__init__(A=A, B=B, C=C, D=D, **kwargs)
+
+
+class CTLEModel(TFModel):
+    def __init__(self, fz, fp1, fp2=None, gbw=None, **kwargs):
+        # calculate the transfer function representation
+        num, den = calc_ctle_num_den(fz=fz, fp1=fp1, fp2=fp2, gbw=gbw)
+
+        # call the super constructor
+        super().__init__(num=num, den=den, **kwargs)

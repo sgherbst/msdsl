@@ -1,9 +1,3 @@
-# warning message
-print('######################################################')
-print('# WARNING: The msdsl.circuit module is experimental! #')
-print('######################################################')
-print()
-
 from msdsl.expr.signals import AnalogSignal
 from msdsl.eqn.deriv import Deriv
 from msdsl.eqn.cases import eqn_case

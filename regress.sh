@@ -13,10 +13,6 @@ curl -L https://git.io/JqceS > channel_resp_mar11.csv
 pip install wheel
 pip install pytest pytest-cov
 
-# temporary fix
-pip install numpy
-pip install cvxpy==1.1.7
-
 # install msdsl
 pip install -e .
 

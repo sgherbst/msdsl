@@ -1,5 +1,5 @@
 # upgrade pip
-python -m pip install --upgrade pip
+python -m pip install --upgrade pip==22.2.2
 
 # install HardFloat
 curl -L https://git.io/JJ5YF > install_hardfloat.sh

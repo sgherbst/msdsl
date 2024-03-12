@@ -138,6 +138,21 @@ class Circuit:
         # return the current through the voltage source
         return current
 
+    def vcvs(self, cp, cn, p, n, gain):
+        # add variable names as necessary
+        self.add_var_names(cp, cn, p, n)
+
+        # create a variable for current through the output
+        current = AnalogSignal(self.tmp_var_name())
+
+        # add related equations
+        self.two_pin_kcl(p, n, current)
+        self.add_eqn((AnalogSignal(p) - AnalogSignal(n))
+            == (gain * (AnalogSignal(cp) - AnalogSignal(cn))))
+
+        # return the current through the voltage source
+        return current
+
     def transformer(self, pri_p, pri_n, sec_p, sec_n, ratio):
         # add variable names as necessary
         self.add_var_names(pri_p, pri_n, sec_p, sec_n)

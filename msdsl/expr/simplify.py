@@ -31,15 +31,21 @@ def extract_coeffs(expr: Sum):
     # extract coefficients for all terms
     if isinstance(expr, Signal):
         pairs.append((1, expr))
+    elif isinstance(expr, Product):
+        result = extract_coeffs_from_product(expr)
+        if result is not None:
+            pairs.append(result)
+        else:
+            others.append(expr)
     else:
         for operand in expr.operands:
+            print(operand, type(operand))
             if isinstance(operand, Signal):
                 pairs.append((1, operand))
             elif isinstance(operand, Product) and len(operand.operands) == 2:
-                if isinstance(operand.operands[0], Constant) and isinstance(operand.operands[1], Signal):
-                    pairs.append((operand.operands[0].value, operand.operands[1]))
-                elif isinstance(operand.operands[1], Constant) and isinstance(operand.operands[0], Signal):
-                    pairs.append((operand.operands[1].value, operand.operands[0]))
+                result = extract_coeffs_from_product(operand)
+                if result is not None:
+                    pairs.append(result)
                 else:
                     others.append(operand)
             else:
@@ -47,6 +53,14 @@ def extract_coeffs(expr: Sum):
 
     # return result
     return pairs, others
+
+def extract_coeffs_from_product(p: Product):
+    if isinstance(p.operands[0], Constant) and isinstance(p.operands[1], Signal):
+        return (p.operands[0].value, p.operands[1])
+    elif isinstance(p.operands[1], Constant) and isinstance(p.operands[0], Signal):
+        return (p.operands[1].value, p.operands[0])
+    else:
+        return None
 
 def collect_terms(expr):
     # only apply this operation to Sum expressions

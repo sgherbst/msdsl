@@ -1,5 +1,5 @@
 # upgrade pip
-python -m pip install --upgrade pip
+python -m pip install --upgrade pip==22.2.2
 
 # install HardFloat
 curl -L https://git.io/JJ5YF > install_hardfloat.sh
@@ -12,10 +12,6 @@ curl -L https://git.io/JqceS > channel_resp_mar11.csv
 # install various python dependencies
 pip install wheel
 pip install pytest pytest-cov
-
-# temporary fix
-pip install numpy
-pip install cvxpy==1.1.7
 
 # install msdsl
 pip install -e .

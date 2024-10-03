@@ -6,6 +6,7 @@ from copy import deepcopy
 
 from msdsl.expr.format import RealFormat, SIntFormat, UIntFormat, Format, IntFormat
 
+import sympy as sp
 # constant wrapping
 
 def wrap_constant(operand):
@@ -1038,6 +1039,9 @@ def mt19937(clk=None, rst=None, cke=None, seed=None):
 
 def lcg_op(clk=None, rst=None, cke=None, seed=None):
     return LCG(clk=clk, rst=rst, cke=cke, seed=seed)
+
+
+
 
 # testing
 

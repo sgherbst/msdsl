@@ -213,8 +213,8 @@ class LDSModel(MixedSignalModel):
         # calculate contribution of inputs to outputs
         inputs_to_outputs = []
         for i in range(num_terms):
-            inputs_to_outputs.append(float(C.dot(A_tilde_pow[i].dot(B_tilde))))
-        inputs_to_outputs[0] += float(D)
+            inputs_to_outputs.append(C.dot(A_tilde_pow[i].dot(B_tilde)).item())
+        inputs_to_outputs[0] += np.asarray(D).item()
 
         out_range = np.zeros((2,), dtype=float)
         for i in range(num_terms):

@@ -138,7 +138,7 @@ def test_gauss_inv_cdf(simulator, real_type, err_lim=0.005):
     # the random seed is chosen to make sure this test has
     # consistent result in regression testing
     rand_pts = 2**(np.random.uniform(0, N_BITS, 100))
-    rand_pts = np.floor(rand_pts).astype(np.int)
+    rand_pts = np.floor(rand_pts).astype(int)
     rand_pts = [int(elem) for elem in rand_pts]
     inpts += rand_pts
 

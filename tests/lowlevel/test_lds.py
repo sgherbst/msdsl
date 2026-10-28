@@ -39,7 +39,7 @@ def test_expm_int(k):
 def test_f_calc(p, j, k):
     meas = calc_lds_f(A, B, C, th, p, j, k)
 
-    func = lambda tau: C.dot(expm((p*th-tau)*A).dot(B))*(((tau-j*th)/th)**k)
+    func = lambda tau: C.dot(expm((p*th-tau)*A).dot(B)).item()*(((tau-j*th)/th)**k)
     expt = quad(func, j*th, (j+1)*th)[0]
 
     assert np.all(np.isclose(meas, expt))

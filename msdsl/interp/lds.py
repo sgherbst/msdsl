@@ -102,10 +102,10 @@ def calc_lds_d_tilde(A, B, C, D, W):
     d_tilde = np.zeros((npts, npts), dtype=float)
     for p in range(npts):
         for i in range(npts):
-            d_tilde[p, i] += D * W[p, 0, i]
+            d_tilde[p, i] += np.asarray(D).item() * W[p, 0, i]
             for j in range(p):
                 for k in range(order + 1):
-                    d_tilde[p, i] += W[j, k, i] * calc_lds_f(A, B, C, th, p, j, k)
+                    d_tilde[p, i] += W[j, k, i] * calc_lds_f(A, B, C, th, p, j, k).item()
 
     # return matrix
     return d_tilde
@@ -182,7 +182,7 @@ class SplineLDS:
         # calculate output
         y = np.zeros((self.npts,), dtype=float)
         for p in range(self.npts):
-            y[p] += self.C_tilde[p].dot(xo)
+            y[p] += self.C_tilde[p].dot(xo).item()
             for i in range(self.npts):
                 y[p] += self.D_tilde[p, i] * inpt[i]
 

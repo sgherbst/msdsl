@@ -74,7 +74,7 @@ class GeneralFunction:
         addr_real = (x_vec - self.domain[0])*((self.numel-1)/(self.domain[1]-self.domain[0]))
         if self.clamp:
             addr_real = np.clip(addr_real, 0, self.numel-1)
-        addr_int = addr_real.astype(np.int)
+        addr_int = addr_real.astype(int)
         addr_frac = addr_real - addr_int
 
         # add one final point at the end (otherwise the last coefficient may end up being zero,
@@ -149,7 +149,7 @@ class GeneralFunction:
             addr_real = np.clip(addr_real, 0, self.numel-1)
 
         # calculate integer and fractional addresses
-        addr_int = addr_real.astype(np.int)
+        addr_int = addr_real.astype(int)
         addr_frac = addr_real - addr_int
 
         # sum up output contributions

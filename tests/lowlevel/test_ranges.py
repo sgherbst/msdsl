@@ -122,7 +122,7 @@ def test_lds_range_simple(wn, zeta, dt, num_terms=100):
         x0_arr.append(x[0, 0])
         x1_arr.append(x[1, 0])
         x = A_tilde.dot(x) + B_tilde.dot(u[k])
-        y_arr.append(float(C.dot(x) + D.dot(u[k])))
+        y_arr.append((C.dot(x) + D.dot(u[k])).item())
 
     x0_rng_sim = (min(x0_arr), max(x0_arr))
     x1_rng_sim = (min(x1_arr), max(x1_arr))

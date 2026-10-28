@@ -9,29 +9,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
-      uses: actions/checkout@v2
-    - name: Set up Python 3.7
-      uses: actions/setup-python@v2
+      uses: actions/checkout@v4
+    - name: Set up Python 3.14
+      uses: actions/setup-python@v5
       with:
-        python-version: 3.7
+        python-version: "3.14"
     - name: Update pip
       run: python -m pip install --upgrade pip
     - name: Install dependencies
-      run: sudo apt-get install libgmp-dev libmpfr-dev libmpc-dev iverilog
+      run: sudo apt-get update && sudo apt-get install -y iverilog
     - name: Run regression test
       run: source regress.sh
-      env:
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   mac:
     runs-on: macOS-latest
     steps:
     - name: Checkout
-      uses: actions/checkout@v2
-    - name: Set up Python 3.7
-      uses: actions/setup-python@v2
+      uses: actions/checkout@v4
+    - name: Set up Python 3.14
+      uses: actions/setup-python@v5
       with:
-        python-version: 3.7
+        python-version: "3.14"
     - name: Update pip
       run: python -m pip install --upgrade pip
     - name: Install dependencies
@@ -39,8 +37,6 @@ jobs:
         brew install icarus-verilog coreutils
     - name: Run regression test
       run: source regress.sh
-      env:
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
 # Windows testing doesn't look like it's going to work, at least for now, because
 # some of the packages used by fault don't support Windows.

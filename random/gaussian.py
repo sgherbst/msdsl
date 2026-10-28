@@ -9,7 +9,7 @@ num_bits = 31  # 31 because the top bit is used to determine the sign
 
 num_test = 10000
 test_pts = 2**(np.random.uniform(0, num_bits, num_test))
-test_pts = np.floor(test_pts).astype(np.int)
+test_pts = np.floor(test_pts).astype(int)
 test_pts = np.append(test_pts, 0)
 test_pts = np.sort(test_pts)
 

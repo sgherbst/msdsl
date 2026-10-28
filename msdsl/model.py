@@ -1,4 +1,5 @@
-from collections import OrderedDict, Iterable
+from collections import OrderedDict
+from collections.abc import Iterable
 from itertools import chain
 from numbers import Integral, Number
 from typing import List, Set, Union
